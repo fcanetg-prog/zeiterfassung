@@ -286,13 +286,23 @@ th.r { text-align: right; }
 
 .logo-prev { height: 34px; width: auto; border: 1px solid var(--line); border-radius: 4px; padding: 3px; background: #fff; }
 
-.list tr.rg td { background: #eef4f4; font-weight: 600; border-top: 1px solid var(--line); }
-.list tr.rgm td:first-child { padding-left: 22px; box-shadow: inset 3px 0 0 var(--teal); }
 .sammel { background: #eef4f4; border-left: 3px solid var(--teal); padding: 8px 10px; margin: 0 0 12px; font-size: 13px; }
 
-.teil { margin-top: 18px; }
-.teil:first-of-type { margin-top: 4px; }
-.teil h3 { display: flex; align-items: baseline; gap: 8px; color: var(--ink); font-size: 14px; border-bottom: 0; margin: 0 0 4px; padding: 6px 10px; background: #eef4f4; border-radius: 6px; }
+/* Abschnitte innerhalb von «Rechnung stellen»: reine Überschriften ohne Fläche */
+.teil { margin-top: 26px; }
+.teil:first-of-type { margin-top: 6px; }
+.teil h3 { display: flex; align-items: baseline; gap: 8px; color: var(--ink); font-size: 15px; font-weight: 600; margin: 0 0 2px; padding: 0 0 7px; border-bottom: 2px solid var(--ink); }
 .teil h3 small { font-weight: 400; color: var(--muted); font-size: 12.5px; margin-left: auto; }
-.teil.jetzt h3 { background: rgba(154, 98, 0, .12); box-shadow: inset 3px 0 0 var(--amber); }
+.teil.jetzt h3 { border-bottom-color: var(--amber); }
+.teil.jetzt h3::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #e0a43a; align-self: center; }
+.teil .list thead th { padding-top: 8px; }
+
+/* Sammelrechnung: eingerahmter Block innerhalb der Liste */
+.list tbody tr:last-child td { border-bottom: 1px solid var(--line-soft); }
+.list tbody.sammel-block { border: 1px solid #a9c4c5; border-left: 4px solid var(--teal); }
+.list tbody.sammel-block td { background: #f6fafa; }
+.list tr.rg td { font-weight: 600; border-bottom: 1px solid #cfdcdd; padding-top: 8px; padding-bottom: 8px; }
+.list tr.rgm td:first-child { padding-left: 26px; }
+.list tr.rgm:last-child td { border-bottom: 0; }
+.sammel-marke { display: inline-block; font-size: 11.5px; font-weight: 700; color: #fff; background: var(--teal-deep); border-radius: 4px; padding: 1px 7px; margin-right: 8px; }
 .nav .zahl { float: right; background: #e0a43a; color: #2b1c00; font-size: 11.5px; font-weight: 700; border-radius: 9px; padding: 0 7px; line-height: 18px; margin-top: 2px; }

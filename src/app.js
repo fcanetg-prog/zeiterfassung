@@ -892,11 +892,11 @@
       if (gezeigt.has(p.id)) return '';
       const g = gruppe(p);
       g.forEach((x) => gezeigt.add(x.id));
-      if (g.length === 1) return row(p, cols, false);
+      if (g.length === 1) return `<tbody>${row(p, cols, false)}</tbody>`;
       const m = C.invoiceModelGroup(g, S(), heute);
       const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
-      return `<tr class="rg"><td colspan="2">Gemeinsame Rechnung für ${g.length} Projekte</td><td class="r num">${fmtCHF(total)}</td>
-        <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>` + g.map((x) => row(x, cols, true)).join('');
+      return `<tbody class="sammel-block"><tr class="rg"><td colspan="2"><span class="sammel-marke">Sammelrechnung</span> ${g.length} Projekte auf einer Rechnung</td><td class="r num">${fmtCHF(total)}</td>
+        <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
     }).join('');
     const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
     const jetzt = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant <= heute).sort(nachDatum);
@@ -904,7 +904,7 @@
     const ohneDatum = zuStellen.filter((p) => !p.rechnungGeplant);
     const teil = (titel, hinweis, list, cls) => (list.length ? `<div class="teil ${cls}"><h3>${titel} <span class="dim">${list.length}</span><small>${hinweis}, total ${fmtCHF(sum(list))}</small></h3>
       ${table(list, ['geplant', 'gestellt', 'btn-gestellt'], ['Rechnungsdatum', 'Gestellt am'])}</div>` : '');
-    const table = (list, cols, heads) => `<div class="table-flat"><table class="list"><thead><tr><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead><tbody>${zeilen(list, cols, heads.length + 1)}</tbody></table></div>`;
+    const table = (list, cols, heads) => `<div class="table-flat"><table class="list"><thead><tr><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead>${zeilen(list, cols, heads.length + 1)}</table></div>`;
 
     return `
     <header class="head"><h1>Rechnungen ${state.year}</h1></header>
