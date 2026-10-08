@@ -4,6 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const invoice = require('./invoice');
 const crypto = require('crypto');
+const os = require('os');
+const Calc = require('./src/calc.js');
 
 const DATA_FILE = 'zeiterfassung-daten.json';
 const BACKUP_DIR = 'Sicherungen';
@@ -37,17 +39,12 @@ function dataPath() { return path.join(dataDir(), DATA_FILE); }
 
 /* ---------- Lesen und Schreiben ---------- */
 
-function loadData() {
-  const file = dataPath();
-  if (!fs.existsSync(file)) return { data: null, path: file };
-  try {
-    return { data: JSON.parse(fs.readFileSync(file, 'utf8')), path: file };
-  } catch (err) {
-    // Beschädigte Datei nie überschreiben: zur Seite legen und melden.
-    const kaputt = file.replace(/\.json$/, `-beschaedigt-${stamp(true)}.json`);
-    try { fs.copyFileSync(file, kaputt); } catch { /* egal */ }
-    return { data: null, path: file, error: `Die Datendatei konnte nicht gelesen werden (${err.message}). Eine Kopie liegt unter ${kaputt}.` };
-  }
+// Stand der Datendatei, wie ihn diese App zuletzt gelesen oder geschrieben hat.
+// Weicht die Datei davon ab, hat ein anderer Rechner (über Dropbox o. ä.) geschrieben.
+let bekannt = null;
+
+function dateiStand(file) {
+  try { const st = fs.statSync(file); return `${st.mtimeMs}:${st.size}`; } catch { return null; }
 }
 
 function stamp(mitZeit) {
@@ -57,12 +54,63 @@ function stamp(mitZeit) {
   return mitZeit ? `${tag}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}` : tag;
 }
 
-/** Erste Speicherung des Tages: den bisherigen Stand als Sicherung ablegen. */
+function rechnerName() {
+  return os.hostname().replace(/[^A-Za-z0-9-]+/g, '-').slice(0, 24) || 'rechner';
+}
+
+/** Konfliktkopien, wie Dropbox sie anlegt, wenn zwei Rechner gleichzeitig offline geändert haben. */
+function konfliktDateien(dir) {
+  const basis = DATA_FILE.replace(/\.json$/, '');
+  try {
+    return fs.readdirSync(dir).filter((f) => f !== DATA_FILE && f.startsWith(basis) && f.endsWith('.json') && !f.includes('-beschaedigt-'));
+  } catch { return []; }
+}
+
+function schreibe(file, data) {
+  const tmp = `${file}.${rechnerName()}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
+  fs.renameSync(tmp, file);
+  bekannt = dateiStand(file);
+}
+
+function loadData() {
+  const file = dataPath();
+  const dir = path.dirname(file);
+  let data = null;
+  if (fs.existsSync(file)) {
+    try {
+      data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (err) {
+      // Beschädigte Datei nie überschreiben: zur Seite legen und melden.
+      const kaputt = file.replace(/\.json$/, `-beschaedigt-${stamp(true)}.json`);
+      try { fs.copyFileSync(file, kaputt); } catch { /* egal */ }
+      return { data: null, path: file, error: `Die Datendatei konnte nicht gelesen werden (${err.message}). Eine Kopie liegt unter ${kaputt}.` };
+    }
+  }
+  bekannt = dateiStand(file);
+
+  // Konfliktkopien einarbeiten und danach zu den Sicherungen legen.
+  let eingearbeitet = 0;
+  for (const name of konfliktDateien(dir)) {
+    const quelle = path.join(dir, name);
+    try {
+      data = Calc.mergeData(data, JSON.parse(fs.readFileSync(quelle, 'utf8')));
+      const ziel = path.join(dir, BACKUP_DIR);
+      fs.mkdirSync(ziel, { recursive: true });
+      fs.renameSync(quelle, path.join(ziel, `konflikt-${stamp(true)}-${name}`));
+      eingearbeitet++;
+    } catch { /* unlesbare Kopie liegen lassen */ }
+  }
+  if (eingearbeitet && data) schreibe(file, data);
+  return { data, path: file, eingearbeitet };
+}
+
+/** Erste Speicherung des Tages auf diesem Rechner: den bisherigen Stand als Sicherung ablegen. */
 function backup(file, mitZeit) {
   if (!fs.existsSync(file)) return;
   const dir = path.join(path.dirname(file), BACKUP_DIR);
   fs.mkdirSync(dir, { recursive: true });
-  const ziel = path.join(dir, `zeiterfassung-${stamp(mitZeit)}.json`);
+  const ziel = path.join(dir, `zeiterfassung-${stamp(mitZeit)}-${rechnerName()}.json`);
   if (!mitZeit && fs.existsSync(ziel)) return;
   fs.copyFileSync(file, ziel);
   const alle = fs.readdirSync(dir).filter((f) => /^zeiterfassung-.*\.json$/.test(f)).sort();
@@ -73,10 +121,42 @@ function saveData(data, opts) {
   const file = dataPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   backup(file, opts && opts.sicherungErzwingen);
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
-  fs.renameSync(tmp, file);
-  return { ok: true, path: file };
+  // Hat inzwischen ein anderer Rechner geschrieben, dessen Änderungen nicht überschreiben, sondern zusammenführen.
+  let zusammengefuehrt = null;
+  if (!(opts && opts.ersetzen) && bekannt && dateiStand(file) && dateiStand(file) !== bekannt) {
+    try {
+      zusammengefuehrt = Calc.mergeData(data, JSON.parse(fs.readFileSync(file, 'utf8')));
+      data = zusammengefuehrt;
+    } catch { /* Datei wird gerade geschrieben: unseren Stand behalten, der Wächter meldet die Änderung erneut */ }
+  }
+  schreibe(file, data);
+  return { ok: true, path: file, data: zusammengefuehrt };
+}
+
+/* ---------- Änderungen von anderen Rechnern bemerken ---------- */
+
+let waechter = null, waechterTimer = null, abfrage = null;
+
+function pruefeAenderung() {
+  const file = dataPath();
+  const stand = dateiStand(file);
+  const fremd = konfliktDateien(path.dirname(file)).length > 0;
+  if ((stand && stand !== bekannt) || fremd) {
+    if (win && !win.isDestroyed()) win.webContents.send('data:changed');
+  }
+}
+
+function starteWaechter() {
+  if (waechter) { try { waechter.close(); } catch { /* egal */ } waechter = null; }
+  clearInterval(abfrage);
+  const dir = dataDir();
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    waechter = fs.watch(dir, () => { clearTimeout(waechterTimer); waechterTimer = setTimeout(pruefeAenderung, 600); });
+    waechter.on('error', () => { /* die Abfrage unten fängt es auf */ });
+  } catch { /* kein Wächter möglich: die Abfrage unten reicht */ }
+  // Sicherheitsnetz, falls der Ordner keine Änderungsmeldungen liefert.
+  abfrage = setInterval(pruefeAenderung, 15000);
 }
 
 /* ---------- Rechnung als PDF ---------- */
@@ -137,8 +217,8 @@ async function pushInvoices(jobs, absender, ziel, erzwingen) {
   const liste = jobs.map((job) => ({
     id: job.id,
     hash: crypto.createHash('sha1').update(JSON.stringify([job.modell, absender, job.an])).digest('hex'),
-    datum: job.modell.datum, an: job.an, kunde: job.projekt.kunde, projekt: job.projekt.name, total: job.modell.total,
-    datei: `${job.id}_${invoice.dateiname(job.modell, job.projekt)}`,
+    datum: job.modell.datum, an: job.an, kunde: job.kunde, projekt: job.projekt, total: job.modell.total,
+    datei: `${job.id}_${invoice.dateiname(job.modell)}`,
   }));
   const signatur = crypto.createHash('sha1').update(JSON.stringify([url, schluessel, liste])).digest('hex');
   if (!erzwingen && signatur === letzterAbgleich) return { ok: true, anzahl: liste.length, hochgeladen: 0, unveraendert: true };
@@ -249,20 +329,22 @@ if (!app.requestSingleInstanceLock()) {
       const cfg = readConfig();
       cfg.dataDir = neu;
       writeConfig(cfg);
+      bekannt = null;
+      starteWaechter();
       return { path: ziel, vorhanden };
     });
     ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath() }));
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
     });
-    ipcMain.handle('invoice:pdf', async (_e, modell, absender, projekt) => {
+    ipcMain.handle('invoice:pdf', async (_e, modell, absender) => {
       try {
         const fehler = invoice.absenderFehler(absender);
         if (fehler.length) return { fehler };
         const pdf = await renderPdf(invoice.buildHtml(modell, absender));
         const dir = path.join(dataDir(), 'Rechnungen');
         fs.mkdirSync(dir, { recursive: true });
-        const file = path.join(dir, invoice.dateiname(modell, projekt));
+        const file = path.join(dir, invoice.dateiname(modell));
         fs.writeFileSync(file, pdf);
         if (!process.env.ZEITERFASSUNG_KEIN_OEFFNEN) shell.openPath(file);
         return { path: file };
@@ -272,6 +354,7 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     createWindow();
+    starteWaechter();
   });
 
   app.on('window-all-closed', () => app.quit());

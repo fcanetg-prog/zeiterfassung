@@ -85,11 +85,67 @@
   const projLabel = (p) => (p ? [p.kunde, p.name].filter(Boolean).join(' – ') : 'Gelöschtes Projekt');
   const projLabelJahr = (p) => projLabel(p) + (p && p.jahr !== +state.date.slice(0, 4) ? ` (${p.jahr})` : '');
 
-  async function persist() {
+  /* Änderungsstempel: Damit zwei Rechner ihre Stände zusammenführen können, bekommt jedes geänderte
+     Projekt und jeder geänderte Zeiteintrag beim Speichern die aktuelle Zeit, Gelöschtes einen Löschvermerk. */
+  let abbild = { p: new Map(), e: new Map(), s: '' };
+  const ohneMod = (r) => JSON.stringify(Object.assign({}, r, { mod: undefined }));
+  function merkeAbbild() {
+    abbild = {
+      p: new Map(state.data.projects.map((r) => [r.id, ohneMod(r)])),
+      e: new Map(state.data.entries.map((r) => [r.id, ohneMod(r)])),
+      s: JSON.stringify(state.data.settings),
+    };
+  }
+  function stempeln() {
+    const jetzt = Date.now();
+    const d = state.data;
+    if (!d.geloescht) d.geloescht = {};
+    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e]]) {
+      const da = new Set();
+      for (const r of liste) {
+        da.add(r.id);
+        if (alt.get(r.id) !== ohneMod(r)) { r.mod = jetzt; delete d.geloescht[r.id]; }
+      }
+      for (const id of alt.keys()) if (!da.has(id)) d.geloescht[id] = jetzt;
+    }
+    if (JSON.stringify(d.settings) !== abbild.s) d.settingsMod = jetzt;
+    merkeAbbild();
+  }
+
+  async function persist(opts) {
+    stempeln();
     recompute();
-    const r = await api.save(state.data);
+    const r = await api.save(state.data, opts);
     if (!r || r.ok === false) toast('Speichern fehlgeschlagen: ' + ((r && r.error) || 'unbekannter Fehler'), { fehler: true });
+    else if (r.data) uebernehme(r.data);   // ein anderer Rechner hatte inzwischen gespeichert
     scheduleSync();
+  }
+
+  /** Übernimmt einen zusammengeführten Stand in die Anzeige. */
+  function uebernehme(daten) {
+    state.data = normalize(daten);
+    merkeAbbild();
+    recompute();
+    if (state.drawer && state.drawer.id && !projById(state.drawer.id)) state.drawer = null;
+    render();
+  }
+
+  /** Die Datendatei wurde von aussen geändert (anderer Rechner): laden, mit dem eigenen Stand zusammenführen. */
+  let holtGerade = false;
+  async function holeAenderungen() {
+    if (holtGerade || !state.data) return;
+    holtGerade = true;
+    try {
+      const r = await api.load();
+      if (!r.data) return;
+      const fern = normalize(r.data);
+      stempeln();
+      const zusammen = C.mergeData(state.data, fern);
+      const gleichWieFern = JSON.stringify(normalize(zusammen)) === JSON.stringify(fern);
+      uebernehme(zusammen);
+      if (!gleichWieFern) await api.save(state.data);
+      scheduleSync();
+    } finally { holtGerade = false; }
   }
 
   /* ============ Rechnungen für Gmail bereitstellen ============ */
@@ -97,7 +153,7 @@
   /** Was mit der Rechnung eines Projekts für den Gmail-Entwurf passiert. */
   function entwurfStatus(p) {
     if (p.abrechnung !== 'rechnung' || p.rechnungsdatum || !p.rechnungGeplant) return null;
-    const m = C.invoiceModel(p, S(), heute);
+    const m = C.invoiceModelGroup(gruppe(p), S(), heute);
     if (m.fehler.length) return { ok: false, text: m.fehler[0] };
     if (!String(p.rechnungsEmail || '').trim()) return { ok: false, text: 'Die E-Mail für die Rechnung fehlt.' };
     return { ok: true, modell: m, text: p.rechnungGeplant <= heute ? 'Entwurf fällig' : `Entwurf am ${fmtDate(p.rechnungGeplant)}` };
@@ -116,9 +172,16 @@
   async function syncNow(laut) {
     if (!gmailAktiv()) { if (laut) toast('Trage zuerst die Adresse der Web-App und den Schlüssel ein.', { fehler: true }); return; }
     const jobs = [];
+    const erledigt = new Set();
     for (const p of state.data.projects) {
-      const st = entwurfStatus(p);
-      if (st && st.ok) jobs.push({ id: p.id, modell: st.modell, projekt: { kunde: p.kunde, name: p.name }, an: p.rechnungsEmail.trim() });
+      if (erledigt.has(p.id)) continue;
+      const g = gruppe(p);
+      g.forEach((x) => erledigt.add(x.id));
+      const st = entwurfStatus(g[0]);
+      if (!st || !st.ok) continue;
+      // Eine Sammelrechnung bekommt eine eigene Kennung, damit sie nicht mit der Einzelrechnung des ersten Projekts verwechselt wird.
+      jobs.push({ id: g.length > 1 ? `${g[0].id}x${g.length}` : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(),
+        kunde: [...new Set(g.map((x) => x.kunde))].join(', '), projekt: g.map((x) => x.name).join(', ') });
     }
     const r = await api.invoicePush(jobs, absender(), gmailZiel(), !!laut);
     const vorher = state.sync && state.sync.fehler;
@@ -147,6 +210,8 @@
     const out = C.emptyData();
     out.settings = Object.assign({}, C.DEFAULTS, d.settings || {});
     out.history = d.history || {};
+    out.geloescht = Object.assign({}, d.geloescht || {});
+    out.settingsMod = d.settingsMod || 0;
     out.projects = d.projects.map((p, i) => ({
       id: p.id || uid('p'), jahr: +p.jahr || state.year, sort: C.isNum(p.sort) ? p.sort : i,
       bereich: p.bereich || '', kategorie: p.kategorie || '', kunde: p.kunde || '', name: p.name || '',
@@ -159,11 +224,11 @@
       rechnungGeplant: p.rechnungGeplant || null, rechnungsdatum: p.rechnungsdatum || null, zahlungsdatum: p.zahlungsdatum || null,
       rechnungsadresse: p.rechnungsadresse || '', referenz: p.referenz || '', rechnungsEmail: p.rechnungsEmail || '',
       rechnungstext: p.rechnungstext || '', offerteVom: p.offerteVom || null, emailVom: p.emailVom || null,
-      notiz: p.notiz || '', archiviert: !!p.archiviert,
+      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, mod: p.mod || 0,
     }));
     const ids = new Set(out.projects.map((p) => p.id));
     out.entries = d.entries.filter((e) => e && e.datum && ids.has(e.projectId) && C.isNum(e.stunden))
-      .map((e) => ({ id: e.id || uid('e'), datum: e.datum, projectId: e.projectId, stunden: e.stunden, notiz: e.notiz || '' }));
+      .map((e) => ({ id: e.id || uid('e'), datum: e.datum, projectId: e.projectId, stunden: e.stunden, notiz: e.notiz || '', mod: e.mod || 0 }));
     return out;
   }
 
@@ -484,6 +549,15 @@
     return `<span class="pill s-${st.code}">${esc(st.label)}${extra}</span>`;
   }
 
+  /** Kleiner Vermerk, wenn ein Projekt mit anderen auf derselben Rechnung steht. */
+  function gemeinsamTag(p) {
+    if (p.abrechnung !== 'rechnung') return '';
+    const g = gruppe(p);
+    if (g.length < 2) return '';
+    const andere = g.filter((x) => x !== p).map(projLabel).join(', ');
+    return ` <span class="note-dot" title="${esc((p.rechnungsdatum ? 'Gemeinsam in Rechnung gestellt mit: ' : 'Kommt auf dieselbe Rechnung wie: ') + andere)}">gemeinsam (${g.length})</span>`;
+  }
+
   function sums(list) {
     let betrag = 0, teil = 0, eff = 0, ziel = 0, rech = 0, teilMitStd = 0, effMitBetrag = 0;
     for (const p of list) {
@@ -536,7 +610,7 @@
           <td class="dim">${p.abrechnung === 'intern' ? '' : MWST_KURZ[p.mwst]}</td>
           <td class="r num">${p.abrechnung === 'rechnung' ? fmtCHF(f.rechnungsbetrag) : '<span class="dim">–</span>'}</td>
           <td class="datecell">${p.abrechnung === 'rechnung' ? `<input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="pg-${p.id}" aria-label="Rechnungsdatum">` : ''}</td>
-          <td class="num">${fmtDate(p.rechnungsdatum)}</td>
+          <td class="num">${fmtDate(p.rechnungsdatum)}${gemeinsamTag(p)}</td>
           <td class="num">${fmtDate(p.zahlungsdatum)}</td>
           <td>${statusPill(f.status)}</td></tr>`;
       }
@@ -569,12 +643,12 @@
   }
 
   function projectsCsv() {
-    const head = ['Bereich', 'Unterbereich', 'Kunde', 'Projekt', 'Effort', 'MwSt.', 'Ansatz', 'Kosten', 'Mein Teil', 'Stunden Offerte', 'Stunden Ziel', 'Stunden effektiv', 'CHF/h Ziel', 'CHF/h effektiv', 'Rechnungsbetrag', 'Rechnungsdatum', 'Rechnung gestellt', 'Zahlung erhalten', 'Status', 'Notiz'];
+    const head = ['Bereich', 'Unterbereich', 'Kunde', 'Projekt', 'Effort', 'MwSt.', 'Ansatz', 'Kosten', 'Mein Teil', 'Stunden Offerte', 'Stunden Ziel', 'Stunden effektiv', 'CHF/h Ziel', 'CHF/h effektiv', 'Rechnungsbetrag', 'Rechnungsdatum', 'Rechnung gestellt', 'Zahlung erhalten', 'Status', 'Gemeinsame Rechnung mit', 'Notiz'];
     const n = (v, d) => (C.isNum(v) ? v.toFixed(d == null ? 2 : d) : '');
     const rows = filteredProjects().map((p) => {
       const f = figs(p);
       return [p.bereich, p.kategorie, p.kunde, p.name, p.effort == null ? '' : p.effort, MWST_KURZ[p.mwst], n(f.netto), n(f.kosten), n(f.meinTeil), n(p.stundenOfferte), n(p.stundenZiel), n(f.stundenEff), n(f.lohnZiel), n(f.lohnEff),
-        p.abrechnung === 'rechnung' ? n(f.rechnungsbetrag) : '', fmtDate(p.rechnungGeplant), fmtDate(p.rechnungsdatum), fmtDate(p.zahlungsdatum), f.status.label, p.notiz.replace(/\n/g, ' | ')];
+        p.abrechnung === 'rechnung' ? n(f.rechnungsbetrag) : '', fmtDate(p.rechnungGeplant), fmtDate(p.rechnungsdatum), fmtDate(p.zahlungsdatum), f.status.label, gruppe(p).filter((x) => x !== p).map(projLabel).join(', '), p.notiz.replace(/\n/g, ' | ')];
     });
     return [head].concat(rows).map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
   }
@@ -587,7 +661,7 @@
       id: null, jahr: state.year, sort: maxSort + 1, bereich: '', kategorie: '', kunde: '', name: '',
       mwst: 'drauf', betrag: null, kosten: 0, stundenOfferte: null, stundenZiel: null, effort: 3,
       abrechnung: 'rechnung', rechnungGeplant: null, rechnungsdatum: null, zahlungsdatum: null,
-      rechnungsadresse: '', referenz: '', rechnungsEmail: '', rechnungstext: '', offerteVom: null, emailVom: null, notiz: '', archiviert: false,
+      rechnungsadresse: '', referenz: '', rechnungsEmail: '', rechnungstext: '', offerteVom: null, emailVom: null, notiz: '', archiviert: false, rechnungGruppe: null, mod: 0,
     };
   }
 
@@ -676,6 +750,7 @@
             ${d.abrechnung === 'rechnung' ? dat('d-rg', 'Rechnungsdatum', 'rechnungGeplant') + dat('d-rd', 'Rechnung gestellt am', 'rechnungsdatum') : ''}
             ${dat('d-zd', 'Zahlung erhalten am', 'zahlungsdatum')}
           </div>`}
+          ${d.abrechnung !== 'rechnung' || !dr.id || gruppe(projById(dr.id)).length < 2 ? '' : `<p class="sammel">${projById(dr.id).rechnungsdatum ? 'Gemeinsam in Rechnung gestellt mit' : 'Kommt auf dieselbe Rechnung wie'}: ${gruppe(projById(dr.id)).filter((x) => x.id !== dr.id).map((x) => esc(projLabel(x))).join(', ')}.</p>`}
           ${d.abrechnung !== 'rechnung' ? '' : `
           <div class="fld"><label for="d-adr">Rechnungsadresse</label><textarea id="d-adr" rows="4" placeholder="Firma&#10;Strasse&#10;PLZ Ort" data-action="d-field" data-key="rechnungsadresse">${esc(d.rechnungsadresse)}</textarea></div>
           <div class="cols2">
@@ -687,7 +762,7 @@
             <small id="d-einl">Auf der Rechnung steht: «${esc(C.invoiceIntro(d))}»</small></div>
           <div class="fld"><label for="d-rt">Rechnungspositionen</label>
             <textarea id="d-rt" rows="3" placeholder="Moderation gemäss Offerte vom 15.01.2026; 3390&#10;Zusatzkosten gemäss E-Mail vom 07.07.2026; 430" data-action="d-field" data-key="rechnungstext">${esc(d.rechnungstext)}</textarea>
-            <small>Eine Position pro Zeile, der Betrag steht nach einem Strichpunkt. Bei nur einer Position kannst du den Betrag weglassen. Leer heisst: Kunde und Projektname mit dem offerierten Betrag.</small></div>
+            <small>Projekte mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen automatisch auf dieselbe Rechnung. Eine Position pro Zeile, der Betrag steht nach einem Strichpunkt. Bei nur einer Position kannst du den Betrag weglassen. Leer heisst: Kunde und Projektname mit dem offerierten Betrag.</small></div>
           <div class="fld"><button type="button" class="btn" data-action="drawer-invoice">Speichern und Rechnung als PDF erstellen</button></div>`}
 
           <h3>Notiz</h3>
@@ -743,10 +818,23 @@
     return state.data.settings.absender;
   }
 
+  const gruppe = (p) => C.invoiceGroup(p, state.data.projects);
+
+  /** Setzt «gestellt am» oder «bezahlt am» für alle Projekte derselben Rechnung und hält fest, was zusammengehört. */
+  function setzeGruppenDatum(p, key, wert) {
+    const g = gruppe(p);
+    if (key === 'rechnungsdatum') {
+      if (wert && g.length > 1 && !p.rechnungGruppe) { const id = uid('RG'); for (const x of g) x.rechnungGruppe = id; }
+      if (!wert) for (const x of g) x.rechnungGruppe = null;
+    }
+    for (const x of g) x[key] = wert || null;
+    return g.length;
+  }
+
   async function makeInvoice(p) {
-    const m = C.invoiceModel(p, S(), heute);
+    const m = C.invoiceModelGroup(gruppe(p), S(), heute);
     if (m.fehler.length) { toast(m.fehler.join(' '), { fehler: true }); return; }
-    const r = await api.invoicePdf(m, absender(), { kunde: p.kunde, name: p.name });
+    const r = await api.invoicePdf(m, absender());
     if (r.fehler) { toast(r.fehler.join(' '), { fehler: true }); return; }
     toast('Rechnung gespeichert: ' + r.path);
   }
@@ -764,30 +852,46 @@
     const by = { faellig: [], offen: [], geplant: [], gestellt: [], ueberfaellig: [], pruefen: [], bezahlt: [] };
     for (const p of yearProjects()) { const c = figs(p).status.code; if (by[c]) by[c].push(p); }
     const sum = (l) => l.reduce((s, p) => s + (figs(p).rechnungsbetrag || 0), 0);
+    // Projekte mit gesetztem Rechnungsdatum gehören in die Hauptliste, auch wenn noch keine Stunden erfasst sind.
+    by.offen = by.offen.concat(by.geplant.filter((p) => p.rechnungGeplant));
+    by.geplant = by.geplant.filter((p) => !p.rechnungGeplant);
     const zuStellen = by.faellig.concat(by.offen).sort((a, b) => (a.rechnungGeplant || '9') < (b.rechnungGeplant || '9') ? -1 : 1);
     const offen = by.ueberfaellig.concat(by.gestellt).sort((a, b) => (a.rechnungsdatum < b.rechnungsdatum ? -1 : 1));
     const bezahlt = by.bezahlt.slice().sort((a, b) => (a.zahlungsdatum < b.zahlungsdatum ? 1 : -1));
 
-    const row = (p, cols) => {
+    const gezeigt = new Set();
+    const knoepfe = (p, cols) => `${cols.includes('btn-gestellt') ? `<button class="btn small" data-action="p-invoice" data-id="${p.id}">PDF</button> <button class="btn small" data-action="p-today" data-key="rechnungsdatum" data-id="${p.id}">Heute gestellt</button>` : ''}
+          ${cols.includes('btn-bezahlt') ? `<button class="btn small" data-action="p-today" data-key="zahlungsdatum" data-id="${p.id}">Heute bezahlt</button>` : ''}`;
+    const row = (p, cols, inGruppe) => {
       const f = figs(p);
-      return `<tr>
+      return `<tr class="${inGruppe ? 'rgm' : ''}">
         <td><button class="link" data-action="open-project" data-id="${p.id}"><b>${esc(p.kunde)}</b> ${esc(p.name)}</button></td>
         <td class="r num">${fmtH(f.stundenEff)}</td>
         <td class="r num">${p.abrechnung === 'ohne' ? fmtCHF(f.netto) : fmtCHF(f.rechnungsbetrag)}</td>
         ${cols.includes('geplant') ? `<td><input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="rg-${p.id}" aria-label="Rechnungsdatum"></td>` : ''}
         ${cols.includes('gestellt') ? `<td><input type="date" class="inline" value="${p.rechnungsdatum || ''}" data-action="p-date" data-key="rechnungsdatum" data-id="${p.id}" id="rd-${p.id}" aria-label="Rechnung gestellt am"></td>` : ''}
         ${cols.includes('bezahlt') ? `<td><input type="date" class="inline" value="${p.zahlungsdatum || ''}" data-action="p-date" data-key="zahlungsdatum" data-id="${p.id}" id="zd-${p.id}" aria-label="Zahlung erhalten am"></td>` : ''}
-        <td>${statusPill(f.status)}${entwurfTag(p)}</td>
-        <td class="r">${cols.includes('btn-gestellt') ? `<button class="btn small" data-action="p-invoice" data-id="${p.id}">PDF</button> <button class="btn small" data-action="p-today" data-key="rechnungsdatum" data-id="${p.id}">Heute gestellt</button>` : ''}
-          ${cols.includes('btn-bezahlt') ? `<button class="btn small" data-action="p-today" data-key="zahlungsdatum" data-id="${p.id}">Heute bezahlt</button>` : ''}</td>
+        <td>${statusPill(f.status)}${inGruppe ? '' : entwurfTag(p)}</td>
+        <td class="r">${inGruppe ? '' : knoepfe(p, cols)}</td>
       </tr>`;
     };
-    const table = (list, cols, heads) => `<div class="table-flat"><table class="list"><thead><tr><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead><tbody>${list.map((p) => row(p, cols)).join('')}</tbody></table></div>`;
+    /** Zeilen einer Liste; Projekte derselben Rechnung stehen zusammen unter einer Kopfzeile. */
+    const zeilen = (list, cols, spalten) => list.map((p) => {
+      if (gezeigt.has(p.id)) return '';
+      const g = gruppe(p);
+      g.forEach((x) => gezeigt.add(x.id));
+      if (g.length === 1) return row(p, cols, false);
+      const m = C.invoiceModelGroup(g, S(), heute);
+      const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
+      return `<tr class="rg"><td colspan="2">Gemeinsame Rechnung für ${g.length} Projekte</td><td class="r num">${fmtCHF(total)}</td>
+        <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>` + g.map((x) => row(x, cols, true)).join('');
+    }).join('');
+    const table = (list, cols, heads) => `<div class="table-flat"><table class="list"><thead><tr><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead><tbody>${zeilen(list, cols, heads.length + 1)}</tbody></table></div>`;
 
     return `
     <header class="head"><h1>Rechnungen ${state.year}</h1></header>
     <div class="tiles">
-      <div class="tile"><span>Noch zu stellen</span><b>${fmtCHF(sum(zuStellen))}</b><i>${zuStellen.length} Projekte mit erfassten Stunden</i></div>
+      <div class="tile"><span>Noch zu stellen</span><b>${fmtCHF(sum(zuStellen))}</b><i>${zuStellen.length} Projekte mit Stunden oder Rechnungsdatum</i></div>
       <div class="tile"><span>Gestellt, noch nicht bezahlt</span><b>${fmtCHF(sum(offen))}</b><i>${offen.length} Rechnungen${by.ueberfaellig.length ? `, davon ${by.ueberfaellig.length} überfällig` : ''}</i></div>
       <div class="tile"><span>Bezahlt</span><b>${fmtCHF(bezahlt.reduce((s, p) => s + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0))}</b><i>${bezahlt.length} Zahlungen</i></div>
     </div>
@@ -964,6 +1068,7 @@
       </section>
       <section class="sec"><h2>Daten</h2>
         <p>Gespeichert in <code>${esc(state.info.dataPath)}</code>. Jede Änderung wird sofort gesichert; im Unterordner «Sicherungen» liegt pro Tag eine Kopie des Vortagsstands.</p>
+        <p>Für die Arbeit auf zwei Rechnern legst du den Speicherort in deinen Dropbox-Ordner und wählst auf dem zweiten Rechner denselben Ordner. Änderungen vom anderen Rechner erscheinen dann von selbst.</p>
         <div class="row">
           <button class="btn" data-action="open-folder">Ordner öffnen</button>
           <button class="btn" data-action="choose-folder">Speicherort ändern</button>
@@ -1017,8 +1122,9 @@
       if (!confirm(`Der Import ersetzt alle vorhandenen Daten (${state.data.projects.length} Projekte, ${state.data.entries.length} Einträge) durch ${neu.projects.length} Projekte und ${neu.entries.length} Einträge aus der Datei. Der bisherige Stand wird vorher gesichert. Fortfahren?`)) return;
       await api.save(state.data, { sicherungErzwingen: true });
     }
+    neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;
-    await persist();
+    await persist({ ersetzen: true });
     render();
     toast(`${neu.projects.length} Projekte und ${neu.entries.length} Einträge importiert`);
   }
@@ -1074,17 +1180,17 @@
         state.data.entries = state.data.entries.filter((e) => e.projectId !== id);
         state.drawer = null; persist(); render(); toast('Projekt gelöscht'); break;
       }
-      case 'p-today': { const p = projById(el.dataset.id); p[el.dataset.key] = heute; persist(); render(); toast(el.dataset.key === 'zahlungsdatum' ? 'Zahlung eingetragen' : 'Rechnungsdatum eingetragen'); break; }
+      case 'p-today': { const n = setzeGruppenDatum(projById(el.dataset.id), el.dataset.key, heute); persist(); render(); toast((el.dataset.key === 'zahlungsdatum' ? 'Zahlung eingetragen' : 'Als gestellt eingetragen') + (n > 1 ? ` für ${n} Projekte derselben Rechnung` : '')); break; }
       case 'toggle-leere': state.zeigeLeere = !state.zeigeLeere; render(); break;
       case 'import': await doImport(); break;
-      case 'start-empty': state.data = C.emptyData(); await persist(); render(); break;
+      case 'start-empty': state.data = C.emptyData(); merkeAbbild(); await persist(); render(); break;
       case 'export': { const r = await api.exportFile(state.data); if (r && r.path) toast('Exportiert nach ' + r.path); break; }
       case 'export-csv': { const r = await api.exportCsv(`Projekte-${state.year}.csv`, projectsCsv()); if (r && r.path) toast('Exportiert nach ' + r.path); break; }
       case 'open-folder': api.openFolder(); break;
       case 'choose-folder': {
         const r = await api.chooseFolder();
         if (!r || r.canceled) break;
-        if (r.vorhanden) { const l = await api.load(); if (l.data) state.data = normalize(l.data); recompute(); }
+        if (r.vorhanden) { const l = await api.load(); if (l.data) { state.data = normalize(l.data); merkeAbbild(); } recompute(); }
         else await persist();
         state.info = await api.info(); render();
         toast(r.vorhanden ? 'Vorhandene Daten am neuen Speicherort geladen' : 'Speicherort geändert');
@@ -1134,7 +1240,11 @@
       if (v == null || v <= 0 || v > 24) { toast('Gib die Stunden als Zahl ein, zum Beispiel 1.5 oder 1:30.', { fehler: true }); render(); return; }
       e.stunden = Math.round(v * 100) / 100; persist(); render();
     } else if (a === 'entry-note') { const e = state.data.entries.find((x) => x.id === el.dataset.id); e.notiz = el.value.trim(); persist(); }
-    else if (a === 'p-date') { const p = projById(el.dataset.id); p[el.dataset.key] = el.value || null; persist(); render(); }
+    else if (a === 'p-date') {
+      const p = projById(el.dataset.id), k = el.dataset.key;
+      if (k === 'rechnungGeplant') p[k] = el.value || null; else setzeGruppenDatum(p, k, el.value);
+      persist(); render();
+    }
     else if (a === 'setting') {
       const v = parseFloat(el.value);
       if (!isFinite(v) || v < 0) { toast('Bitte eine Zahl eingeben.', { fehler: true }); render(); return; }
@@ -1177,7 +1287,9 @@
       state.info = await api.info();
       const r = await api.load();
       if (r.error) state.fehler = r.error;
-      if (r.data) { state.data = normalize(r.data); recompute(); }
+      if (r.data) { state.data = normalize(r.data); merkeAbbild(); recompute(); }
+      if (r.eingearbeitet) setTimeout(() => toast('Änderungen von einem anderen Rechner wurden eingearbeitet.'), 400);
+      if (api.onChanged) api.onChanged(holeAenderungen);
     } catch (e) {
       state.fehler = 'Die Daten konnten nicht geladen werden: ' + e.message;
     }

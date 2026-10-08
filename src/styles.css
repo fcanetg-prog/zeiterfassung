@@ -285,3 +285,7 @@ th.r { text-align: right; }
 .ytag { font-size: 11px; font-weight: 600; color: var(--teal-deep); border: 1px solid rgba(var(--teal-rgb), .45); border-radius: 3px; padding: 0 4px; margin-left: 4px; font-variant-numeric: tabular-nums; }
 
 .logo-prev { height: 34px; width: auto; border: 1px solid var(--line); border-radius: 4px; padding: 3px; background: #fff; }
+
+.list tr.rg td { background: #eef4f4; font-weight: 600; border-top: 1px solid var(--line); }
+.list tr.rgm td:first-child { padding-left: 22px; box-shadow: inset 3px 0 0 var(--teal); }
+.sammel { background: #eef4f4; border-left: 3px solid var(--teal); padding: 8px 10px; margin: 0 0 12px; font-size: 13px; }

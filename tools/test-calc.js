@@ -40,3 +40,29 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(C.invoiceIntro({ offerteVom: '2026-01-15', emailVom: '2026-07-07' }), 'Auf Basis meiner Offerte vom 15. Januar 2026 und unseres E-Mail-Austauschs vom 7. Juli 2026 stelle ich hiermit folgende Arbeiten in Rechnung.');
   console.log('Rechnungsprüfungen bestanden.');
 }
+
+// Sammelrechnung und Zusammenführen
+{
+  const adr = 'Verband\nMattenstrasse 8\n3073 Gümligen';
+  const mk = (id, betrag, extra) => Object.assign({ id, sort: +id.slice(1), kunde: 'VSRB', name: 'Folge ' + id, abrechnung: 'rechnung', mwst: 'drauf', kosten: 0, betrag, rechnungsadresse: adr, rechnungsEmail: 'A@b.ch', rechnungGeplant: '2026-10-20' }, extra || {});
+  const ps = [mk('p1', 975), mk('p2', 975, { rechnungsEmail: 'a@b.ch ' }), mk('p3', 975, { rechnungGeplant: '2026-11-20' }), mk('p4', 2195, { rechnungsadresse: adr + '\n' })];
+  const g = C.invoiceGroup(ps[0], ps);
+  assert.deepStrictEqual(g.map((p) => p.id), ['p1', 'p2', 'p4']);
+  const m = C.invoiceModelGroup(g, s, '2026-10-08');
+  assert.deepStrictEqual(m.fehler, []); assert.strictEqual(m.positionen.length, 3); assert.strictEqual(m.zwischentotal, 4145); assert.strictEqual(m.mwst, 335.75); assert.strictEqual(m.total, 4480.75);
+  assert.strictEqual(C.invoiceGroup(ps[2], ps).length, 1);
+  assert.strictEqual(C.invoiceModelGroup([ps[0], mk('p9', 100, { mwst: 'keine' })], s, '2026-10-08').fehler.length, 1);
+  // gestellte Gruppe bleibt zusammen, auch wenn später Daten ändern
+  ps[0].rechnungsdatum = ps[1].rechnungsdatum = '2026-10-20'; ps[0].rechnungGruppe = ps[1].rechnungGruppe = 'RG1'; ps[1].rechnungGeplant = '2026-12-01';
+  assert.deepStrictEqual(C.invoiceGroup(ps[0], ps).map((p) => p.id), ['p1', 'p2']);
+  assert.deepStrictEqual(C.invoiceGroup(ps[3], ps).map((p) => p.id), ['p4']);
+
+  const A = { settings: { x: 1 }, settingsMod: 5, projects: [{ id: 'a', jahr: 2026, sort: 1, name: 'alt', mod: 1 }, { id: 'b', jahr: 2026, sort: 2, mod: 1 }], entries: [{ id: 'e1', projectId: 'a', datum: '2026-01-02', stunden: 1, mod: 1 }, { id: 'e2', projectId: 'b', datum: '2026-01-03', stunden: 2, mod: 1 }], geloescht: {} };
+  const B = { settings: { x: 2 }, settingsMod: 9, projects: [{ id: 'a', jahr: 2026, sort: 1, name: 'neu', mod: 7 }, { id: 'c', jahr: 2026, sort: 3, mod: 4 }], entries: [{ id: 'e1', projectId: 'a', datum: '2026-01-02', stunden: 1, mod: 1 }, { id: 'e3', projectId: 'c', datum: '2026-01-01', stunden: 3, mod: 4 }], geloescht: { b: 6, e2: 6 } };
+  for (const M of [C.mergeData(A, B), C.mergeData(B, A)]) {
+    assert.deepStrictEqual(M.projects.map((p) => p.id + ':' + (p.name || '')), ['a:neu', 'c:']);
+    assert.deepStrictEqual(M.entries.map((e) => e.id), ['e3', 'e1']);
+    assert.strictEqual(M.settings.x, 2);
+  }
+  console.log('Sammelrechnung und Zusammenführen bestanden.');
+}

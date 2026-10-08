@@ -252,7 +252,92 @@
     };
   }
 
+  /* ---------- Sammelrechnungen ---------- */
+
+  const zeilen = (t) => String(t || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  /** Projekte mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen auf eine Rechnung. */
+  function groupKey(p) {
+    if (p.abrechnung !== 'rechnung' || !p.rechnungGeplant) return null;
+    const adr = zeilen(p.rechnungsadresse).join('\n');
+    if (!adr) return null;
+    return [p.rechnungGeplant, adr.toLowerCase(), String(p.rechnungsEmail || '').trim().toLowerCase()].join('|');
+  }
+
+  /** Alle Projekte, die mit p auf derselben Rechnung stehen (p eingeschlossen), in Listenreihenfolge. */
+  function invoiceGroup(p, projects) {
+    let m;
+    if (p.rechnungGruppe) m = projects.filter((x) => x.rechnungGruppe === p.rechnungGruppe);
+    else if (!p.rechnungsdatum && groupKey(p)) {
+      const k = groupKey(p);
+      m = projects.filter((x) => !x.rechnungsdatum && !x.rechnungGruppe && groupKey(x) === k);
+    } else m = [p];
+    if (!m.includes(p)) m.push(p);
+    return m.slice().sort((a, b) => a.sort - b.sort);
+  }
+
+  /** Rechnung für eine Gruppe von Projekten. Bei einem einzelnen Projekt identisch mit invoiceModel. */
+  function invoiceModelGroup(members, s, heute) {
+    const einzel = members.map((p) => invoiceModel(p, s, heute));
+    const label = (p) => [p.kunde, p.name].filter(Boolean).join(' – ');
+    const projekte = members.map((p) => ({ id: p.id, kunde: p.kunde, name: p.name }));
+    if (members.length === 1) return Object.assign({ projekte }, einzel[0]);
+
+    const fehler = [];
+    einzel.forEach((m, i) => m.fehler.forEach((f) => fehler.push(`${label(members[i])}: ${f}`)));
+    if (new Set(members.map((p) => p.mwst === 'keine')).size > 1) fehler.push('Projekte mit und ohne Mehrwertsteuer können nicht auf derselben Rechnung stehen. Gib einem davon ein anderes Rechnungsdatum.');
+    if (fehler.length) return { fehler, projekte };
+
+    const positionen = [].concat(...einzel.map((m) => m.positionen));
+    const zwischentotal = round2(positionen.reduce((a, x) => a + x.betrag, 0));
+    const mitMwst = einzel[0].mitMwst;
+    const mwst = mitMwst ? round2(zwischentotal * s.mwstSatz / 100) : 0;
+    const einleitungen = new Set(einzel.map((m) => m.einleitung));
+    const referenz = [];
+    for (const m of einzel) for (const l of m.referenz) if (!referenz.includes(l)) referenz.push(l);
+    return Object.assign({}, einzel[0], {
+      fehler: [], projekte, positionen, zwischentotal, mwst, mitMwst, total: round2(zwischentotal + mwst), referenz,
+      einleitung: einleitungen.size === 1 ? einzel[0].einleitung : invoiceIntro({}),
+    });
+  }
+
+  /* ---------- Zusammenführen zweier Datenstände (Synchronisation zwischen Rechnern) ---------- */
+
+  /**
+   * Führt zwei Stände zusammen. Pro Projekt und pro Zeiteintrag gewinnt die jüngere Änderung («mod»).
+   * Gelöschtes bleibt gelöscht, solange es danach nicht wieder geändert wurde.
+   */
+  function mergeData(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    const geloescht = Object.assign({}, a.geloescht || {});
+    for (const [id, t] of Object.entries(b.geloescht || {})) if (!(geloescht[id] >= t)) geloescht[id] = t;
+    const mergeList = (x, y) => {
+      const map = new Map();
+      for (const r of x || []) map.set(r.id, r);
+      for (const r of y || []) {
+        const v = map.get(r.id);
+        if (!v || (r.mod || 0) > (v.mod || 0)) map.set(r.id, r);
+      }
+      return [...map.values()].filter((r) => !(geloescht[r.id] >= (r.mod || 0)));
+    };
+    const projects = mergeList(a.projects, b.projects);
+    const ids = new Set(projects.map((p) => p.id));
+    const entries = mergeList(a.entries, b.entries).filter((e) => ids.has(e.projectId))
+      .sort((x, y) => (x.datum < y.datum ? -1 : x.datum > y.datum ? 1 : x.id < y.id ? -1 : 1));
+    projects.sort((x, y) => (x.jahr - y.jahr) || (x.sort - y.sort) || (x.id < y.id ? -1 : 1));
+    const neuer = (b.settingsMod || 0) > (a.settingsMod || 0) ? b : a;
+    return {
+      version: 1,
+      settings: neuer.settings || a.settings || b.settings,
+      settingsMod: neuer.settingsMod || 0,
+      projects, entries, geloescht,
+      history: Object.assign({}, b.history || {}, a.history || {}),
+    };
+  }
+
   return {
+    groupKey, invoiceGroup, invoiceModelGroup, mergeData,
     dateLong, invoiceIntro, parsePositions, invoiceModel,
     DEFAULTS, settings, emptyData, hoursByProject, projectFigures, status, daysBetween,
     dailyTotals, daysInYear, dayOfYear, isoFromDayOfYear, monthlyTarget, monthly,
