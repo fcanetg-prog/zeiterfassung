@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   openFolder: () => ipcRenderer.invoke('data:openFolder'),
   chooseFolder: () => ipcRenderer.invoke('data:chooseFolder'),
   info: () => ipcRenderer.invoke('app:info'),
+  invoiceSync: (jobs, absender, ordner) => ipcRenderer.invoke('invoice:sync', jobs, absender, ordner),
+  invoiceChooseFolder: () => ipcRenderer.invoke('invoice:chooseFolder'),
   invoicePdf: (modell, absender, projekt) => ipcRenderer.invoke('invoice:pdf', modell, absender, projekt),
 });
