@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const invoice = require('./invoice');
@@ -97,51 +97,64 @@ async function renderPdf(html) {
 
 /* ---------- Rechnungen für Gmail bereitstellen ---------- */
 
-const MANIFEST = 'rechnungen.json';
+let letzterAbgleich = null; // Signatur des letzten erfolgreichen Abgleichs, spart unnötige Anfragen
+
+function webAppErlaubt(url) {
+  if (process.env.ZEITERFASSUNG_TEST_WEBAPP && url.startsWith(process.env.ZEITERFASSUNG_TEST_WEBAPP)) return true;
+  return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url);
+}
+
+async function webAppAnfrage(url, inhalt) {
+  let res;
+  try {
+    res = await net.fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(inhalt), redirect: 'follow' });
+  } catch (err) {
+    throw new Error('Keine Verbindung zum Google-Skript. Prüfe die Internetverbindung.');
+  }
+  const text = await res.text();
+  let antwort;
+  try { antwort = JSON.parse(text); } catch {
+    throw new Error('Das Google-Skript antwortet nicht wie erwartet. Prüfe die Adresse der Web-App und ob der Zugriff auf «Jeder» steht.');
+  }
+  if (!antwort.ok) throw new Error(antwort.fehler || 'Das Google-Skript meldet einen Fehler.');
+  return antwort;
+}
 
 /**
- * Hält im gewählten (von Google Drive synchronisierten) Ordner pro fällige Rechnung ein PDF bereit,
- * dazu die Liste rechnungen.json, die das Google-Skript täglich liest.
- * Gelöscht werden nur PDFs, die diese Funktion früher selbst angelegt hat.
+ * Schickt die fälligen Rechnungen an das Google-Skript. Das Skript legt sie in Google Drive ab
+ * und erstellt am Rechnungsdatum den Entwurf in Gmail. PDFs werden nur hochgeladen, wenn sie neu oder geändert sind.
  */
-async function syncInvoices(jobs, absender, ordner) {
-  if (!ordner) return { ok: false, fehler: 'Kein Ordner gewählt.' };
-  if (!fs.existsSync(ordner)) return { ok: false, fehler: `Der Ordner ${ordner} ist nicht erreichbar.` };
-  const absFehler = invoice.absenderFehler(absender);
-  if (absFehler.length) return { ok: false, fehler: absFehler.join(' ') };
-
-  const manifestPath = path.join(ordner, MANIFEST);
-  let alt = [];
-  try { alt = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).rechnungen || []; } catch { /* noch keine Liste */ }
-  const altNachId = new Map(alt.map((r) => [r.id, r]));
-
-  const neu = [];
-  let erstellt = 0;
-  for (const job of jobs) {
-    const hash = crypto.createHash('sha1').update(JSON.stringify([job.modell, absender, job.an])).digest('hex');
-    const datei = `${job.id}_${invoice.dateiname(job.modell, job.projekt)}`;
-    const vorher = altNachId.get(job.id);
-    const ziel = path.join(ordner, datei);
-    if (!(vorher && vorher.hash === hash && vorher.datei === datei && fs.existsSync(ziel))) {
-      fs.writeFileSync(ziel, await renderPdf(invoice.buildHtml(job.modell, absender)));
-      erstellt++;
-    }
-    neu.push({ id: job.id, hash, datum: job.modell.datum, an: job.an, kunde: job.projekt.kunde, projekt: job.projekt.name, total: job.modell.total, datei });
+async function pushInvoices(jobs, absender, ziel, erzwingen) {
+  const url = String((ziel && ziel.url) || '').trim();
+  const schluessel = String((ziel && ziel.schluessel) || '').trim();
+  if (!url || !schluessel) return { ok: false, fehler: 'Adresse der Web-App oder Schlüssel fehlt.' };
+  if (!webAppErlaubt(url)) return { ok: false, fehler: 'Die Adresse muss mit https://script.google.com/macros/s/ beginnen und auf /exec enden.' };
+  if (jobs.length) {
+    const absFehler = invoice.absenderFehler(absender);
+    if (absFehler.length) return { ok: false, fehler: absFehler.join(' ') };
   }
-  const behalten = new Set(neu.map((r) => r.datei));
-  let entfernt = 0;
-  for (const r of alt) {
-    if (r.datei && !behalten.has(r.datei) && path.basename(r.datei) === r.datei) {
-      try { fs.unlinkSync(path.join(ordner, r.datei)); entfernt++; } catch { /* schon weg */ }
-    }
+
+  const liste = jobs.map((job) => ({
+    id: job.id,
+    hash: crypto.createHash('sha1').update(JSON.stringify([job.modell, absender, job.an])).digest('hex'),
+    datum: job.modell.datum, an: job.an, kunde: job.projekt.kunde, projekt: job.projekt.name, total: job.modell.total,
+    datei: `${job.id}_${invoice.dateiname(job.modell, job.projekt)}`,
+  }));
+  const signatur = crypto.createHash('sha1').update(JSON.stringify([url, schluessel, liste])).digest('hex');
+  if (!erzwingen && signatur === letzterAbgleich) return { ok: true, anzahl: liste.length, hochgeladen: 0, unveraendert: true };
+
+  const vorhanden = new Map((await webAppAnfrage(url, { schluessel, aktion: 'liste' })).rechnungen.map((r) => [r.id, r.hash]));
+  let hochgeladen = 0;
+  for (let i = 0; i < liste.length; i++) {
+    if (vorhanden.get(liste[i].id) === liste[i].hash) continue;
+    const pdf = await renderPdf(invoice.buildHtml(jobs[i].modell, absender));
+    liste[i] = Object.assign({}, liste[i], { pdf: pdf.toString('base64') });
+    hochgeladen++;
   }
-  const inhalt = JSON.stringify({ version: 1, aktualisiert: new Date().toISOString(), rechnungen: neu }, null, 1);
-  let bisher = null;
-  try { bisher = fs.readFileSync(manifestPath, 'utf8'); } catch { /* neu */ }
-  // Nur schreiben, wenn sich an den Rechnungen etwas geändert hat, damit Drive nicht ständig neu synchronisiert.
-  const gleich = bisher && JSON.stringify((JSON.parse(bisher).rechnungen)) === JSON.stringify(neu);
-  if (!gleich) fs.writeFileSync(manifestPath, inhalt, 'utf8');
-  return { ok: true, anzahl: neu.length, erstellt, entfernt };
+  const antwort = await webAppAnfrage(url, { schluessel, aktion: 'abgleich', rechnungen: liste });
+  if (antwort.fehlt && antwort.fehlt.length) throw new Error('Einzelne Rechnungen sind bei Google nicht angekommen. Klicke auf «Jetzt abgleichen».');
+  letzterAbgleich = signatur;
+  return { ok: true, anzahl: liste.length, hochgeladen };
 }
 
 /* ---------- Fenster ---------- */
@@ -239,12 +252,8 @@ if (!app.requestSingleInstanceLock()) {
       return { path: ziel, vorhanden };
     });
     ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath() }));
-    ipcMain.handle('invoice:sync', async (_e, jobs, absender, ordner) => {
-      try { return await syncInvoices(jobs, absender, ordner); } catch (err) { return { ok: false, fehler: err.message }; }
-    });
-    ipcMain.handle('invoice:chooseFolder', async () => {
-      const r = await dialog.showOpenDialog(win, { title: 'Ordner in Google Drive für die Rechnungen wählen', properties: ['openDirectory', 'createDirectory'] });
-      return r.canceled || !r.filePaths[0] ? { canceled: true } : { path: r.filePaths[0] };
+    ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
+      try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
     });
     ipcMain.handle('invoice:pdf', async (_e, modell, absender, projekt) => {
       try {

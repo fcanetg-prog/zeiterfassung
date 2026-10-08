@@ -54,8 +54,7 @@
     async openFolder() {}, async chooseFolder() { return { canceled: true }; },
     async info() { return { version: 'Vorschau', dataPath: 'Browser-Vorschau' }; },
     async invoicePdf() { return { fehler: ['Rechnungen als PDF gibt es nur in der Desktop-App.'] }; },
-    async invoiceSync() { return { ok: false, fehler: 'Nur in der Desktop-App.' }; },
-    async invoiceChooseFolder() { return { canceled: true }; },
+    async invoicePush() { return { ok: false, fehler: 'Nur in der Desktop-App.' }; },
   };
 
   /* ============ Zustand ============ */
@@ -104,26 +103,28 @@
     return { ok: true, modell: m, text: p.rechnungGeplant <= heute ? 'Entwurf fällig' : `Entwurf am ${fmtDate(p.rechnungGeplant)}` };
   }
 
+  const gmailZiel = () => ({ url: state.data.settings.gmailUrl || '', schluessel: state.data.settings.gmailSchluessel || '' });
+  const gmailAktiv = () => !!(state.data && state.data.settings.gmailUrl && state.data.settings.gmailSchluessel);
+
   let syncTimer = null;
   function scheduleSync() {
-    if (!state.data || !state.data.settings.gmailOrdner) return;
+    if (!gmailAktiv()) return;
     clearTimeout(syncTimer);
-    syncTimer = setTimeout(syncNow, 1500);
+    syncTimer = setTimeout(syncNow, 3000);
   }
 
   async function syncNow(laut) {
-    const ordner = state.data.settings.gmailOrdner;
-    if (!ordner) return;
+    if (!gmailAktiv()) { if (laut) toast('Trage zuerst die Adresse der Web-App und den Schlüssel ein.', { fehler: true }); return; }
     const jobs = [];
     for (const p of state.data.projects) {
       const st = entwurfStatus(p);
       if (st && st.ok) jobs.push({ id: p.id, modell: st.modell, projekt: { kunde: p.kunde, name: p.name }, an: p.rechnungsEmail.trim() });
     }
-    const r = await api.invoiceSync(jobs, absender(), ordner);
+    const r = await api.invoicePush(jobs, absender(), gmailZiel(), !!laut);
     const vorher = state.sync && state.sync.fehler;
-    state.sync = r.ok ? { text: `${r.anzahl} Rechnungen bereitgestellt`, zeit: new Date() } : { fehler: r.fehler };
+    state.sync = r.ok ? { text: `${r.anzahl} Rechnungen liegen beim Google-Skript bereit.` } : { fehler: r.fehler };
     if (!r.ok && (laut || vorher !== r.fehler)) toast('Rechnungen für Gmail: ' + r.fehler, { fehler: true });
-    else if (laut) toast(`${r.anzahl} Rechnungen im Drive-Ordner bereitgestellt`);
+    else if (laut) toast(`Verbindung in Ordnung. ${r.anzahl} Rechnungen liegen beim Google-Skript bereit.`);
     if (state.view === 'einstellungen' && !(document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))) render();
   }
 
@@ -753,10 +754,10 @@
   /* ============ Rechnungen ============ */
 
   function entwurfTag(p) {
-    if (!state.data.settings.gmailOrdner) return '';
+    if (!gmailAktiv()) return '';
     const st = entwurfStatus(p);
     if (!st) return '';
-    return ` <span class="pill ${st.ok ? 's-gestellt' : 's-offen'}" title="${esc(st.ok ? 'Die Rechnung liegt für das Gmail-Skript bereit.' : 'Kein Gmail-Entwurf: ' + st.text)}">${esc(st.ok ? st.text : 'Entwurf nicht möglich')}</span>`;
+    return ` <span class="pill ${st.ok ? 's-gestellt' : 's-offen'}" title="${esc(st.ok ? 'Die Rechnung wird ans Google-Skript geschickt.' : 'Kein Gmail-Entwurf: ' + st.text)}">${esc(st.ok ? st.text : 'Entwurf nicht möglich')}</span>`;
   }
 
   function viewRechnungen() {
@@ -955,12 +956,10 @@
         <p class="hint">Diese Angaben stehen auf jeder Rechnung und im QR-Zahlteil. Sie werden nur in deiner Datendatei gespeichert.</p>
       </section>
       <section class="sec"><h2>Gmail-Entwürfe</h2>
-        <p>Die App legt für jedes Projekt mit Rechnungsdatum, Rechnungsadresse und E-Mail die fertige Rechnung in einen Ordner von Google Drive. Das Google-Skript erstellt daraus am Rechnungsdatum einen Entwurf in Gmail.</p>
-        <p>Ordner: ${state.data.settings.gmailOrdner ? `<code>${esc(state.data.settings.gmailOrdner)}</code>` : '<span class="dim">noch keiner gewählt</span>'}</p>
-        <div class="row">
-          <button class="btn" data-action="gmail-folder">Ordner wählen</button>
-          ${state.data.settings.gmailOrdner ? '<button class="btn" data-action="gmail-sync">Jetzt abgleichen</button><button class="btn" data-action="gmail-off">Ausschalten</button>' : ''}
-        </div>
+        <p>Die App schickt für jedes Projekt mit Rechnungsdatum, Rechnungsadresse und E-Mail die fertige Rechnung an dein Google-Skript. Das Skript erstellt daraus am Rechnungsdatum einen Entwurf in Gmail.</p>
+        <div class="fld"><label for="g-url">Adresse der Web-App</label><input id="g-url" type="text" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(state.data.settings.gmailUrl || '')}" data-action="gmail-set" data-key="gmailUrl"></div>
+        <div class="fld"><label for="g-key">Schlüssel</label><input id="g-key" type="text" value="${esc(state.data.settings.gmailSchluessel || '')}" data-action="gmail-set" data-key="gmailSchluessel"></div>
+        <div class="row"><button class="btn" data-action="gmail-sync">Jetzt abgleichen</button></div>
         ${state.sync ? `<p class="hint ${state.sync.fehler ? 'warn' : ''}">${esc(state.sync.fehler || state.sync.text)}</p>` : ''}
       </section>
       <section class="sec"><h2>Daten</h2>
@@ -1055,13 +1054,7 @@
       case 'drawer-close': state.drawer = null; render(); break;
       case 'drawer-invoice': { const p = saveDrawer(); if (p) await makeInvoice(p); break; }
       case 'p-invoice': await makeInvoice(projById(el.dataset.id)); break;
-      case 'gmail-folder': {
-        const r = await api.invoiceChooseFolder();
-        if (!r || r.canceled) break;
-        state.data.settings.gmailOrdner = r.path; await persist(); await syncNow(true); render(); break;
-      }
       case 'gmail-sync': await syncNow(true); render(); break;
-      case 'gmail-off': delete state.data.settings.gmailOrdner; state.sync = null; await persist(); render(); break;
       case 'logo-remove': delete absender().logo; persist(); render(); break;
       case 'd-seg': {
         const k = el.dataset.key; let v = el.dataset.val;
@@ -1125,6 +1118,7 @@
     if (a === 'year') { state.year = +el.value; if (+state.date.slice(0, 4) !== state.year) { state.date = state.year === +heute.slice(0, 4) ? heute : `${state.year}-01-01`; state.calMonth = state.date.slice(0, 7); } render(); }
     else if (a === 'filter-status') { state.filter.status = el.value; render(); }
     else if (a === 'absender') { absender()[el.dataset.key] = el.value.trim(); persist(); }
+    else if (a === 'gmail-set') { const v = el.value.trim(); if (v) state.data.settings[el.dataset.key] = v; else delete state.data.settings[el.dataset.key]; state.sync = null; persist(); }
     else if (a === 'logo-file') {
       const f = el.files && el.files[0];
       if (!f) return;
