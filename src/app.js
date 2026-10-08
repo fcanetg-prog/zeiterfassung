@@ -203,7 +203,7 @@
   /* ============ Erfassen ============ */
 
   function activeProjects(year) {
-    return state.data.projects.filter((p) => p.jahr === year && !p.archiviert).sort((a, b) => a.sort - b.sort);
+    return gruppiert(state.data.projects.filter((p) => p.jahr === year && !p.archiviert));
   }
 
   function recentProjects(year, n) {
@@ -365,8 +365,23 @@
     ['intern', 'Keine Abrechnung'],
   ];
 
+  /** Hält Bereiche und Kunden zusammen, auch wenn ein Projekt aus einem anderen Jahr dazukommt. */
+  function gruppiert(list) {
+    const sorted = list.slice().sort((a, b) => a.sort - b.sort);
+    const bereiche = new Map();
+    for (const p of sorted) {
+      if (!bereiche.has(p.bereich)) bereiche.set(p.bereich, new Map());
+      const kunden = bereiche.get(p.bereich);
+      if (!kunden.has(p.kunde)) kunden.set(p.kunde, []);
+      kunden.get(p.kunde).push(p);
+    }
+    const out = [];
+    for (const kunden of bereiche.values()) for (const ps of kunden.values()) out.push(...ps);
+    return out;
+  }
+
   function yearProjects() {
-    return state.data.projects.filter((p) => p.jahr === state.year).sort((a, b) => a.sort - b.sort);
+    return gruppiert(state.data.projects.filter((p) => p.jahr === state.year));
   }
 
   function filteredProjects() {
@@ -560,6 +575,14 @@
     return `<datalist id="${id}">${vals.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>`;
   }
 
+  /** Jahre zur Auswahl im Projekt: alle vorhandenen, dazu das Vorjahr und das Folgejahr des aktuellen Jahres. */
+  function jahrOptionen(aktuell) {
+    const h = +heute.slice(0, 4);
+    const ys = new Set([h - 1, h, h + 1, aktuell, state.year]);
+    for (const p of state.data.projects) ys.add(p.jahr);
+    return [...ys].sort((a, b) => a - b);
+  }
+
   function drawerHtml() {
     const dr = state.drawer, d = dr.draft, neu = !dr.id;
     const fld = (id, label, key, attrs) => `<div class="fld"><label for="${id}">${label}</label><input id="${id}" type="text" value="${esc(d[key])}" data-action="d-field" data-key="${key}" ${attrs || ''}></div>`;
@@ -579,7 +602,10 @@
             ${fld('d-bereich', 'Bereich', 'bereich', 'list="dl-bereich"')}${fld('d-kategorie', 'Unterbereich', 'kategorie', 'list="dl-kategorie"')}
           </div>
           ${datalist('dl-kunde', 'kunde')}${datalist('dl-bereich', 'bereich')}${datalist('dl-kategorie', 'kategorie')}
-          <div class="fld"><label>Effort</label>${seg('effort', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']])}</div>
+          <div class="cols2">
+            <div class="fld"><label>Jahr</label>${seg('jahr', jahrOptionen(d.jahr).map((y) => [y, String(y)]))}</div>
+            <div class="fld"><label>Effort</label>${seg('effort', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']])}</div>
+          </div>
 
           <h3>Honorar und Stunden</h3>
           <div class="fld"><label>Mehrwertsteuer</label>${seg('mwst', [['drauf', 'kommt zum Betrag dazu'], ['inkl', 'im Betrag enthalten'], ['keine', 'keine MwSt.']])}</div>
@@ -628,8 +654,10 @@
     for (const k of ['kunde', 'name', 'bereich', 'kategorie']) d[k] = d[k].trim();
     for (const k of ['rechnungGeplant', 'rechnungsdatum', 'zahlungsdatum']) d[k] = d[k] || null;
     d.effort = d.effort == null ? null : +d.effort;
+    let verschoben = null;
     if (dr.id) {
       const i = state.data.projects.findIndex((p) => p.id === dr.id);
+      if (state.data.projects[i].jahr !== d.jahr) verschoben = d.jahr;
       state.data.projects[i] = d;
     } else {
       d.id = uid('p');
@@ -637,7 +665,7 @@
     }
     state.drawer = null;
     persist(); render();
-    toast(dr.id ? 'Projekt gespeichert' : 'Projekt angelegt');
+    toast(verschoben ? `Projekt ins Jahr ${verschoben} verschoben` : dr.id ? 'Projekt gespeichert' : 'Projekt angelegt');
     return true;
   }
 
@@ -904,7 +932,7 @@
       case 'drawer-close': state.drawer = null; render(); break;
       case 'd-seg': {
         const k = el.dataset.key; let v = el.dataset.val;
-        if (k === 'effort') v = +v;
+        if (k === 'effort' || k === 'jahr') v = +v;
         state.drawer.draft[k] = v; render(); break;
       }
       case 'project-dup': {
