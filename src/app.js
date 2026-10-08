@@ -180,7 +180,7 @@
       const st = entwurfStatus(g[0]);
       if (!st || !st.ok) continue;
       // Eine Sammelrechnung bekommt eine eigene Kennung, damit sie nicht mit der Einzelrechnung des ersten Projekts verwechselt wird.
-      jobs.push({ id: g.length > 1 ? `${g[0].id}x${g.length}` : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(),
+      jobs.push({ id: g.length > 1 ? `${g[0].id}x${g.length}` : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(), bereich: g[0].bereich,
         kunde: [...new Set(g.map((x) => x.kunde))].join(', '), projekt: g.map((x) => x.name).join(', ') });
     }
     const r = await api.invoicePush(jobs, absender(), gmailZiel(), !!laut);

@@ -18,13 +18,14 @@ const SCHLUESSEL = 'HIER-EINEN-LANGEN-ZUFAELLIGEN-SCHLUESSEL-EINTRAGEN';
 // Ordner in «Meine Ablage», in dem die Rechnungen liegen. Wird bei Bedarf angelegt.
 const ORDNER_NAME = 'Zeiterfassung-Rechnungen';
 
+// Betreff: «Rechnung: Geldcast», «Rechnung: Angebot und Nachgefragt» usw. (der Bereich des Projekts in der App).
 const BETREFF = 'Rechnung';
 
 const TEXT = [
   'Geschätzte Kundin',
   'Geschätzter Kunde',
   '',
-  'Das ist ein automatisch generiertes E-Mail. Im Anhang finden Sie die Rechnung für meine Arbeiten; Sie finden alle Details dazu im angehängten Dokument.',
+  'Das ist ein automatisch generiertes E-Mail. Im Anhang finden Sie die Rechnung für meine Arbeiten. Sie finden alle Details dazu im angehängten Dokument.',
   '',
   'Ich danke Ihnen für das Vertrauen in meine Arbeit.',
   '',
@@ -63,7 +64,8 @@ function rechnungsEntwuerfeErstellen() {
     const pdf = neusteDatei_(ordner, r.datei);
     if (!pdf) { console.log('PDF fehlt in Drive: ' + r.datei); return; }
 
-    GmailApp.createDraft(r.an, BETREFF, TEXT, { attachments: [pdf.getAs('application/pdf').setName(anhangName_(r))] });
+    const betreff = r.bereich ? BETREFF + ': ' + r.bereich : BETREFF;
+    GmailApp.createDraft(r.an, betreff, TEXT, { attachments: [pdf.getAs('application/pdf').setName(anhangName_(r))] });
     merker.setProperty(schluessel, heute);
     erstellt++;
     console.log('Entwurf erstellt: ' + r.kunde + ' – ' + r.projekt + ' an ' + r.an);
@@ -118,7 +120,7 @@ function abgleich_(neu) {
         fehlt.push(r.id);
         return;
       }
-      liste.push({ id: r.id, hash: r.hash, datum: r.datum, an: r.an, kunde: r.kunde, projekt: r.projekt, total: r.total, datei: r.datei });
+      liste.push({ id: r.id, hash: r.hash, datum: r.datum, an: r.an, bereich: r.bereich || '', kunde: r.kunde, projekt: r.projekt, total: r.total, datei: r.datei });
     });
     const behalten = {};
     liste.forEach(function (r) { behalten[r.datei] = true; });

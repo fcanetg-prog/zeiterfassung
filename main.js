@@ -216,8 +216,8 @@ async function pushInvoices(jobs, absender, ziel, erzwingen) {
 
   const liste = jobs.map((job) => ({
     id: job.id,
-    hash: crypto.createHash('sha1').update(JSON.stringify([job.modell, absender, job.an])).digest('hex'),
-    datum: job.modell.datum, an: job.an, kunde: job.kunde, projekt: job.projekt, total: job.modell.total,
+    hash: crypto.createHash('sha1').update(JSON.stringify([job.modell, absender, job.an, job.bereich])).digest('hex'),
+    datum: job.modell.datum, an: job.an, bereich: job.bereich || '', kunde: job.kunde, projekt: job.projekt, total: job.modell.total,
     datei: `${job.id}_${invoice.dateiname(job.modell)}`,
   }));
   const signatur = crypto.createHash('sha1').update(JSON.stringify([url, schluessel, liste])).digest('hex');
