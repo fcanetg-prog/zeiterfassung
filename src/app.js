@@ -81,6 +81,7 @@
   const figs = (p) => C.projectFigures(p, hrs.get(p.id) || 0, S(), heute);
   const projById = (id) => state.data.projects.find((p) => p.id === id);
   const projLabel = (p) => (p ? [p.kunde, p.name].filter(Boolean).join(' – ') : 'Gelöschtes Projekt');
+  const projLabelJahr = (p) => projLabel(p) + (p && p.jahr !== +state.date.slice(0, 4) ? ` (${p.jahr})` : '');
 
   async function persist() {
     recompute();
@@ -206,18 +207,24 @@
     return gruppiert(state.data.projects.filter((p) => p.jahr === year && !p.archiviert));
   }
 
+  /** Projekte, auf die an einem Tag im Jahr «year» gebucht werden kann: dieses Jahr und alle Folgejahre. */
+  function bookableProjects(year) {
+    const jahre = [...new Set(state.data.projects.filter((p) => p.jahr >= year && !p.archiviert).map((p) => p.jahr))].sort((a, b) => a - b);
+    return jahre.reduce((out, y) => out.concat(activeProjects(y)), []);
+  }
+
   function recentProjects(year, n) {
     const seen = new Map();
     for (const e of state.data.entries) {
       const prev = seen.get(e.projectId);
       if (!prev || e.datum > prev) seen.set(e.projectId, e.datum);
     }
-    return activeProjects(year).filter((p) => seen.has(p.id)).sort((a, b) => (seen.get(b.id) < seen.get(a.id) ? -1 : 1)).slice(0, n);
+    return bookableProjects(year).filter((p) => seen.has(p.id)).sort((a, b) => (seen.get(b.id) < seen.get(a.id) ? -1 : 1)).slice(0, n);
   }
 
   function comboMatches() {
     const year = +state.date.slice(0, 4);
-    const all = activeProjects(year);
+    const all = bookableProjects(year);
     const q = state.combo.q.trim().toLowerCase();
     if (!q) {
       const rec = recentProjects(year, 6);
@@ -225,10 +232,15 @@
       return rec.map((p) => ({ p, zuletzt: true })).concat(all.filter((p) => !ids.has(p.id)).map((p) => ({ p })));
     }
     const tokens = q.split(/\s+/);
-    return all.filter((p) => {
-      const hay = `${p.kunde} ${p.name} ${p.bereich} ${p.kategorie}`.toLowerCase();
-      return tokens.every((t) => hay.includes(t));
-    }).map((p) => ({ p }));
+    // Treffer in Kunde oder Projektname zuerst, Treffer nur im Bereich danach.
+    const direkt = [], rest = [];
+    for (const p of all) {
+      const eng = `${p.kunde} ${p.name} ${p.jahr}`.toLowerCase();
+      const weit = `${eng} ${p.bereich} ${p.kategorie}`.toLowerCase();
+      if (tokens.every((t) => eng.includes(t))) direkt.push({ p });
+      else if (tokens.every((t) => weit.includes(t))) rest.push({ p });
+    }
+    return direkt.concat(rest);
   }
 
   function comboListHtml() {
@@ -236,13 +248,14 @@
     if (!list.length) return '<div class="combo-empty">Kein Projekt gefunden. Lege es unter «Projekte» an.</div>';
     state.combo.idx = Math.max(0, Math.min(state.combo.idx, list.length - 1));
     let lastGroup = null;
+    const tagJahr = +state.date.slice(0, 4);
     return list.map(({ p, zuletzt }, i) => {
-      const group = zuletzt ? 'Zuletzt verwendet' : p.bereich;
+      const group = zuletzt ? 'Zuletzt verwendet' : p.jahr === tagJahr ? p.bereich : `${p.jahr}: ${p.bereich}`;
       const head = group !== lastGroup ? `<div class="combo-group">${esc(group)}</div>` : '';
       lastGroup = group;
       const eff = hrs.get(p.id) || 0;
       return `${head}<div class="combo-item ${i === state.combo.idx ? 'on' : ''}" data-action="combo-pick" data-id="${p.id}" data-idx="${i}">
-        <span><b>${esc(p.kunde)}</b> ${esc(p.name)}</span>
+        <span><b>${esc(p.kunde)}</b> ${esc(p.name)}${p.jahr !== tagJahr ? ` <span class="ytag">${p.jahr}</span>` : ''}</span>
         <span class="num dim">${fmtH(eff)}${C.isNum(p.stundenZiel) ? ' / ' + fmtH(p.stundenZiel) : ''} h</span></div>`;
     }).join('');
   }
@@ -277,7 +290,7 @@
         <form class="addform" data-action="add-entry" autocomplete="off">
           <div class="combo">
             <label for="combo-input">Projekt</label>
-            <input id="combo-input" type="text" placeholder="Kunde oder Projekt suchen" value="${esc(sel ? projLabel(sel) : state.combo.q)}" data-action="combo-input" role="combobox" aria-expanded="${state.combo.open}">
+            <input id="combo-input" type="text" placeholder="Kunde oder Projekt suchen" value="${esc(sel ? projLabelJahr(sel) : state.combo.q)}" data-action="combo-input" role="combobox" aria-expanded="${state.combo.open}">
             <div id="combo-list" class="combo-list ${state.combo.open ? 'open' : ''}">${state.combo.open ? comboListHtml() : ''}</div>
           </div>
           <div class="f-std"><label for="f-stunden">Stunden</label>
@@ -293,7 +306,7 @@
           <tbody>${entries.map((e) => {
             const p = projById(e.projectId);
             return `<tr>
-              <td><div class="e-proj"><b>${esc(p ? p.kunde : '')}</b> ${esc(p ? p.name : 'Gelöschtes Projekt')}</div>
+              <td><div class="e-proj"><b>${esc(p ? p.kunde : '')}</b> ${esc(p ? p.name : 'Gelöschtes Projekt')}${p && p.jahr !== +d.slice(0, 4) ? ` <span class="ytag">${p.jahr}</span>` : ''}</div>
                   <div class="e-prog">${p ? progress(p) : ''}</div></td>
               <td><input class="inline" type="text" value="${esc(e.notiz)}" placeholder="–" data-action="entry-note" data-id="${e.id}" id="en-${e.id}" aria-label="Notiz"></td>
               <td class="r"><input class="inline num w-h" type="text" inputmode="decimal" value="${fmtH(e.stunden).replace('’', '')}" data-action="entry-hours" data-id="${e.id}" id="eh-${e.id}" aria-label="Stunden"></td>
