@@ -1104,10 +1104,39 @@
     $('#f-stunden').focus();
   }
 
+  /** Füllt leere Rechnungsangaben aus einer Ergänzungsdatei. Ausgefülltes bleibt unangetastet. */
+  function ergaenze(regeln) {
+    const z = { projekte: 0, rechnungsadresse: 0, rechnungsEmail: 0, referenz: 0 };
+    const klein = (t) => String(t || '').trim().toLowerCase();
+    const passt = (p, r) => {
+      const k = klein(p.kunde), b = klein(p.bereich);
+      return (r.kundeGleich || []).some((x) => k === klein(x)) || (r.kundeEnthaelt || []).some((x) => k.includes(klein(x))) || (r.bereichGleich || []).some((x) => b === klein(x));
+    };
+    for (const p of state.data.projects) {
+      if (p.abrechnung === 'intern') continue;
+      const r = regeln.find((x) => passt(p, x));
+      if (!r) continue;
+      let geaendert = false;
+      for (const feld of ['rechnungsadresse', 'rechnungsEmail', 'referenz']) {
+        if (r[feld] && !String(p[feld] || '').trim()) { p[feld] = r[feld]; z[feld]++; geaendert = true; }
+      }
+      if (geaendert) z.projekte++;
+    }
+    return z;
+  }
+
   async function doImport() {
     const r = await api.importFile();
     if (!r || r.canceled) return;
     if (r.error) { toast(r.error, { fehler: true }); return; }
+    if (r.data && r.data.typ === 'ergaenzung') {
+      if (!state.data) { toast('Importiere zuerst deine Projekte.', { fehler: true }); return; }
+      const z = ergaenze(r.data.regeln || []);
+      if (z.projekte) await persist();
+      render();
+      toast(z.projekte ? `${z.projekte} Projekte ergänzt: ${z.rechnungsadresse} Adressen, ${z.rechnungsEmail} E-Mails, ${z.referenz} Referenzen. Bereits ausgefüllte Felder sind unverändert.` : 'Nichts zu ergänzen: Alle passenden Felder sind schon ausgefüllt.');
+      return;
+    }
     if (r.data && r.data.typ === 'einstellungen') {
       if (!state.data) state.data = C.emptyData();
       const neuS = r.data.settings || {};
