@@ -996,7 +996,14 @@
       if (C.isNum(f.meinTeil)) { g.teil += f.meinTeil; if (f.stundenEff > 0) { g.teilStd += f.meinTeil; g.hBetrag += f.stundenEff; } }
       groups.set(p.bereich, g);
     }
-    const totalH = [...groups.values()].reduce((a, g) => a + g.h, 0) || 1;
+    const totalH = [...groups.values()].reduce((a, g) => a + g.h, 0);
+    const istIntern = (name) => String(name || '').trim().toLowerCase() === 'intern';
+    const internH = [...groups.entries()].reduce((a, [name, g]) => a + (istIntern(name) ? g.h : 0), 0);
+    const externH = totalH - internH;
+    const bereichZeilen = [...groups.entries()].map(([name, g]) => {
+      const intern = istIntern(name), basis = intern ? totalH : externH;
+      return { name, h: g.h, intern, pct: basis > 0 ? (g.h / basis) * 100 : 0 };
+    });
 
     return `
     <header class="head"><h1>Auswertung ${y}</h1>
@@ -1018,11 +1025,13 @@
       </section>
       <section class="sec">
         <h2>Nach Bereich</h2>
-        <table class="list">
-          <thead><tr><th>Bereich</th><th class="r">Stunden</th><th class="r">Anteil</th></tr></thead>
-          <tbody>${[...groups.entries()].map(([name, g]) => `<tr><td>${esc(name || 'Ohne Bereich')}</td><td class="r num">${fmtH(g.h)}</td>
-            <td class="r num"><span class="bar"><i style="width:${((g.h / totalH) * 100).toFixed(1)}%"></i></span>${((g.h / totalH) * 100).toFixed(0)}%</td></tr>`).join('')}</tbody>
+        <table class="list bereiche">
+          <thead><tr><th>Bereich</th><th class="r">Stunden</th><th colspan="2">Anteil</th></tr></thead>
+          <tbody>${bereichZeilen.map((z) => `<tr class="${z.intern ? 'b-intern' : ''}"><td>${esc(z.name || 'Ohne Bereich')}</td><td class="r num">${fmtH(z.h)}</td>
+            <td class="bcell"><span class="bar ${z.intern ? '' : 'extern'}"><i style="width:${z.pct.toFixed(1)}%"></i></span></td><td class="r num pct">${z.pct.toFixed(0)}%</td></tr>`).join('')}</tbody>
+          <tfoot><tr><td>Total</td><td class="r num">${fmtH(totalH)}</td><td colspan="2" class="dim">davon ${fmtH(externH)} ohne Intern</td></tr></tfoot>
         </table>
+        <p class="hint">Intern in Prozent aller Stunden. Die übrigen Bereiche in Prozent der Stunden, die nicht auf Intern gingen.</p>
       </section>
       <section class="sec wide">
         <h2>Kumulierte Stunden im Jahresvergleich</h2>
