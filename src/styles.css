@@ -174,7 +174,9 @@ th.r { text-align: right; }
 /* ---------- Projekte ---------- */
 
 .table-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
-.grid { font-size: 13px; min-width: 1500px; }
+.grid { font-size: 13px; min-width: 1640px; }
+.grid td.datecell { padding: 2px 4px; }
+.grid td.datecell input { font-size: 13px; padding: 3px 4px; }
 .grid th { position: sticky; top: 0; z-index: 3; background: #eef3f3; padding: 9px 8px; border-bottom: 1px solid var(--line); }
 .grid td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
 .grid th:nth-child(1), .grid td.kunde { position: sticky; left: 0; z-index: 2; min-width: 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }

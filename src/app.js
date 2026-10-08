@@ -445,9 +445,8 @@
       const sg = sums(g.items);
       body += `<tr class="grp" data-action="toggle-group" data-group="${esc(g.name)}">
         <td colspan="2"><span class="chev">${zu ? '▸' : '▾'}</span> ${esc(g.name || 'Ohne Bereich')} <span class="dim">${g.items.length}</span></td>
-        <td></td><td class="r num">${fmtCHF(sg.betrag, 0)}</td><td></td><td class="r num">${fmtCHF(sg.teil, 0)}</td>
-        <td></td><td class="r num">${fmtH(sg.ziel)}</td><td class="r num">${fmtH(sg.eff)}</td>
-        <td></td><td class="r num">${C.isNum(sg.lohn) ? fmtCHF(sg.lohn, 0) : ''}</td><td></td><td class="r num">${fmtCHF(sg.rech)}</td><td colspan="3"></td></tr>`;
+        <td colspan="6"></td><td class="r num">${fmtH(sg.eff)}</td>
+        <td></td><td class="r num">${C.isNum(sg.lohn) ? fmtCHF(sg.lohn, 0) : ''}</td><td></td><td class="r num">${sg.rech ? fmtCHF(sg.rech) : ''}</td><td colspan="4"></td></tr>`;
       if (zu) continue;
       let lastKunde = null;
       for (const p of g.items) {
@@ -468,7 +467,8 @@
           <td class="r num cs" style="${scale(f.lohnEff)}">${C.isNum(f.lohnEff) ? fmtCHF(f.lohnEff, 0) : '–'}</td>
           <td class="dim">${p.abrechnung === 'intern' ? '' : MWST_KURZ[p.mwst]}</td>
           <td class="r num">${p.abrechnung === 'rechnung' ? fmtCHF(f.rechnungsbetrag) : '<span class="dim">–</span>'}</td>
-          <td class="num">${p.rechnungsdatum ? fmtDate(p.rechnungsdatum) : (p.rechnungGeplant ? `<span class="dim">geplant ${fmtDate(p.rechnungGeplant)}</span>` : '')}</td>
+          <td class="datecell">${p.abrechnung === 'rechnung' ? `<input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="pg-${p.id}" aria-label="Rechnungsdatum">` : ''}</td>
+          <td class="num">${fmtDate(p.rechnungsdatum)}</td>
           <td class="num">${fmtDate(p.zahlungsdatum)}</td>
           <td>${statusPill(f.status)}</td></tr>`;
       }
@@ -491,23 +491,22 @@
         <th class="r" title="Offerierter Betrag ohne Mehrwertsteuer">Ansatz</th><th class="r" title="Kosten für Dritte">Kosten</th><th class="r" title="Ansatz minus Kosten">Mein Teil</th>
         <th class="r">Std. Offerte</th><th class="r">Std. Ziel</th><th class="r">Std. effektiv</th>
         <th class="r" title="Mein Teil ÷ Zielstunden × ${S().lohnFaktor}">CHF/h Ziel</th><th class="r" title="Mein Teil ÷ effektive Stunden × ${S().lohnFaktor}">CHF/h effektiv</th>
-        <th>MwSt.</th><th class="r">Rechnungsbetrag</th><th>Rechnung gestellt</th><th>Zahlung erhalten</th><th>Status</th>
+        <th>MwSt.</th><th class="r">Rechnungsbetrag</th><th title="Datum, an dem oder ab dem du die Rechnung stellen willst">Rechnungsdatum</th><th>Rechnung gestellt</th><th>Zahlung erhalten</th><th>Status</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr><td colspan="2">Total ${list.length} Projekte</td><td></td>
-        <td class="r num">${fmtCHF(st.betrag, 0)}</td><td></td><td class="r num">${fmtCHF(st.teil, 0)}</td><td></td>
-        <td class="r num">${fmtH(st.ziel)}</td><td class="r num">${fmtH(st.eff)}</td><td></td>
-        <td class="r num">${C.isNum(st.lohn) ? fmtCHF(st.lohn, 0) : ''}</td><td></td><td class="r num">${fmtCHF(st.rech)}</td><td colspan="3"></td></tr></tfoot>
+        <td colspan="5"></td><td class="r num">${fmtH(st.eff)}</td><td></td>
+        <td class="r num">${C.isNum(st.lohn) ? fmtCHF(st.lohn, 0) : ''}</td><td></td><td class="r num">${fmtCHF(st.rech)}</td><td colspan="4"></td></tr></tfoot>
     </table></div>` : `<div class="empty">${yearProjects().length ? 'Kein Projekt passt zu diesem Filter.' : `Für ${state.year} gibt es noch keine Projekte. Lege das erste mit «Neues Projekt» an.`}</div>`}`;
   }
 
   function projectsCsv() {
-    const head = ['Bereich', 'Unterbereich', 'Kunde', 'Projekt', 'Effort', 'MwSt.', 'Ansatz', 'Kosten', 'Mein Teil', 'Stunden Offerte', 'Stunden Ziel', 'Stunden effektiv', 'CHF/h Ziel', 'CHF/h effektiv', 'Rechnungsbetrag', 'Rechnung gestellt', 'Zahlung erhalten', 'Status', 'Notiz'];
+    const head = ['Bereich', 'Unterbereich', 'Kunde', 'Projekt', 'Effort', 'MwSt.', 'Ansatz', 'Kosten', 'Mein Teil', 'Stunden Offerte', 'Stunden Ziel', 'Stunden effektiv', 'CHF/h Ziel', 'CHF/h effektiv', 'Rechnungsbetrag', 'Rechnungsdatum', 'Rechnung gestellt', 'Zahlung erhalten', 'Status', 'Notiz'];
     const n = (v, d) => (C.isNum(v) ? v.toFixed(d == null ? 2 : d) : '');
     const rows = filteredProjects().map((p) => {
       const f = figs(p);
       return [p.bereich, p.kategorie, p.kunde, p.name, p.effort == null ? '' : p.effort, MWST_KURZ[p.mwst], n(f.netto), n(f.kosten), n(f.meinTeil), n(p.stundenOfferte), n(p.stundenZiel), n(f.stundenEff), n(f.lohnZiel), n(f.lohnEff),
-        p.abrechnung === 'rechnung' ? n(f.rechnungsbetrag) : '', fmtDate(p.rechnungsdatum), fmtDate(p.zahlungsdatum), f.status.label, p.notiz.replace(/\n/g, ' | ')];
+        p.abrechnung === 'rechnung' ? n(f.rechnungsbetrag) : '', fmtDate(p.rechnungGeplant), fmtDate(p.rechnungsdatum), fmtDate(p.zahlungsdatum), f.status.label, p.notiz.replace(/\n/g, ' | ')];
     });
     return [head].concat(rows).map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
   }
@@ -595,7 +594,7 @@
           <h3>Abrechnung</h3>
           <div class="fld">${seg('abrechnung', [['rechnung', 'Ich stelle eine Rechnung'], ['ohne', 'Zahlung ohne Rechnung'], ['intern', 'Keine Abrechnung']])}</div>
           ${d.abrechnung === 'intern' ? '' : `<div class="cols3">
-            ${d.abrechnung === 'rechnung' ? dat('d-rg', 'Rechnung geplant am', 'rechnungGeplant') + dat('d-rd', 'Rechnung gestellt am', 'rechnungsdatum') : ''}
+            ${d.abrechnung === 'rechnung' ? dat('d-rg', 'Rechnungsdatum', 'rechnungGeplant') + dat('d-rd', 'Rechnung gestellt am', 'rechnungsdatum') : ''}
             ${dat('d-zd', 'Zahlung erhalten am', 'zahlungsdatum')}
           </div>`}
           ${d.abrechnung !== 'rechnung' ? '' : `
@@ -658,7 +657,7 @@
         <td><button class="link" data-action="open-project" data-id="${p.id}"><b>${esc(p.kunde)}</b> ${esc(p.name)}</button></td>
         <td class="r num">${fmtH(f.stundenEff)}</td>
         <td class="r num">${p.abrechnung === 'ohne' ? fmtCHF(f.netto) : fmtCHF(f.rechnungsbetrag)}</td>
-        ${cols.includes('geplant') ? `<td><input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="rg-${p.id}" aria-label="Rechnung geplant am"></td>` : ''}
+        ${cols.includes('geplant') ? `<td><input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="rg-${p.id}" aria-label="Rechnungsdatum"></td>` : ''}
         ${cols.includes('gestellt') ? `<td><input type="date" class="inline" value="${p.rechnungsdatum || ''}" data-action="p-date" data-key="rechnungsdatum" data-id="${p.id}" id="rd-${p.id}" aria-label="Rechnung gestellt am"></td>` : ''}
         ${cols.includes('bezahlt') ? `<td><input type="date" class="inline" value="${p.zahlungsdatum || ''}" data-action="p-date" data-key="zahlungsdatum" data-id="${p.id}" id="zd-${p.id}" aria-label="Zahlung erhalten am"></td>` : ''}
         <td>${statusPill(f.status)}</td>
@@ -677,9 +676,9 @@
     </div>
 
     <section class="sec"><h2>Rechnung stellen <span class="dim">${zuStellen.length}</span></h2>
-      ${zuStellen.length ? table(zuStellen, ['geplant', 'gestellt', 'btn-gestellt'], ['Geplant am', 'Gestellt am']) : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
+      ${zuStellen.length ? table(zuStellen, ['geplant', 'gestellt', 'btn-gestellt'], ['Rechnungsdatum', 'Gestellt am']) : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
       ${by.geplant.length ? `<button class="link more" data-action="toggle-leere">${state.zeigeLeere ? 'Ausblenden' : `${by.geplant.length} weitere Projekte ohne erfasste Stunden zeigen`}</button>
-        ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt'], ['Geplant am', 'Gestellt am']) : ''}` : ''}
+        ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt'], ['Rechnungsdatum', 'Gestellt am']) : ''}` : ''}
     </section>
 
     <section class="sec"><h2>Warten auf Zahlung <span class="dim">${offen.length}</span></h2>
@@ -778,10 +777,9 @@
       <section class="sec">
         <h2>Nach Bereich</h2>
         <table class="list">
-          <thead><tr><th>Bereich</th><th class="r">Stunden</th><th class="r">Anteil</th><th class="r">Mein Teil</th><th class="r" title="Nur Projekte mit erfassten Stunden">CHF/h effektiv</th></tr></thead>
+          <thead><tr><th>Bereich</th><th class="r">Stunden</th><th class="r">Anteil</th></tr></thead>
           <tbody>${[...groups.entries()].map(([name, g]) => `<tr><td>${esc(name || 'Ohne Bereich')}</td><td class="r num">${fmtH(g.h)}</td>
-            <td class="r num"><span class="bar"><i style="width:${((g.h / totalH) * 100).toFixed(1)}%"></i></span>${((g.h / totalH) * 100).toFixed(0)}%</td>
-            <td class="r num">${fmtCHF(g.teil, 0)}</td><td class="r num">${g.hBetrag ? fmtCHF((g.teilStd / g.hBetrag) * s.lohnFaktor, 0) : '–'}</td></tr>`).join('')}</tbody>
+            <td class="r num"><span class="bar"><i style="width:${((g.h / totalH) * 100).toFixed(1)}%"></i></span>${((g.h / totalH) * 100).toFixed(0)}%</td></tr>`).join('')}</tbody>
         </table>
       </section>
       <section class="sec wide">
