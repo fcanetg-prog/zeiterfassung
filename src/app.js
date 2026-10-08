@@ -657,7 +657,15 @@
     let verschoben = null;
     if (dr.id) {
       const i = state.data.projects.findIndex((p) => p.id === dr.id);
-      if (state.data.projects[i].jahr !== d.jahr) verschoben = d.jahr;
+      if (state.data.projects[i].jahr !== d.jahr) {
+        verschoben = d.jahr;
+        // Im Zieljahr hinten beim gleichen Kunden, sonst beim gleichen Bereich, sonst ganz am Schluss einreihen.
+        const ziel = state.data.projects.filter((p) => p.jahr === d.jahr && p.id !== d.id);
+        const gleich = ziel.filter((p) => p.bereich === d.bereich && p.kunde === d.kunde);
+        const basis = gleich.length ? gleich : ziel.filter((p) => p.bereich === d.bereich);
+        const max = (l) => l.reduce((m, p) => Math.max(m, p.sort), 0);
+        d.sort = basis.length ? max(basis) + 0.0001 : max(ziel) + 1;
+      }
       state.data.projects[i] = d;
     } else {
       d.id = uid('p');
