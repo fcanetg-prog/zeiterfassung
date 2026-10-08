@@ -44,13 +44,17 @@ console.log('Alle Prüfungen bestanden.');
 // Sammelrechnung und Zusammenführen
 {
   const adr = 'Verband\nMattenstrasse 8\n3073 Gümligen';
-  const mk = (id, betrag, extra) => Object.assign({ id, sort: +id.slice(1), kunde: 'VSRB', name: 'Folge ' + id, abrechnung: 'rechnung', mwst: 'drauf', kosten: 0, betrag, rechnungsadresse: adr, rechnungsEmail: 'A@b.ch', rechnungGeplant: '2026-10-20' }, extra || {});
+  const mk = (id, betrag, extra) => Object.assign({ id, sort: +id.slice(1), jahr: 2026, bereich: 'Angebot und Nachgefragt', kunde: 'VSRB', name: 'Folge ' + id, abrechnung: 'rechnung', mwst: 'drauf', kosten: 0, betrag, rechnungsadresse: adr, rechnungsEmail: 'A@b.ch', rechnungGeplant: '2026-10-20' }, extra || {});
   const ps = [mk('p1', 975), mk('p2', 975, { rechnungsEmail: 'a@b.ch ' }), mk('p3', 975, { rechnungGeplant: '2026-11-20' }), mk('p4', 2195, { rechnungsadresse: adr + '\n' })];
   const g = C.invoiceGroup(ps[0], ps);
   assert.deepStrictEqual(g.map((p) => p.id), ['p1', 'p2', 'p4']);
   const m = C.invoiceModelGroup(g, s, '2026-10-08');
   assert.deepStrictEqual(m.fehler, []); assert.strictEqual(m.positionen.length, 3); assert.strictEqual(m.zwischentotal, 4145); assert.strictEqual(m.mwst, 335.75); assert.strictEqual(m.total, 4480.75);
   assert.strictEqual(C.invoiceGroup(ps[2], ps).length, 1);
+  // anderer Bereich: eigene Rechnung, auch bei gleichem Datum, gleicher Adresse und gleicher E-Mail
+  const anderer = mk('p7', 1725, { bereich: 'Geldcast' });
+  assert.deepStrictEqual(C.invoiceGroup(anderer, ps.concat(anderer)).map((p) => p.id), ['p7']);
+  assert.deepStrictEqual(C.invoiceGroup(ps[0], ps.concat(anderer)).map((p) => p.id), ['p1', 'p2', 'p4']);
   assert.strictEqual(C.invoiceModelGroup([ps[0], mk('p9', 100, { mwst: 'keine' })], s, '2026-10-08').fehler.length, 1);
   // gestellte Gruppe bleibt zusammen, auch wenn später Daten ändern
   ps[0].rechnungsdatum = ps[1].rechnungsdatum = '2026-10-20'; ps[0].rechnungGruppe = ps[1].rechnungGruppe = 'RG1'; ps[1].rechnungGeplant = '2026-12-01';

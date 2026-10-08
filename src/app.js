@@ -762,7 +762,7 @@
             <small id="d-einl">Auf der Rechnung steht: «${esc(C.invoiceIntro(d))}»</small></div>
           <div class="fld"><label for="d-rt">Rechnungspositionen</label>
             <textarea id="d-rt" rows="3" placeholder="Moderation gemäss Offerte vom 15.01.2026; 3390&#10;Zusatzkosten gemäss E-Mail vom 07.07.2026; 430" data-action="d-field" data-key="rechnungstext">${esc(d.rechnungstext)}</textarea>
-            <small>Projekte mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen automatisch auf dieselbe Rechnung. Eine Position pro Zeile, der Betrag steht nach einem Strichpunkt. Bei nur einer Position kannst du den Betrag weglassen. Leer heisst: Kunde und Projektname mit dem offerierten Betrag.</small></div>
+            <small>Projekte desselben Bereichs mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen automatisch auf dieselbe Rechnung. Eine Position pro Zeile, der Betrag steht nach einem Strichpunkt. Bei nur einer Position kannst du den Betrag weglassen. Leer heisst: Kunde und Projektname mit dem offerierten Betrag.</small></div>
           <div class="fld"><button type="button" class="btn" data-action="drawer-invoice">Speichern und Rechnung als PDF erstellen</button></div>`}
 
           <h3>Notiz</h3>

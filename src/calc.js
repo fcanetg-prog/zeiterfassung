@@ -256,12 +256,12 @@
 
   const zeilen = (t) => String(t || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  /** Projekte mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen auf eine Rechnung. */
+  /** Projekte desselben Bereichs mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen auf eine Rechnung. */
   function groupKey(p) {
     if (p.abrechnung !== 'rechnung' || !p.rechnungGeplant) return null;
     const adr = zeilen(p.rechnungsadresse).join('\n');
     if (!adr) return null;
-    return [p.rechnungGeplant, adr.toLowerCase(), String(p.rechnungsEmail || '').trim().toLowerCase()].join('|');
+    return [p.rechnungGeplant, adr.toLowerCase(), String(p.rechnungsEmail || '').trim().toLowerCase(), p.jahr, String(p.bereich || '').trim().toLowerCase()].join('|');
   }
 
   /** Alle Projekte, die mit p auf derselben Rechnung stehen (p eingeschlossen), in Listenreihenfolge. */
