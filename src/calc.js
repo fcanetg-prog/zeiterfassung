@@ -64,7 +64,7 @@
       if (tage > (s.zahlungsfrist || 30)) return { code: 'ueberfaellig', label: 'überfällig', tage };
       return { code: 'gestellt', label: 'Rechnung gestellt', tage };
     }
-    if (p.rechnungGeplant && heute && p.rechnungGeplant <= heute) return { code: 'faellig', label: 'Rechnung stellen' };
+    if (p.rechnungGeplant && heute && p.rechnungGeplant <= heute) return { code: 'faellig', label: 'Rechnung stellen', tage: daysBetween(p.rechnungGeplant, heute) };
     if (stundenEff > 0) return { code: 'offen', label: 'noch nicht verrechnet' };
     return { code: 'geplant', label: 'noch nicht begonnen' };
   }

@@ -249,6 +249,17 @@
     return [...ys].sort((a, b) => b - a);
   }
 
+  /** Anzahl Rechnungen (Sammelrechnungen zählen einmal), deren Rechnungsdatum erreicht ist. */
+  function faelligAnzahl() {
+    const gesehen = new Set(); let n = 0;
+    for (const p of state.data.projects) {
+      if (gesehen.has(p.id) || p.abrechnung !== 'rechnung' || p.rechnungsdatum || p.zahlungsdatum || !p.rechnungGeplant || p.rechnungGeplant > heute) continue;
+      C.invoiceGroup(p, state.data.projects).forEach((x) => gesehen.add(x.id));
+      n++;
+    }
+    return n;
+  }
+
   function dayTotal(iso) { let t = 0; for (const e of state.data.entries) if (e.datum === iso) t += e.stunden; return t; }
 
   function render() {
@@ -270,7 +281,7 @@
       <nav class="side">
         <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 8.5V16l5 3.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div><strong>Zeiterfassung</strong><span>Fabio Canetg GmbH</span></div></div>
-        <div class="navlist">${NAV.map(([k, l]) => `<button class="nav ${state.view === k ? 'on' : ''}" data-action="nav" data-view="${k}">${l}</button>`).join('')}</div>
+        <div class="navlist">${NAV.map(([k, l]) => `<button class="nav ${state.view === k ? 'on' : ''}" data-action="nav" data-view="${k}">${l}${k === 'rechnungen' && faelligAnzahl() ? `<span class="zahl" title="Rechnungen, die jetzt zu stellen sind">${faelligAnzahl()}</span>` : ''}</button>`).join('')}</div>
         <label class="yearpick">Jahr
           <select id="year-select" data-action="year">${years().map((y) => `<option ${y === state.year ? 'selected' : ''}>${y}</option>`).join('')}</select>
         </label>
@@ -546,6 +557,7 @@
 
   function statusPill(st) {
     const extra = st.code === 'gestellt' || st.code === 'ueberfaellig' ? ` · ${st.tage} T.` : '';
+    if (st.code === 'faellig') return `<span class="pill s-faellig">${st.tage > 0 ? `seit ${st.tage} ${st.tage === 1 ? 'Tag' : 'Tagen'} fällig` : 'heute fällig'}</span>`;
     return `<span class="pill s-${st.code}">${esc(st.label)}${extra}</span>`;
   }
 
@@ -886,18 +898,27 @@
       return `<tr class="rg"><td colspan="2">Gemeinsame Rechnung für ${g.length} Projekte</td><td class="r num">${fmtCHF(total)}</td>
         <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>` + g.map((x) => row(x, cols, true)).join('');
     }).join('');
+    const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
+    const jetzt = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant <= heute).sort(nachDatum);
+    const spaeter = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant > heute).sort(nachDatum);
+    const ohneDatum = zuStellen.filter((p) => !p.rechnungGeplant);
+    const teil = (titel, hinweis, list, cls) => (list.length ? `<div class="teil ${cls}"><h3>${titel} <span class="dim">${list.length}</span><small>${hinweis}, total ${fmtCHF(sum(list))}</small></h3>
+      ${table(list, ['geplant', 'gestellt', 'btn-gestellt'], ['Rechnungsdatum', 'Gestellt am'])}</div>` : '');
     const table = (list, cols, heads) => `<div class="table-flat"><table class="list"><thead><tr><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead><tbody>${zeilen(list, cols, heads.length + 1)}</tbody></table></div>`;
 
     return `
     <header class="head"><h1>Rechnungen ${state.year}</h1></header>
     <div class="tiles">
-      <div class="tile"><span>Noch zu stellen</span><b>${fmtCHF(sum(zuStellen))}</b><i>${zuStellen.length} Projekte mit Stunden oder Rechnungsdatum</i></div>
+      <div class="tile"><span>Noch zu stellen</span><b>${fmtCHF(sum(zuStellen))}</b><i>${zuStellen.length} Projekte${jetzt.length ? `, davon ${jetzt.length} jetzt fällig (${fmtCHF(sum(jetzt))})` : ''}</i></div>
       <div class="tile"><span>Gestellt, noch nicht bezahlt</span><b>${fmtCHF(sum(offen))}</b><i>${offen.length} Rechnungen${by.ueberfaellig.length ? `, davon ${by.ueberfaellig.length} überfällig` : ''}</i></div>
       <div class="tile"><span>Bezahlt</span><b>${fmtCHF(bezahlt.reduce((s, p) => s + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0))}</b><i>${bezahlt.length} Zahlungen</i></div>
     </div>
 
     <section class="sec"><h2>Rechnung stellen <span class="dim">${zuStellen.length}</span></h2>
-      ${zuStellen.length ? table(zuStellen, ['geplant', 'gestellt', 'btn-gestellt'], ['Rechnungsdatum', 'Gestellt am']) : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
+      ${zuStellen.length ? '' : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
+      ${teil('Jetzt stellen', 'Rechnungsdatum heute oder schon vorbei', jetzt, 'jetzt')}
+      ${teil('Später stellen', 'Rechnungsdatum liegt in der Zukunft', spaeter, '')}
+      ${teil('Noch ohne Rechnungsdatum', 'Stunden erfasst, aber noch kein Datum gesetzt', ohneDatum, '')}
       ${by.geplant.length ? `<button class="link more" data-action="toggle-leere">${state.zeigeLeere ? 'Ausblenden' : `${by.geplant.length} weitere Projekte ohne erfasste Stunden zeigen`}</button>
         ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt'], ['Rechnungsdatum', 'Gestellt am']) : ''}` : ''}
     </section>
