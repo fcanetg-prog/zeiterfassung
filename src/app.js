@@ -53,6 +53,7 @@
     async exportCsv() { return { canceled: true }; },
     async openFolder() {}, async chooseFolder() { return { canceled: true }; },
     async info() { return { version: 'Vorschau', dataPath: 'Browser-Vorschau' }; },
+    async invoicePdf() { return { fehler: ['Rechnungen als PDF gibt es nur in der Desktop-App.'] }; },
   };
 
   /* ============ Zustand ============ */
@@ -119,7 +120,8 @@
       abrechnung: ['rechnung', 'ohne', 'intern'].includes(p.abrechnung) ? p.abrechnung : 'rechnung',
       rechnungGeplant: p.rechnungGeplant || null, rechnungsdatum: p.rechnungsdatum || null, zahlungsdatum: p.zahlungsdatum || null,
       rechnungsadresse: p.rechnungsadresse || '', referenz: p.referenz || '', rechnungsEmail: p.rechnungsEmail || '',
-      rechnungstext: p.rechnungstext || '', notiz: p.notiz || '', archiviert: !!p.archiviert,
+      rechnungstext: p.rechnungstext || '', offerteVom: p.offerteVom || null, emailVom: p.emailVom || null,
+      notiz: p.notiz || '', archiviert: !!p.archiviert,
     }));
     const ids = new Set(out.projects.map((p) => p.id));
     out.entries = d.entries.filter((e) => e && e.datum && ids.has(e.projectId) && C.isNum(e.stunden))
@@ -547,7 +549,7 @@
       id: null, jahr: state.year, sort: maxSort + 1, bereich: '', kategorie: '', kunde: '', name: '',
       mwst: 'drauf', betrag: null, kosten: 0, stundenOfferte: null, stundenZiel: null, effort: 3,
       abrechnung: 'rechnung', rechnungGeplant: null, rechnungsdatum: null, zahlungsdatum: null,
-      rechnungsadresse: '', referenz: '', rechnungsEmail: '', rechnungstext: '', notiz: '', archiviert: false,
+      rechnungsadresse: '', referenz: '', rechnungsEmail: '', rechnungstext: '', offerteVom: null, emailVom: null, notiz: '', archiviert: false,
     };
   }
 
@@ -642,7 +644,13 @@
             <div class="fld"><label for="d-ref">Referenz des Kunden</label><textarea id="d-ref" rows="2" data-action="d-field" data-key="referenz">${esc(d.referenz)}</textarea></div>
             <div class="fld"><label for="d-mail">E-Mail für die Rechnung</label><input id="d-mail" type="text" value="${esc(d.rechnungsEmail)}" data-action="d-field" data-key="rechnungsEmail"></div>
           </div>
-          <div class="fld"><label for="d-rt">Text der Rechnungsposition</label><input id="d-rt" type="text" value="${esc(d.rechnungstext)}" placeholder="z. B. Moderation gemäss Offerte vom 15.01.2026" data-action="d-field" data-key="rechnungstext"></div>`}
+          <div class="fld"><label>Grundlage der Rechnung</label>
+            <div class="cols2">${dat('d-ov', 'Offerte vom', 'offerteVom')}${dat('d-ev', 'E-Mail-Austausch vom', 'emailVom')}</div>
+            <small id="d-einl">Auf der Rechnung steht: «${esc(C.invoiceIntro(d))}»</small></div>
+          <div class="fld"><label for="d-rt">Rechnungspositionen</label>
+            <textarea id="d-rt" rows="3" placeholder="Moderation gemäss Offerte vom 15.01.2026; 3390&#10;Zusatzkosten gemäss E-Mail vom 07.07.2026; 430" data-action="d-field" data-key="rechnungstext">${esc(d.rechnungstext)}</textarea>
+            <small>Eine Position pro Zeile, der Betrag steht nach einem Strichpunkt. Bei nur einer Position kannst du den Betrag weglassen. Leer heisst: Kunde und Projektname mit dem offerierten Betrag.</small></div>
+          <div class="fld"><button type="button" class="btn" data-action="drawer-invoice">Speichern und Rechnung als PDF erstellen</button></div>`}
 
           <h3>Notiz</h3>
           <div class="fld"><textarea id="d-notiz" rows="3" aria-label="Notiz" data-action="d-field" data-key="notiz">${esc(d.notiz)}</textarea></div>
@@ -665,7 +673,7 @@
     if (!d.name.trim() && !d.kunde.trim()) { toast('Gib mindestens einen Kunden oder einen Projektnamen ein.', { fehler: true }); return false; }
     if (dr.txt.betrag.trim() && d.betrag == null) { toast('Der offerierte Betrag ist keine gültige Zahl.', { fehler: true }); return false; }
     for (const k of ['kunde', 'name', 'bereich', 'kategorie']) d[k] = d[k].trim();
-    for (const k of ['rechnungGeplant', 'rechnungsdatum', 'zahlungsdatum']) d[k] = d[k] || null;
+    for (const k of ['rechnungGeplant', 'rechnungsdatum', 'zahlungsdatum', 'offerteVom', 'emailVom']) d[k] = d[k] || null;
     d.effort = d.effort == null ? null : +d.effort;
     let verschoben = null;
     if (dr.id) {
@@ -687,7 +695,22 @@
     state.drawer = null;
     persist(); render();
     toast(verschoben ? `Projekt ins Jahr ${verschoben} verschoben` : dr.id ? 'Projekt gespeichert' : 'Projekt angelegt');
-    return true;
+    return d;
+  }
+
+  /* ============ Rechnung als PDF ============ */
+
+  function absender() {
+    if (!state.data.settings.absender) state.data.settings.absender = {};
+    return state.data.settings.absender;
+  }
+
+  async function makeInvoice(p) {
+    const m = C.invoiceModel(p, S(), heute);
+    if (m.fehler.length) { toast(m.fehler.join(' '), { fehler: true }); return; }
+    const r = await api.invoicePdf(m, absender(), { kunde: p.kunde, name: p.name });
+    if (r.fehler) { toast(r.fehler.join(' '), { fehler: true }); return; }
+    toast('Rechnung gespeichert: ' + r.path);
   }
 
   /* ============ Rechnungen ============ */
@@ -710,7 +733,7 @@
         ${cols.includes('gestellt') ? `<td><input type="date" class="inline" value="${p.rechnungsdatum || ''}" data-action="p-date" data-key="rechnungsdatum" data-id="${p.id}" id="rd-${p.id}" aria-label="Rechnung gestellt am"></td>` : ''}
         ${cols.includes('bezahlt') ? `<td><input type="date" class="inline" value="${p.zahlungsdatum || ''}" data-action="p-date" data-key="zahlungsdatum" data-id="${p.id}" id="zd-${p.id}" aria-label="Zahlung erhalten am"></td>` : ''}
         <td>${statusPill(f.status)}</td>
-        <td class="r">${cols.includes('btn-gestellt') ? `<button class="btn small" data-action="p-today" data-key="rechnungsdatum" data-id="${p.id}">Heute gestellt</button>` : ''}
+        <td class="r">${cols.includes('btn-gestellt') ? `<button class="btn small" data-action="p-invoice" data-id="${p.id}">PDF</button> <button class="btn small" data-action="p-today" data-key="rechnungsdatum" data-id="${p.id}">Heute gestellt</button>` : ''}
           ${cols.includes('btn-bezahlt') ? `<button class="btn small" data-action="p-today" data-key="zahlungsdatum" data-id="${p.id}">Heute bezahlt</button>` : ''}</td>
       </tr>`;
     };
@@ -848,6 +871,8 @@
 
   function viewEinstellungen() {
     const s = S();
+    const a = absender();
+    const abs = (key, label) => `<div class="fld"><label for="a-${key}">${label}</label><input id="a-${key}" type="text" value="${esc(a[key] || '')}" data-action="absender" data-key="${key}"></div>`;
     const num = (key, label, hint, step) => `<div class="fld"><label for="s-${key}">${label}</label>
       <input id="s-${key}" type="number" step="${step || 'any'}" value="${s[key]}" data-action="setting" data-key="${key}"><small>${hint}</small></div>`;
     return `
@@ -868,6 +893,22 @@
           ${num('ferientage', 'Ferientage pro Jahr', '', '1')}
         </div>
         <p class="hint">Ergibt ein Soll von ${fmtH1(C.monthlyTarget(s))} Stunden pro Monat.</p>
+      </section>
+      <section class="sec"><h2>Absender für Rechnungen</h2>
+        <div class="cols2">
+          ${abs('firma', 'Firma')}${abs('unterschrift', 'Name unter der Rechnung')}
+          ${abs('strasse', 'Strasse')}${abs('hausnummer', 'Hausnummer')}
+          ${abs('plz', 'PLZ')}${abs('ort', 'Ort')}
+          ${abs('uid', 'UID-Nummer')}${abs('mwstNr', 'MwSt.-Nummer')}
+          ${abs('mobile', 'Mobile')}${abs('homepage', 'Homepage')}
+          ${abs('email', 'E-Mail')}${abs('rechnungsort', 'Ort vor dem Datum')}
+          ${abs('iban', 'IBAN')}${abs('bank', 'Bank, wie sie im Zahlungstext steht')}
+        </div>
+        <div class="fld"><label>Logo oben rechts</label>
+          <div class="row">${a.logo ? `<img class="logo-prev" src="${esc(a.logo)}" alt="Logo">` : '<span class="dim">Kein Logo hinterlegt</span>'}
+            <label class="btn">Bild wählen<input type="file" accept="image/png,image/jpeg" data-action="logo-file" hidden></label>
+            ${a.logo ? '<button class="btn" data-action="logo-remove">Entfernen</button>' : ''}</div></div>
+        <p class="hint">Diese Angaben stehen auf jeder Rechnung und im QR-Zahlteil. Sie werden nur in deiner Datendatei gespeichert.</p>
       </section>
       <section class="sec"><h2>Daten</h2>
         <p>Gespeichert in <code>${esc(state.info.dataPath)}</code>. Jede Änderung wird sofort gesichert; im Unterordner «Sicherungen» liegt pro Tag eine Kopie des Vortagsstands.</p>
@@ -910,6 +951,14 @@
     const r = await api.importFile();
     if (!r || r.canceled) return;
     if (r.error) { toast(r.error, { fehler: true }); return; }
+    if (r.data && r.data.typ === 'einstellungen') {
+      if (!state.data) state.data = C.emptyData();
+      const neuS = r.data.settings || {};
+      state.data.settings = Object.assign({}, state.data.settings, neuS, { absender: Object.assign({}, state.data.settings.absender, neuS.absender) });
+      await persist(); render();
+      toast('Einstellungen übernommen. Projekte und Stunden sind unverändert.');
+      return;
+    }
     let neu;
     try { neu = normalize(r.data); } catch (e) { toast(e.message, { fehler: true }); return; }
     if (state.data && (state.data.projects.length || state.data.entries.length)) {
@@ -951,6 +1000,9 @@
       case 'open-project': openDrawer(projById(el.dataset.id)); break;
       case 'new-project': openDrawer(newProject()); break;
       case 'drawer-close': state.drawer = null; render(); break;
+      case 'drawer-invoice': { const p = saveDrawer(); if (p) await makeInvoice(p); break; }
+      case 'p-invoice': await makeInvoice(projById(el.dataset.id)); break;
+      case 'logo-remove': delete absender().logo; persist(); render(); break;
       case 'd-seg': {
         const k = el.dataset.key; let v = el.dataset.val;
         if (k === 'effort' || k === 'jahr') v = +v;
@@ -998,7 +1050,12 @@
     } else if (a === 'form-stunden') state.form.stunden = el.value;
     else if (a === 'form-notiz') state.form.notiz = el.value;
     else if (a === 'filter-q') { state.filter.q = el.value; render(); }
-    else if (a === 'd-field') state.drawer.draft[el.dataset.key] = el.value;
+    else if (a === 'd-field') {
+      state.drawer.draft[el.dataset.key] = el.value;
+      const einl = $('#d-einl');
+      if (einl && (el.dataset.key === 'offerteVom' || el.dataset.key === 'emailVom')) einl.textContent = `Auf der Rechnung steht: «${C.invoiceIntro(state.drawer.draft)}»`;
+    }
+    else if (a === 'absender') { absender()[el.dataset.key] = el.value; }
     else if (a === 'd-txt') { state.drawer.txt[el.dataset.key] = el.value; $('#drawer-calc').innerHTML = drawerCalcHtml(); }
   });
 
@@ -1007,6 +1064,15 @@
     if (!a) return;
     if (a === 'year') { state.year = +el.value; if (+state.date.slice(0, 4) !== state.year) { state.date = state.year === +heute.slice(0, 4) ? heute : `${state.year}-01-01`; state.calMonth = state.date.slice(0, 7); } render(); }
     else if (a === 'filter-status') { state.filter.status = el.value; render(); }
+    else if (a === 'absender') { absender()[el.dataset.key] = el.value.trim(); persist(); }
+    else if (a === 'logo-file') {
+      const f = el.files && el.files[0];
+      if (!f) return;
+      if (f.size > 1.5e6) { toast('Das Bild ist zu gross. Nimm eine Datei unter 1.5 MB.', { fehler: true }); return; }
+      const rd = new FileReader();
+      rd.onload = () => { absender().logo = rd.result; persist(); render(); toast('Logo gespeichert'); };
+      rd.readAsDataURL(f);
+    }
     else if (a === 'filter-archiv') { state.filter.archiv = el.checked; render(); }
     else if (a === 'd-check') state.drawer.draft[el.dataset.key] = el.checked;
     else if (a === 'entry-hours') {

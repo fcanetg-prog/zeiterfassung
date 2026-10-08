@@ -1,7 +1,7 @@
 {
   "name": "zeiterfassung",
   "productName": "Zeiterfassung",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Zeiterfassung und Rechnungsübersicht für Fabio Canetg GmbH",
   "author": "Fabio Canetg GmbH",
   "private": true,
@@ -21,6 +21,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "invoice.js",
       "src/**/*"
     ],
     "directories": {
@@ -43,5 +44,8 @@
       "deleteAppDataOnUninstall": false
     },
     "publish": null
+  },
+  "dependencies": {
+    "swissqrbill": "^4.4.2"
   }
 }

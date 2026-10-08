@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const invoice = require('./invoice');
 
 const DATA_FILE = 'zeiterfassung-daten.json';
 const BACKUP_DIR = 'Sicherungen';
@@ -75,6 +76,22 @@ function saveData(data, opts) {
   fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
   fs.renameSync(tmp, file);
   return { ok: true, path: file };
+}
+
+/* ---------- Rechnung als PDF ---------- */
+
+/** Lädt das HTML in ein unsichtbares Fenster und druckt es als A4-PDF. */
+async function renderPdf(html) {
+  const tmp = path.join(app.getPath('temp'), `zeiterfassung-rechnung-${Date.now()}.html`);
+  fs.writeFileSync(tmp, html, 'utf8');
+  const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
+  try {
+    await w.loadFile(tmp);
+    return await w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+  } finally {
+    w.destroy();
+    try { fs.unlinkSync(tmp); } catch { /* egal */ }
+  }
 }
 
 /* ---------- Fenster ---------- */
@@ -172,6 +189,21 @@ if (!app.requestSingleInstanceLock()) {
       return { path: ziel, vorhanden };
     });
     ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath() }));
+    ipcMain.handle('invoice:pdf', async (_e, modell, absender, projekt) => {
+      try {
+        const fehler = invoice.absenderFehler(absender);
+        if (fehler.length) return { fehler };
+        const pdf = await renderPdf(invoice.buildHtml(modell, absender));
+        const dir = path.join(dataDir(), 'Rechnungen');
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, invoice.dateiname(modell, projekt));
+        fs.writeFileSync(file, pdf);
+        if (!process.env.ZEITERFASSUNG_KEIN_OEFFNEN) shell.openPath(file);
+        return { path: file };
+      } catch (err) {
+        return { fehler: [`Die Rechnung konnte nicht erstellt werden: ${err.message}`] };
+      }
+    });
 
     createWindow();
   });

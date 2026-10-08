@@ -171,7 +171,89 @@
     return parseFloat(t.replace(',', '.'));
   }
 
+  const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  /** «2026-09-18» -> «18. September 2026» */
+  function dateLong(iso) {
+    if (!iso) return '';
+    return `${+iso.slice(8, 10)}. ${MONATE[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}`;
+  }
+
+  /** Einleitungssatz der Rechnung, je nachdem, worauf sie sich stützt. */
+  function invoiceIntro(p) {
+    const teile = [];
+    if (p.offerteVom) teile.push(`meiner Offerte vom ${dateLong(p.offerteVom)}`);
+    if (p.emailVom) teile.push(`unseres E-Mail-Austauschs vom ${dateLong(p.emailVom)}`);
+    const basis = teile.length ? teile.join(' und ') : 'unserer Vereinbarungen';
+    return `Auf Basis ${basis} stelle ich hiermit folgende Arbeiten in Rechnung.`;
+  }
+
+  /** Positionen aus dem Textfeld: eine pro Zeile, Betrag optional nach dem letzten Strichpunkt. */
+  function parsePositions(txt) {
+    const out = [];
+    for (const raw of String(txt || '').split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const i = line.lastIndexOf(';');
+      if (i >= 0) {
+        const betrag = parseAmount(line.slice(i + 1));
+        if (betrag != null) { out.push({ text: line.slice(0, i).trim(), betrag }); continue; }
+      }
+      out.push({ text: line, betrag: null });
+    }
+    return out;
+  }
+
+  /**
+   * Alles, was auf der Rechnung steht. Gibt { fehler: [...] } zurück, wenn etwas fehlt oder nicht aufgeht.
+   * Die Beträge der Positionen verstehen sich wie der offerierte Betrag (ohne MwSt., ausser bei «im Betrag enthalten»).
+   */
+  function invoiceModel(p, s, heute) {
+    const fehler = [];
+    const f = projectFigures(p, 0, s, heute);
+    if (p.abrechnung !== 'rechnung') fehler.push('Für dieses Projekt ist keine Rechnung vorgesehen.');
+    if (!isNum(p.betrag) || p.betrag <= 0) fehler.push('Der offerierte Betrag fehlt.');
+    if (!String(p.rechnungsadresse || '').trim()) fehler.push('Die Rechnungsadresse fehlt.');
+    if (fehler.length) return { fehler };
+
+    let pos = parsePositions(p.rechnungstext);
+    if (!pos.length) pos = [{ text: [p.kunde, p.name].filter(Boolean).join(' – '), betrag: null }];
+    if (pos.length === 1 && pos[0].betrag == null) pos[0].betrag = p.betrag;
+    if (pos.some((x) => x.betrag == null)) fehler.push('Bei mehreren Rechnungspositionen braucht jede Zeile einen Betrag nach einem Strichpunkt, zum Beispiel «Moderation; 3390».');
+    else {
+      const summe = round2(pos.reduce((a, x) => a + x.betrag, 0));
+      if (Math.abs(summe - round2(p.betrag)) > 0.005) fehler.push(`Die Rechnungspositionen ergeben ${summe.toFixed(2)}, der offerierte Betrag ist ${round2(p.betrag).toFixed(2)}.`);
+    }
+    if (fehler.length) return { fehler };
+
+    const total = f.rechnungsbetrag;
+    const mwst = p.mwst === 'keine' ? 0 : f.mwstBetrag;
+    const zwischentotal = round2(total - mwst);
+    let positionen = pos.map((x) => ({ text: x.text, betrag: round2(x.betrag) }));
+    if (p.mwst === 'inkl') {
+      // Positionen sind inklusive MwSt. erfasst: anteilig auf netto umrechnen, die letzte gleicht Rundungen aus.
+      const faktor = zwischentotal / total;
+      let rest = zwischentotal;
+      positionen = positionen.map((x, i) => {
+        const netto = i === positionen.length - 1 ? round2(rest) : round2(x.betrag * faktor);
+        rest -= netto;
+        return { text: x.text, betrag: netto };
+      });
+    }
+    const datum = p.rechnungGeplant || heute;
+    return {
+      fehler: [],
+      datum, datumLang: dateLong(datum),
+      empfaenger: String(p.rechnungsadresse).split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
+      referenz: String(p.referenz || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
+      einleitung: invoiceIntro(p),
+      positionen, zwischentotal, mwst, mwstSatz: s.mwstSatz, mitMwst: p.mwst !== 'keine', total,
+      zahlungsfrist: s.zahlungsfrist || 30,
+      email: p.rechnungsEmail || '',
+    };
+  }
+
   return {
+    dateLong, invoiceIntro, parsePositions, invoiceModel,
     DEFAULTS, settings, emptyData, hoursByProject, projectFigures, status, daysBetween,
     dailyTotals, daysInYear, dayOfYear, isoFromDayOfYear, monthlyTarget, monthly,
     cumulative, movingAverage, parseHours, parseAmount, round2, isNum,

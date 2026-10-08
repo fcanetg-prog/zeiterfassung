@@ -283,3 +283,5 @@ th.r { text-align: right; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 
 .ytag { font-size: 11px; font-weight: 600; color: var(--teal-deep); border: 1px solid rgba(var(--teal-rgb), .45); border-radius: 3px; padding: 0 4px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+.logo-prev { height: 34px; width: auto; border: 1px solid var(--line); border-radius: 4px; padding: 3px; background: #fff; }
