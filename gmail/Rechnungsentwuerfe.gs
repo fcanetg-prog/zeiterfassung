@@ -35,6 +35,10 @@ const TEXT = [
 ].join('\n');
 
 const ZEITZONE = 'Europe/Zurich';
+
+// Die tägliche Prüfung läuft in der Stunde ab dieser Uhrzeit, also zwischen 3 und 4 Uhr nachts.
+// Nach einer Änderung die Funktion «einrichten» einmal ausführen.
+const STUNDE = 3;
 const LISTE = 'rechnungen.json';
 
 /** Einmal ausführen: legt den Ordner an, richtet die tägliche Prüfung ein und prüft gleich ein erstes Mal. */
@@ -43,8 +47,8 @@ function einrichten() {
   ScriptApp.getProjectTriggers()
     .filter(function (t) { return t.getHandlerFunction() === 'rechnungsEntwuerfeErstellen'; })
     .forEach(function (t) { ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('rechnungsEntwuerfeErstellen').timeBased().everyDays(1).atHour(6).inTimezone(ZEITZONE).create();
-  console.log('Die tägliche Prüfung ist eingerichtet (jeweils zwischen 6 und 7 Uhr).');
+  ScriptApp.newTrigger('rechnungsEntwuerfeErstellen').timeBased().everyDays(1).atHour(STUNDE).inTimezone(ZEITZONE).create();
+  console.log('Die tägliche Prüfung ist eingerichtet (jeweils zwischen ' + STUNDE + ' und ' + (STUNDE + 1) + ' Uhr).');
   rechnungsEntwuerfeErstellen();
 }
 
