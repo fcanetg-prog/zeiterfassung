@@ -447,3 +447,19 @@ th.r { text-align: right; }
 .bh-tab.konten .link { font-size: 11.5px; }
 .bh-neu td:last-child, .bh-edit td:last-child { font-size: 11.5px; }
 .list.re .btn.small, .bh-tab .btn.small { font-size: 11.5px; }
+
+/* Buchungsvorschläge aus dem E-Banking */
+.bh-zahl { display: inline-block; background: #e0a43a; color: #2b1c00; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 6px; margin-left: 4px; line-height: 16px; }
+.bh-tab tr.bh-vkopf td { background: #fbeccb; border-top: 2px solid #e0a43a; border-bottom: 1px solid #e9cf96; white-space: normal; padding: 7px 8px; }
+.bh-tab tr.bh-vkopf td { display: table-cell; }
+.bh-tab tr.bh-vor td { background: #fdf6e3; border-bottom: 1px solid #efdfb8; vertical-align: top; padding: 5px 4px; overflow: visible; }
+.bh-tab tr.bh-vor.unsicher td { background: #fbe9d0; }
+.bh-tab tr.bh-vor td:first-child, .bh-tab tr.bh-vor td:nth-child(6) { padding: 10px 8px 0; }
+.bh-tab tr.bh-vor td:first-child { box-shadow: inset 4px 0 0 #e0a43a; }
+.bh-vor input { width: 100%; padding: 4px 6px; font-size: 12px; }
+.bh-banktext { font-size: 11px; color: var(--muted); margin: 3px 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-vhin { font-size: 11px; color: var(--amber); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-vk { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.bh-vk .grow { flex: 1; }
+.bh-vk .pos, .bh-vk .neg { font-weight: 600; }
+.bh-vk .btn { flex: none; }

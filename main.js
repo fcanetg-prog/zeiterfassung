@@ -345,6 +345,19 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
     });
+    ipcMain.handle('file:openText', async (_e, titel, endungen) => {
+      const r = await dialog.showOpenDialog(win, { title: String(titel || 'Datei öffnen'), filters: [{ name: 'Export', extensions: Array.isArray(endungen) && endungen.length ? endungen.map(String) : ['csv'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return { canceled: true };
+      try {
+        const roh = fs.readFileSync(r.filePaths[0]);
+        let text;
+        // Bankexporte sind je nach Alter UTF-8 oder Windows-1252.
+        try { text = new TextDecoder('utf-8', { fatal: true }).decode(roh); } catch { text = new TextDecoder('windows-1252').decode(roh); }
+        return { text, name: path.basename(r.filePaths[0]) };
+      } catch (err) {
+        return { fehler: `Die Datei konnte nicht gelesen werden: ${err.message}` };
+      }
+    });
     ipcMain.handle('pdf:save', async (_e, html, opts) => {
       try {
         const ordner = path.basename(String((opts && opts.ordner) || 'Berichte'));

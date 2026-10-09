@@ -116,5 +116,143 @@
     return out;
   }
 
-  return { round2, sortiert, saldi, auswertung, totalsummen, kontoauszug, eroeffnung, naechsterBeleg, abschnitte };
+  /* ---------- Bankbewegungen aus dem E-Banking ---------- */
+
+  function isoDatum(t) {
+    t = String(t || '').trim();
+    let m;
+    if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
+    if ((m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/))) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    return null;
+  }
+  function zahl(t) {
+    t = String(t == null ? '' : t).trim().replace(/[’'\s]/g, '');
+    if (!t) return null;
+    if (/,\d{1,2}$/.test(t) && !/\.\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+    const v = parseFloat(t);
+    return isFinite(v) ? v : null;
+  }
+  function csvZeile(line, trenner) {
+    const out = []; let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === trenner) { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  /** Liest den CSV-Export der Kontobewegungen (Raiffeisen, altes und neues Format). */
+  function parseBankCsv(text) {
+    const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return { fehler: 'Die Datei enthält keine Bewegungen.' };
+    const trenner = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
+    const kopf = csvZeile(lines[0], trenner).map((h) => h.trim().toLowerCase());
+    const finde = (...namen) => kopf.findIndex((h) => namen.some((n) => h === n || h.startsWith(n)));
+    const iD = finde('booked at', 'buchungsdatum', 'datum'), iT = finde('text', 'buchungstext', 'beschreibung'),
+      iB = finde('credit/debit amount', 'betrag'), iS = finde('balance', 'saldo');
+    if (iD < 0 || iT < 0 || iB < 0) return { fehler: 'Die Spalten Datum, Text und Betrag wurden in der Datei nicht gefunden. Erwartet wird der CSV-Export der Kontobewegungen aus dem E-Banking.' };
+    const zeilen = [], zaehler = new Map();
+    for (let i = 1; i < lines.length; i++) {
+      const f = csvZeile(lines[i], trenner);
+      const datum = isoDatum(f[iD]), betrag = zahl(f[iB]);
+      if (!datum || betrag == null) continue;
+      const txt = String(f[iT] || '').replace(/\s+/g, ' ').trim();
+      const basis = `${datum}|${betrag.toFixed(2)}|${txt}`;
+      const n = (zaehler.get(basis) || 0) + 1; zaehler.set(basis, n);
+      zeilen.push({ datum, text: txt, betrag: round2(betrag), saldo: iS >= 0 ? zahl(f[iS]) : null, schluessel: `${basis}|${n}`, nr: zeilen.length });
+    }
+    return { zeilen };
+  }
+
+  /** Kern des Banktexts ohne Daten, Kartennummern, Kurse und Codes: dient zum Wiedererkennen gleicher Zahlungen. */
+  function bankKern(text) {
+    return String(text || '').toLowerCase()
+      .replace(/,?\s*debit mastercard-nr\.?.*$/, '').replace(/\d{2}\.\d{2}\.\d{4}(,\s*\d{2}:\d{2})?/g, ' ')
+      .replace(/\*\S+/g, ' ').replace(/\b(von|bis)\b/g, ' ').replace(/[0-9]+([.,][0-9]+)?/g, ' ').replace(/[^a-zäöüéèàç&\- ]/g, ' ')
+      .replace(/\s+/g, ' ').trim().split(' ').slice(0, 5).join(' ');
+  }
+
+  const tage = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+
+  /**
+   * Gleicht Bankbewegungen mit den Buchungen auf dem Bankkonto ab.
+   * Liefert die schon verbuchten Paare (zum Lernen) und die Bewegungen, die noch fehlen.
+   */
+  function bankAbgleich(zeilen, buchungen, konto, ignoriert) {
+    const ign = new Set(ignoriert || []);
+    const frei = buchungen.filter((b) => (b.soll === konto) !== (b.haben === konto))
+      .map((b) => ({ b, betrag: round2(b.soll === konto ? b.betrag : -b.betrag), weg: false }));
+    const offen = zeilen.filter((z) => Math.abs(z.betrag) > 0.004).map((z) => ({ z, weg: false }));
+    const paare = [];
+    const nimm = (o, liste) => { o.weg = true; for (const f of liste) f.weg = true; paare.push({ zeile: o.z, buchungen: liste.map((f) => f.b) }); };
+
+    // 1. Schon einmal eingelesen (gleicher Schlüssel)
+    const nachSchluessel = new Map(frei.filter((f) => f.b.bankSchluessel).map((f) => [f.b.bankSchluessel, f]));
+    for (const o of offen) { const f = nachSchluessel.get(o.z.schluessel); if (f && !f.weg) nimm(o, [f]); }
+    // 2. Gleicher Betrag, Datum gleich oder wenige Tage daneben (nächstes zuerst)
+    for (const fenster of [0, 2, 6]) {
+      for (const o of offen) {
+        if (o.weg) continue;
+        let best = null;
+        for (const f of frei) {
+          if (f.weg || f.betrag !== o.z.betrag) continue;
+          const d = Math.abs(tage(f.b.datum, o.z.datum));
+          if (d <= fenster && (!best || d < best.d)) best = { f, d };
+        }
+        if (best) nimm(o, [best.f]);
+      }
+    }
+    // 3. Eine Bankbewegung, in der Buchhaltung auf zwei oder drei Buchungen aufgeteilt
+    for (const o of offen) {
+      if (o.weg) continue;
+      const kand = frei.filter((f) => !f.weg && Math.sign(f.betrag) === Math.sign(o.z.betrag) && Math.abs(tage(f.b.datum, o.z.datum)) <= 6);
+      let gefunden = null;
+      for (let i = 0; i < kand.length && !gefunden; i++) for (let j = i + 1; j < kand.length && !gefunden; j++) {
+        if (round2(kand[i].betrag + kand[j].betrag) === o.z.betrag) gefunden = [kand[i], kand[j]];
+        for (let k = j + 1; k < kand.length && !gefunden; k++) if (round2(kand[i].betrag + kand[j].betrag + kand[k].betrag) === o.z.betrag) gefunden = [kand[i], kand[j], kand[k]];
+      }
+      if (gefunden) nimm(o, gefunden);
+    }
+    // 4. Betrag kommt auf beiden Seiten genau einmal vor: auch bei abweichendem Datum (bis 45 Tage) dieselbe Zahlung
+    const zaehle = (liste, wert) => liste.filter((x) => !x.weg && wert(x)).length;
+    for (const o of offen) {
+      if (o.weg) continue;
+      const kand = frei.filter((f) => !f.weg && f.betrag === o.z.betrag);
+      if (kand.length === 1 && zaehle(offen, (x) => x.z.betrag === o.z.betrag) === 1 && Math.abs(tage(kand[0].b.datum, o.z.datum)) <= 45) nimm(o, [kand[0]]);
+    }
+    return { paare, neu: offen.filter((o) => !o.weg && !ign.has(o.z.schluessel)).map((o) => o.z), ignoriert: offen.filter((o) => !o.weg && ign.has(o.z.schluessel)).length };
+  }
+
+  /** Buchungsvorschlag für eine neue Bankbewegung, gelernt aus früheren gleichartigen Zahlungen. */
+  function bankVorschlag(zeile, paare, konto) {
+    const kern = bankKern(zeile.text);
+    const bsp = [];
+    for (const p of paare) {
+      if (p.buchungen.length !== 1 || bankKern(p.zeile.text) !== kern || Math.sign(p.zeile.betrag) !== Math.sign(zeile.betrag)) continue;
+      const b = p.buchungen[0];
+      bsp.push({ text: b.text, gegen: b.soll === konto ? b.haben : b.soll, datum: b.datum, betrag: p.zeile.betrag });
+    }
+    const basis = { datum: zeile.datum, betrag: Math.abs(zeile.betrag), bankText: zeile.text, bankSchluessel: zeile.schluessel };
+    const fertig = (text, gegen, sicher) => Object.assign(basis, { text, soll: zeile.betrag > 0 ? konto : gegen, haben: zeile.betrag > 0 ? gegen : konto, sicher });
+    if (!bsp.length) return fertig(zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '').slice(0, 90), '', false);
+    // Gleicher Betrag wie früher schlägt alles; sonst die häufigste Kombination, bei Gleichstand die jüngste.
+    const gleich = bsp.filter((x) => x.betrag === zeile.betrag).sort((a, b) => (a.datum < b.datum ? 1 : -1))[0];
+    if (gleich) return fertig(gleich.text, gleich.gegen, true);
+    const gruppen = new Map();
+    for (const x of bsp) {
+      const k = `${x.gegen}|${x.text}`;
+      const g = gruppen.get(k) || { n: 0, letzt: '', x };
+      g.n++; if (x.datum > g.letzt) { g.letzt = x.datum; g.x = x; }
+      gruppen.set(k, g);
+    }
+    const konten = new Set(bsp.map((x) => x.gegen));
+    const beste = [...gruppen.values()].sort((a, b) => b.n - a.n || (a.letzt < b.letzt ? 1 : -1))[0];
+    return fertig(beste.x.text, beste.x.gegen, konten.size === 1);
+  }
+
+  return { round2, sortiert, saldi, auswertung, totalsummen, kontoauszug, eroeffnung, naechsterBeleg, abschnitte, parseBankCsv, bankKern, bankAbgleich, bankVorschlag };
 });

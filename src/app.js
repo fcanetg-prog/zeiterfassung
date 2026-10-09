@@ -56,6 +56,17 @@
     async invoicePdf() { return { fehler: ['Rechnungen als PDF gibt es nur in der Desktop-App.'] }; },
     async invoicePush() { return { ok: false, fehler: 'Nur in der Desktop-App.' }; },
     async savePdf() { return { fehler: 'PDF gibt es nur in der Desktop-App.' }; },
+    openText() {
+      return new Promise((res) => {
+        const inp = document.createElement('input'); inp.type = 'file';
+        inp.onchange = async () => {
+          const roh = await inp.files[0].arrayBuffer();
+          let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(roh); } catch (_) { text = new TextDecoder('windows-1252').decode(roh); }
+          res({ text, name: inp.files[0].name });
+        };
+        inp.click();
+      });
+    },
   };
 
   /* ============ Zustand ============ */
@@ -218,7 +229,8 @@
     out.geloescht = Object.assign({}, d.geloescht || {});
     out.buchungen = (d.buchungen || []).filter((b) => b && b.datum && C.isNum(b.betrag)).map((b, i) => ({
       id: b.id || uid('b'), jahr: +b.jahr || +b.datum.slice(0, 4), datum: b.datum, beleg: String(b.beleg == null ? '' : b.beleg), text: b.text || '',
-      soll: String(b.soll), haben: String(b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
+      soll: String(b.soll == null ? '' : b.soll), haben: String(b.haben == null ? '' : b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
+      vorschlag: !!b.vorschlag, sicher: !!b.sicher, bankText: b.bankText || '', bankSchluessel: b.bankSchluessel || '',
     }));
     out.kontenplaene = {};
     for (const [jahr, plan] of Object.entries(d.kontenplaene || {})) {

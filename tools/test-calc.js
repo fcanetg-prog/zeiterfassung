@@ -101,4 +101,24 @@ console.log('Alle Prüfungen bestanden.');
     { projects: [], entries: [], buchungen: [Object.assign({}, b[0], { mod: 5, betrag: 1 }), Object.assign({}, b[1], { mod: 2 })], kontenplaene: { 2026: { mod: 3, zeilen: plan.slice(0, 2) }, 2027: { mod: 1, zeilen: [] } } });
   assert.deepStrictEqual(M.buchungen.map((x) => x.id + ':' + x.betrag), ['a:1', 'b:1081.05']); assert.strictEqual(M.kontenplaene[2026].zeilen.length, 2); assert.ok(M.kontenplaene[2027]);
   console.log('Buchhaltung bestanden.');
+
+  // Bankabgleich (erfundene Daten)
+  const csv = ['IBAN;Booked At;Text;Credit/Debit Amount;Balance;Valuta Date',
+    'CH00;2026-02-01 00:00:00.0;Online Einkauf Meta 31.01.2026, 08:00, Debit Mastercard-Nr. 1234xxxx;-81.05;19918.95;2026-02-01 00:00:00.0',
+    'CH00;2026-03-03 00:00:00.0;Gutschrift Kunde AG;1081.05;21000;2026-03-03 00:00:00.0',
+    'CH00;2026-04-02 00:00:00.0;Online Einkauf Meta 01.04.2026, 09:00, Debit Mastercard-Nr. 1234xxxx;-50;20950;2026-04-02 00:00:00.0',
+    'CH00;2026-04-05 00:00:00.0;Zahlung Unbekannt GmbH;-10;20940;2026-04-05 00:00:00.0'].join('\r\n');
+  const pz = L.parseBankCsv(csv); assert.ok(!pz.fehler); assert.strictEqual(pz.zeilen.length, 4);
+  assert.strictEqual(pz.zeilen[0].betrag, -81.05); assert.strictEqual(pz.zeilen[0].datum, '2026-02-01'); assert.strictEqual(pz.zeilen[3].saldo, 20940);
+  assert.ok(L.parseBankCsv('a;b\n1;2').fehler);
+  const ag = L.bankAbgleich(pz.zeilen, b, '1010', []);
+  assert.strictEqual(ag.paare.length, 2); assert.strictEqual(ag.neu.length, 2);   // Honorar trotz zwei Tagen Abstand erkannt, Eröffnung bleibt unberührt
+  const v1 = L.bankVorschlag(ag.neu[0], ag.paare, '1010');
+  assert.deepStrictEqual([v1.text, v1.soll, v1.haben, v1.betrag, v1.sicher], ['Werbung', '6600', '1010', 50, true]);
+  const v2 = L.bankVorschlag(ag.neu[1], ag.paare, '1010'); assert.strictEqual(v2.soll, ''); assert.strictEqual(v2.haben, '1010'); assert.strictEqual(v2.sicher, false);
+  // Zweiter Import: Vorschläge werden über den Schlüssel wiedererkannt, Verworfenes bleibt weg
+  const mitV = b.concat([Object.assign({ id: 'v1', vorschlag: true }, v1)]);
+  const ag2 = L.bankAbgleich(pz.zeilen, mitV, '1010', [v2.bankSchluessel]);
+  assert.strictEqual(ag2.neu.length, 0); assert.strictEqual(ag2.ignoriert, 1); assert.strictEqual(ag2.paare.length, 3);
+  console.log('Bankabgleich bestanden.');
 }
