@@ -315,3 +315,5 @@ th.r { text-align: right; }
 .bereiche td.pct { width: 52px; }
 .bereiche tr.b-intern td { border-bottom: 2px solid var(--line); }
 .bereiche tfoot td.dim { font-weight: 400; }
+
+.head .bignum + .bignum { margin-left: 26px; padding-left: 26px; border-left: 1px solid var(--line); }

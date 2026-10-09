@@ -410,12 +410,11 @@
             <div id="combo-list" class="combo-list ${state.combo.open ? 'open' : ''}">${state.combo.open ? comboListHtml() : ''}</div>
           </div>
           <div class="f-std"><label for="f-stunden">Stunden</label>
-            <input id="f-stunden" type="text" inputmode="decimal" placeholder="1.5" value="${esc(state.form.stunden)}" data-action="form-stunden"></div>
+            <input id="f-stunden" type="text" inputmode="decimal" value="${esc(state.form.stunden)}" data-action="form-stunden"></div>
           <div class="f-notiz"><label for="f-notiz">Notiz</label>
             <input id="f-notiz" type="text" placeholder="optional" value="${esc(state.form.notiz)}" data-action="form-notiz"></div>
           <button class="btn primary" type="submit">Eintragen</button>
         </form>
-        <p class="hint">Stunden als 1.5, 1,5 oder 1:30. Mit Enter eintragen.</p>
 
         ${entries.length ? `<table class="entries">
           <thead><tr><th>Projekt</th><th>Notiz</th><th class="r">Stunden</th><th></th></tr></thead>
@@ -895,7 +894,7 @@
       if (g.length === 1) return `<tbody>${row(p, cols, false)}</tbody>`;
       const m = C.invoiceModelGroup(g, S(), heute);
       const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
-      return `<tbody class="sammel-block"><tr class="rg"><td colspan="2"><span class="sammel-marke">Sammelrechnung</span> ${g.length} Projekte auf einer Rechnung</td><td class="r num">${fmtCHF(total)}</td>
+      return `<tbody class="sammel-block"><tr class="rg"><td colspan="2"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
         <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
     }).join('');
     const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
@@ -979,6 +978,13 @@
     const mo = C.monthly(state.data, y, heute);
     const tot = mo.reduce((a, m) => ({ eff: a.eff + m.effektiv, ist: a.ist + m.ist, soll: a.soll + (m.zukunft ? 0 : m.soll) }), { eff: 0, ist: 0, soll: 0 });
     const letzte = mo.filter((m) => !m.zukunft).pop();
+    // Aktuelles Pensum: Schnitt der letzten 7 abgeschlossenen Tage (bis gestern), auf 5 Arbeitstage hochgerechnet, mit Zuschlag, gemessen an 100%.
+    let pensum = null;
+    if (y === +heute.slice(0, 4) && s.stundenProTag > 0) {
+      let summe = 0;
+      for (const e of state.data.entries) if (e.datum >= addDays(heute, -7) && e.datum < heute) summe += e.stunden;
+      pensum = ((summe / 7) * (7 / 5) * s.stundenZuschlag / s.stundenProTag) * 100;
+    }
     const bis = y === +heute.slice(0, 4) ? C.dayOfYear(heute) : null;
 
     const jahre = [y - 2, y - 1, y].map((yy) => ({ yy, d: C.dailyTotals(state.data, yy) })).filter((o) => o.d.quelle !== 'leer' || o.yy === y);
@@ -1007,6 +1013,7 @@
 
     return `
     <header class="head"><h1>Auswertung ${y}</h1>
+      ${pensum == null ? '' : `<div class="bignum" title="Schnitt der letzten 7 Tage bis gestern, hochgerechnet auf 5 Arbeitstage, mit Zuschlag ${s.stundenZuschlag}, im Verhältnis zu ${s.stundenProTag} Stunden pro Tag"><b>${Math.round(pensum)}%</b><span>Aktuelles Pensum</span></div>`}
       <div class="bignum"><b class="${letzte && letzte.ueberzeit < 0 ? 'neg' : ''}">${letzte ? (letzte.ueberzeit > 0 ? '+' : '') + fmtH1(letzte.ueberzeit) : '–'}</b><span>Überzeit kumuliert</span></div>
     </header>
     <div class="aus">
