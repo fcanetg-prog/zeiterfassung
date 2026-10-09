@@ -436,4 +436,14 @@ th.r { text-align: right; }
 .grp td { top: 33px; padding: 6px 5px; }
 
 .list.re input[type=date].inline { max-width: 124px; }
-@media (min-width: 1700px) { .list.re { font-size: 13px; } .list.re input[type=date].inline { font-size: 13px; } }
+
+/* Einheitliche Schrift in allen Datentabellen (wie in der Projektliste) */
+.list, .list.re, .bh-tab, .bh-ab { font-size: 12px; }
+.list th, .list.re th, .bh-tab th { font-size: 11.5px; }
+.list.re input[type=date].inline, .bh-neu input, .bh-edit input, .bh-tab th input[type=search] { font-size: 12px; }
+.list .pill, .bh-tab .pill { font-size: 11px; padding: 1px 6px; }
+.bh-tab.konten tr.k-sek td { font-size: 13px; }
+.bh-tab.konten tr.k-grp.gross td, .bh-ab tr.gross td { font-size: 13px; }
+.bh-tab.konten .link { font-size: 11.5px; }
+.bh-neu td:last-child, .bh-edit td:last-child { font-size: 11.5px; }
+.list.re .btn.small, .bh-tab .btn.small { font-size: 11.5px; }
