@@ -120,5 +120,25 @@ console.log('Alle Prüfungen bestanden.');
   const mitV = b.concat([Object.assign({ id: 'v1', vorschlag: true }, v1)]);
   const ag2 = L.bankAbgleich(pz.zeilen, mitV, '1010', [v2.bankSchluessel]);
   assert.strictEqual(ag2.neu.length, 0); assert.strictEqual(ag2.ignoriert, 1); assert.strictEqual(ag2.paare.length, 3);
+  // Zahlungseingänge und offene Rechnungen (erfundene Daten)
+  const P = (id, o) => Object.assign({ id, jahr: 2026, abrechnung: 'rechnung', mwst: 'drauf', bereich: 'A', kunde: 'Kunde', name: id, rechnungsadresse: 'Muster Bündner Bank AG\nPostfach', rechnungsdatum: '2026-03-01', zahlungsdatum: null, rechnungGruppe: null }, o);
+  const Z = (datum, betrag, text) => ({ datum, betrag, text, schluessel: datum + betrag + text });
+  const ps = [P('p1', { betrag: 1000 }), P('p2', { betrag: 2260 }), P('p3', { betrag: 500 }), P('p4', { betrag: 500 }), P('p5', { betrag: 300, mwst: 'keine', rechnungsadresse: 'Verein Beispiel', rechnungsdatum: '2026-05-01' }),
+    P('p6', { betrag: 1000, zahlungsdatum: '2026-02-10', rechnungsdatum: '2026-01-15' })];
+  const zz = [Z('2026-02-11', 1081, 'Gutschrift Muster Buendner Bank AG'),   // gehört zur bereits bezahlten p6
+    Z('2026-02-20', 1081, 'Gutschrift Muster Bundner Bank AG'),              // vor dem Rechnungsdatum von p1: nicht zuordnen
+    Z('2026-03-20', 1081, 'Gutschrift Muster Buendner Bank AG'),             // p1
+    Z('2026-03-21', 2443.05, 'Gutschrift MUSTER BUNDNER BANK AG'),           // p2, auf fünf Rappen gerundet (2443.06)
+    Z('2026-03-25', 1081, 'Gutschrift Muster Bündner Bank AG'),              // p3 + p4 zusammen
+    Z('2026-05-20', 300, 'Gutschrift Hans Fremd'),                           // Betrag passt, Zahler nicht
+    Z('2026-05-21', -300, 'Zahlung Verein Beispiel')];
+  const zr = C.zahlungenZuordnen(zz, ps, {});
+  assert.deepStrictEqual(zr.treffer.map((t) => t.zeile.datum + ':' + t.projekte.map((x) => x.id).join('+')), ['2026-03-20:p1', '2026-03-21:p2', '2026-03-25:p3+p4']);
+  assert.deepStrictEqual(zr.fast.map((t) => t.zeile.datum + ':' + t.projekte.map((x) => x.id).join('+')), ['2026-05-20:p5']);
+  assert.ok(C.zahlerPasst('Gutschrift Universitat Bern', ['Universität Bern'])); assert.ok(!C.zahlerPasst('Gutschrift Live Fabrik GmbH', ['Verband Schweizer Regionalbanken']));
+  assert.ok(!C.zahlerPasst('Gutschrift Irgendwer AG', ['AG']));
+  // Schon verwendete Gutschrift zahlt keine zweite Rechnung
+  ps[0].zahlungsdatum = '2026-03-20'; ps[0].zahlungBank = zz[2].schluessel; ps.push(P('p7', { betrag: 1000, rechnungsdatum: '2026-03-10' }));
+  assert.strictEqual(C.zahlungenZuordnen(zz.slice(0, 3), ps, {}).treffer.length, 0);
   console.log('Bankabgleich bestanden.');
 }

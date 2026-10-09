@@ -249,7 +249,7 @@
       rechnungGeplant: p.rechnungGeplant || null, rechnungsdatum: p.rechnungsdatum || null, zahlungsdatum: p.zahlungsdatum || null,
       rechnungsadresse: p.rechnungsadresse || '', referenz: p.referenz || '', rechnungsEmail: p.rechnungsEmail || '',
       rechnungstext: p.rechnungstext || '', offerteVom: p.offerteVom || null, emailVom: p.emailVom || null,
-      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, mod: p.mod || 0,
+      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, zahlungBank: p.zahlungBank || null, mod: p.mod || 0,
     }));
     const ids = new Set(out.projects.map((p) => p.id));
     out.entries = d.entries.filter((e) => e && e.datum && ids.has(e.projectId) && C.isNum(e.stunden))

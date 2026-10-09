@@ -1,7 +1,7 @@
 {
   "name": "zeiterfassung",
   "productName": "Zeiterfassung",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Zeiterfassung und Rechnungsübersicht für Fabio Canetg GmbH",
   "author": "Fabio Canetg GmbH",
   "private": true,

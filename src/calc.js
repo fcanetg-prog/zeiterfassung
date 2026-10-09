@@ -255,6 +255,7 @@
   /* ---------- Sammelrechnungen ---------- */
 
   const zeilen = (t) => String(t || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const zeilen2 = zeilen;
 
   /** Projekte desselben Bereichs mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen auf eine Rechnung. */
   function groupKey(p) {
@@ -299,6 +300,97 @@
       fehler: [], projekte, positionen, zwischentotal, mwst, mitMwst, total: round2(zwischentotal + mwst), referenz,
       einleitung: einleitungen.size === 1 ? einzel[0].einleitung : invoiceIntro({}),
     });
+  }
+
+  /* ---------- Zahlungseingänge aus dem E-Banking den offenen Rechnungen zuordnen ---------- */
+
+  const NAME_OHNE = new Set(['ag', 'gmbh', 'sa', 'sarl', 'ltd', 'inc', 'co', 'und', 'et', 'the', 'der', 'die', 'das', 'des', 'de', 'la', 'le', 'du', 'pour', 'fur', 'von', 'herr', 'frau', 'dr', 'prof', 'ch']);
+  /** Vergleichsform eines Namens: klein, ohne Akzente; ä/ae, ö/oe, ü/ue werden gleich behandelt (Banken schreiben «Universitat» und «Graubuendner»). */
+  function nameNorm(t) {
+    return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss')
+      .replace(/([aou])e/g, '$1').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+  const nameTeile = (t) => nameNorm(t).split(' ').filter((w) => w.length >= 2 && !NAME_OHNE.has(w) && !/^\d+$/.test(w));
+  /** Passt der Zahler im Banktext zu einem der Namen (Rechnungsadresse Zeile 1 und 2, Kunde)? Alle wesentlichen Wörter des Namens müssen vorkommen. */
+  function zahlerPasst(bankText, namen) {
+    const bank = new Set(nameNorm(bankText).split(' '));
+    return namen.some((n) => { const w = nameTeile(n); return w.length > 0 && w.some((x) => x.length >= 3) && w.every((x) => bank.has(x)); });
+  }
+
+  /**
+   * Sucht zu Gutschriften die passende offene Rechnung (gestellt, noch nicht bezahlt).
+   * Automatisch zugeordnet wird nur, wenn Betrag und Zahler stimmen und die Zahlung nicht vor dem Rechnungsdatum liegt.
+   * Rückgabe: { treffer: [{ zeile, projekte }], fast: [{ zeile, projekte }] }; «fast» = Betrag passt eindeutig, Zahler nicht erkennbar.
+   */
+  function zahlungenZuordnen(zeilen, projects, s) {
+    const sat = Object.assign({}, DEFAULTS, s || {});
+    const brutto = (p) => projectFigures(p, 0, sat).rechnungsbetrag;
+    const namenVon = (p) => zeilen2(p.rechnungsadresse).slice(0, 2).concat(p.kunde ? [p.kunde] : []);
+    const adrKey = (p) => zeilen2(p.rechnungsadresse).join('\n').toLowerCase();
+    // Rechnungseinheiten: eine Sammelrechnung zählt als Ganzes.
+    const einheiten = [], gesehen = new Set();
+    for (const p of projects) {
+      if (p.abrechnung !== 'rechnung' || !p.rechnungsdatum || gesehen.has(p.id)) continue;
+      const m = p.rechnungGruppe ? projects.filter((x) => x.rechnungGruppe === p.rechnungGruppe) : [p];
+      m.forEach((x) => gesehen.add(x.id));
+      let betrag = null;
+      if (m.length > 1) { const g = invoiceModelGroup(m, sat); betrag = g.fehler && g.fehler.length ? null : g.total; }
+      if (betrag == null) { const e = m.map(brutto); betrag = e.every(isNum) ? round2(e.reduce((a, x) => a + x, 0)) : null; }
+      if (!isNum(betrag) || betrag <= 0) continue;
+      einheiten.push({ m, betrag, datum: p.rechnungsdatum, bezahlt: m.every((x) => x.zahlungsdatum) ? m[0].zahlungsdatum : null, weg: false,
+        mwst: m[0].mwst === 'drauf', netto: m.reduce((a, x) => a + (+x.betrag || 0), 0), adr: adrKey(p), bereich: String(p.bereich || '').trim().toLowerCase(), namen: [].concat(...m.map(namenVon)) });
+    }
+    const verbraucht = new Set(projects.map((p) => p.zahlungBank).filter(Boolean));
+    const gut = zeilen.filter((z) => z.betrag > 0.004 && !verbraucht.has(z.schluessel)).map((z) => ({ z, weg: false }));
+    // Manche Kunden runden beim Zahlen auf fünf Rappen.
+    const gleich = (werte, bank) => werte.some((w) => w === bank || round2(Math.round(w * 20 + 1e-6) / 20) === bank);
+    // Gutschriften, die zu einer bereits als bezahlt eingetragenen Rechnung gehören, sind vergeben.
+    for (const e of einheiten) {
+      if (!e.bezahlt) continue;
+      const g = gut.find((x) => !x.weg && gleich([e.betrag], x.z.betrag) && Math.abs(daysBetween(e.bezahlt, x.z.datum)) <= 5);
+      if (g) g.weg = true;
+    }
+    const offen = einheiten.filter((e) => !e.bezahlt && e.m.every((x) => !x.zahlungsdatum));
+    // Mehrere Rechnungen vom selben Tag an dieselbe Adresse werden oft mit einer Zahlung beglichen.
+    const summe = (liste) => {
+      const einzeln = round2(liste.reduce((a, e) => a + e.betrag, 0));
+      if (!liste.every((e) => e.mwst)) return [einzeln];
+      const netto = round2(liste.reduce((a, e) => a + e.netto, 0));
+      return [einzeln, round2(netto + round2(netto * sat.mwstSatz / 100))];
+    };
+    const kombis = (z) => {
+      const out = [];
+      const kand = offen.filter((e) => !e.weg && e.datum <= z.datum);
+      for (const e of kand) if (gleich([e.betrag], z.betrag)) out.push([e]);
+      const nachTag = new Map();
+      for (const e of kand) { const k = e.datum + '|' + e.adr; (nachTag.get(k) || nachTag.set(k, []).get(k)).push(e); }
+      for (const liste of nachTag.values()) {
+        if (liste.length < 2 || liste.length > 12) continue;
+        for (let maske = 3; maske < (1 << liste.length); maske++) {
+          const teil = liste.filter((_, i) => maske & (1 << i));
+          if (teil.length < 2) continue;
+          if (gleich(summe(teil), z.betrag)) out.push(teil);
+        }
+      }
+      return out;
+    };
+    const treffer = [], fast = [];
+    const nimm = (g, liste, ziel) => { g.weg = true; liste.forEach((e) => { e.weg = true; }); ziel.push({ zeile: g.z, projekte: [].concat(...liste.map((e) => e.m)) }); };
+    const alter = (liste) => liste.reduce((a, e) => (e.datum < a ? e.datum : a), '9999');
+    for (const g of gut.slice().sort((a, b) => (a.z.datum < b.z.datum ? -1 : 1))) {
+      if (g.weg) continue;
+      const mit = kombis(g.z).filter((liste) => liste.every((e) => zahlerPasst(g.z.text, e.namen)));
+      if (!mit.length) continue;
+      // Bei mehreren passenden: zuerst ganze Bereiche, dann die älteste Rechnung.
+      mit.sort((a, b) => (new Set(a.map((e) => e.bereich)).size - new Set(b.map((e) => e.bereich)).size) || (alter(a) < alter(b) ? -1 : alter(a) > alter(b) ? 1 : 0));
+      nimm(g, mit[0], treffer);
+    }
+    for (const g of gut) {
+      if (g.weg) continue;
+      const k = kombis(g.z);
+      if (k.length === 1) nimm(g, k[0], fast);
+    }
+    return { treffer, fast };
   }
 
   /* ---------- Zusammenführen zweier Datenstände (Synchronisation zwischen Rechnern) ---------- */
@@ -346,7 +438,7 @@
   }
 
   return {
-    groupKey, invoiceGroup, invoiceModelGroup, mergeData,
+    groupKey, invoiceGroup, invoiceModelGroup, mergeData, zahlungenZuordnen, zahlerPasst,
     dateLong, invoiceIntro, parsePositions, invoiceModel,
     DEFAULTS, settings, emptyData, hoursByProject, projectFigures, status, daysBetween,
     dailyTotals, daysInYear, dayOfYear, isoFromDayOfYear, monthlyTarget, monthly,

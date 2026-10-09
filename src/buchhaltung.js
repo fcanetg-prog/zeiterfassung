@@ -72,6 +72,7 @@
         <button class="btn" data-bh="bank">Bankbewegungen einlesen</button>
         <button class="btn" data-bh="pdf">Dossier als PDF</button>
       </div>
+      ${zahlPanel()}
       ${inhalt}`;
     }
 
@@ -170,6 +171,40 @@
       return null;
     }
 
+    /* ---------- Zahlungseingänge und offene Rechnungen ---------- */
+
+    const projekt = (id) => state.data.projects.find((x) => x.id === id);
+    const pName = (id) => { const x = projekt(id); return x ? [x.kunde, x.name].filter(Boolean).join(' – ') : ''; };
+    function setzeBezahlt(e) {
+      for (const id of e.projekte) { const x = projekt(id); if (x && !x.zahlungsdatum) { x.zahlungsdatum = e.datum; x.zahlungBank = e.schluessel; } }
+    }
+    /** Gleicht die Gutschriften der Datei mit den offenen Rechnungen ab und trägt eindeutige Zahlungen ein. */
+    function rechnungenAbgleichen(zeilen) {
+      const nein = new Set(state.data.settings.zahlungNein || []);   // von Hand rückgängig gemacht: nicht erneut eintragen
+      const r = C.zahlungenZuordnen(zeilen.filter((z) => !nein.has(z.schluessel)), state.data.projects, state.data.settings);
+      const form = (x) => ({ datum: x.zeile.datum, betrag: x.zeile.betrag, text: x.zeile.text, schluessel: x.zeile.schluessel, projekte: x.projekte.map((q) => q.id) });
+      const gesetzt = r.treffer.map(form), fast = r.fast.map(form);
+      gesetzt.forEach(setzeBezahlt);
+      state.bh.zahl = gesetzt.length || fast.length ? { gesetzt, fast } : null;
+      return gesetzt.length;
+    }
+    function zahlPanel() {
+      const z = state.bh.zahl;
+      if (!z) return '';
+      const zeile = (e, i, art) => `<tr><td class="num">${fmtDate(e.datum)}</td><td class="num r">${chf(e.betrag)}</td>
+        <td>${esc(e.text.replace(/^Gutschrift\s+/i, ''))}</td><td>${e.projekte.map((id) => esc(pName(id))).join('<br>')}</td>
+        <td class="r">${art === 'gesetzt' ? `<button class="btn small" data-bh="z-zurueck" data-i="${i}">Rückgängig</button>` : `<button class="btn small primary" data-bh="z-setzen" data-i="${i}">Als bezahlt eintragen</button>`}</td></tr>`;
+      return `<div class="bh-zahl-panel">
+        <button class="x" data-bh="z-zu" title="Schliessen">×</button>
+        ${z.gesetzt.length ? `<h3>${z.gesetzt.length === 1 ? 'Eine Rechnung wurde' : `${z.gesetzt.length} Rechnungen wurden`} als bezahlt eingetragen</h3>
+          <p>Betrag und Zahler stimmen mit einer Gutschrift überein. Das Zahlungsdatum ist das Buchungsdatum der Bank.</p>
+          <table>${z.gesetzt.map((e, i) => zeile(e, i, 'gesetzt')).join('')}</table>` : ''}
+        ${z.fast.length ? `<h3>Betrag passt, Zahler nicht erkannt</h3>
+          <p>Hier stimmt nur der Betrag. Der Name auf der Gutschrift kommt weder in der Rechnungsadresse noch im Kunden vor, darum ist nichts eingetragen.</p>
+          <table>${z.fast.map((e, i) => zeile(e, i, 'fast')).join('')}</table>` : ''}
+      </div>`;
+    }
+
     /** Liest den CSV-Export aus dem E-Banking, erkennt Verbuchtes und legt für den Rest Vorschläge an. */
     async function bankEinlesen() {
       const r = await api.openText('Kontobewegungen aus dem E-Banking wählen', ['csv', 'txt']);
@@ -177,8 +212,10 @@
       if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
       const p = L.parseBankCsv(r.text);
       if (p.fehler) { toast(p.fehler, { fehler: true }); return; }
+      const bezahlt = rechnungenAbgleichen(p.zeilen);
+      const zusatz = bezahlt ? ` ${bezahlt === 1 ? 'Eine Rechnung' : `${bezahlt} Rechnungen`} als bezahlt eingetragen.` : '';
       const z = p.zeilen.filter((x) => x.datum.startsWith(jahr() + '-'));
-      if (!z.length) { toast(`Die Datei enthält keine Bewegungen im Jahr ${jahr()}.`, { fehler: true }); return; }
+      if (!z.length) { if (bezahlt) persist(); render(); toast(`Die Datei enthält keine Bewegungen im Jahr ${jahr()}.${zusatz}`, { fehler: !bezahlt }); return; }
       const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
       const a = L.bankAbgleich(z, alle, BANK, state.data.settings.bankIgnoriert || []);
       // Gelernt wird nur aus bestätigten Buchungen.
@@ -188,10 +225,10 @@
       const letzte = z[z.length - 1];
       state.bh.bank = { jahr: jahr(), datum: letzte.datum, saldo: letzte.saldo };
       state.bh.tab = 'buchungen'; state.bh.q = '';
-      if (a.neu.length) persist();
+      if (a.neu.length || bezahlt) persist();
       render();
       const offenV = a.paare.length - lern.length;
-      toast(`${a.paare.length + a.neu.length + a.ignoriert} Bewegungen gelesen: ${lern.length} schon verbucht, ${a.neu.length} ${a.neu.length === 1 ? 'neuer Vorschlag' : 'neue Vorschläge'}${offenV ? `, ${offenV} noch unbestätigt` : ''}${a.ignoriert ? `, ${a.ignoriert} früher verworfen` : ''}.`);
+      toast(`${a.paare.length + a.neu.length + a.ignoriert} Bewegungen gelesen: ${lern.length} schon verbucht, ${a.neu.length} ${a.neu.length === 1 ? 'neuer Vorschlag' : 'neue Vorschläge'}${offenV ? `, ${offenV} noch unbestätigt` : ''}${a.ignoriert ? `, ${a.ignoriert} früher verworfen` : ''}.${zusatz}`);
     }
 
     function hinweisNeu() {
@@ -398,6 +435,16 @@
       const a = el.dataset.bh;
       if (a === 'tab') { state.bh.tab = el.dataset.tab; state.bh.edit = null; render(); }
       else if (a === 'bank') bankEinlesen();
+      else if (a === 'z-zu') { state.bh.zahl = null; render(); }
+      else if (a === 'z-zurueck') {
+        const [e] = state.bh.zahl.gesetzt.splice(+el.dataset.i, 1);
+        for (const id of e.projekte) { const x = projekt(id); if (x && x.zahlungBank === e.schluessel) { x.zahlungsdatum = null; x.zahlungBank = null; } }
+        (state.data.settings.zahlungNein || (state.data.settings.zahlungNein = [])).push(e.schluessel);
+        state.bh.zahl.fast.push(e); persist(); render();
+      } else if (a === 'z-setzen') {
+        const [e] = state.bh.zahl.fast.splice(+el.dataset.i, 1);
+        setzeBezahlt(e); state.bh.zahl.gesetzt.push(e); persist(); render();
+      }
       else if (a === 'v-ok') {
         const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
         const f = bestaetige(v);

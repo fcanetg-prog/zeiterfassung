@@ -463,3 +463,11 @@ th.r { text-align: right; }
 .bh-vk .grow { flex: 1; }
 .bh-vk .pos, .bh-vk .neg { font-weight: 600; }
 .bh-vk .btn { flex: none; }
+.bh-zahl-panel { position: relative; background: #e6f4ef; border: 1px solid #b5dccf; border-left: 4px solid #1f8a70; border-radius: 8px; padding: 10px 14px 8px; margin: 0 0 12px; font-size: 12px; }
+.bh-zahl-panel h3 { font-size: 13px; margin: 0 0 2px; }
+.bh-zahl-panel h3:not(:first-of-type) { margin-top: 12px; }
+.bh-zahl-panel p { margin: 0 0 6px; color: var(--muted); }
+.bh-zahl-panel table { width: 100%; border-collapse: collapse; }
+.bh-zahl-panel td { padding: 4px 8px 4px 0; border-top: 1px solid #cfe6dd; vertical-align: top; }
+.bh-zahl-panel td:first-child { width: 84px; } .bh-zahl-panel td:nth-child(2) { width: 90px; } .bh-zahl-panel td:last-child { width: 170px; padding-right: 0; }
+.bh-zahl-panel .x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
