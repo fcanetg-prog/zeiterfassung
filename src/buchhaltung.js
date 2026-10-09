@@ -15,7 +15,8 @@
     const plan = () => { const p = state.data.kontenplaene[jahr()]; return p ? p.zeilen : null; };
     // Vorschläge aus dem Bankabgleich zählen erst, wenn sie bestätigt sind.
     const buchungen = () => state.data.buchungen.filter((b) => b.jahr === jahr() && !b.vorschlag);
-    const vorschlaege = () => L.sortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag));
+    // Neueste zuoberst, wie in der Liste der Buchungen.
+    const vorschlaege = () => L.sortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag)).reverse();
     const BANK = '1010';
     const konten = () => (plan() || []).filter((z) => z.konto);
     const kontoName = (nr) => { const z = konten().find((x) => x.konto === nr); return z ? z.text : ''; };
@@ -188,6 +189,49 @@
       state.bh.zahl = gesetzt.length || fast.length ? { gesetzt, fast } : null;
       return gesetzt.length;
     }
+    /**
+     * Lernt aus früheren Zahlungen, auf welches Konto die Rechnungen eines Kunden oder Bereichs verbucht wurden.
+     * paare: bereits verbuchte Bankbewegungen mit ihrer Buchung.
+     */
+    function rechnungsBeispiele(paare) {
+      const sat = Object.assign({}, C.DEFAULTS, state.data.settings);
+      const brutto = (x) => C.projectFigures(x, 0, sat).rechnungsbetrag || 0;
+      const namen = (x) => String(x.rechnungsadresse || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2).concat(x.kunde ? [x.kunde] : []);
+      const bezahlt = state.data.projects.filter((x) => x.abrechnung === 'rechnung' && x.zahlungsdatum);
+      const out = [];
+      for (const paar of paare) {
+        const z = paar.zeile, b = paar.buchungen[0];
+        if (paar.buchungen.length !== 1 || z.betrag <= 0 || b.soll !== BANK) continue;
+        const nah = bezahlt.filter((x) => x.zahlungBank === z.schluessel || Math.abs(C.daysBetween(x.zahlungsdatum, z.datum)) <= 3);
+        const gruppen = (liste) => { const m = new Map(); for (const x of liste) (m.get(x.bereich) || m.set(x.bereich, []).get(x.bereich)).push(x); return [...m.values()]; };
+        const passtBetrag = (g) => Math.abs(g.reduce((a, x) => a + brutto(x), 0) - z.betrag) <= 0.05;
+        const mitName = gruppen(nah.filter((x) => C.zahlerPasst(z.text, namen(x))));
+        let g = mitName.filter(passtBetrag);
+        if (g.length !== 1) g = mitName.length === 1 ? mitName : gruppen(nah).filter(passtBetrag);
+        if (g.length !== 1) continue;
+        out.push({ bereich: g[0][0].bereich, kunden: new Set(g[0].map((x) => x.kunde)), gegen: b.haben, datum: b.datum });
+      }
+      return out;
+    }
+    /** Buchungstext aus den Projekten einer Rechnung, z. B. «Honorar VSRB: VSRB Remote Folge 4 (Juni), Folge 5 (September)». */
+    function rechnungsText(ps, konto) {
+      const nachKunde = new Map();
+      for (const x of ps) (nachKunde.get(x.kunde) || nachKunde.set(x.kunde, []).get(x.kunde)).push(x.name);
+      const teile = [...nachKunde].map(([k, n]) => [k, n.filter(Boolean).join(', ')].filter(Boolean).join(' '));
+      const kopf = kontoName(konto) || 'Honorar';
+      return `${kopf}: ${teile.join(', ')}`.slice(0, 140);
+    }
+    /** Ergänzt einen Vorschlag um das, was die zugeordnete Rechnung verrät: Ertragskonto und Text. */
+    function mitRechnung(v, ids, eindeutig, beispiele) {
+      const ps = ids.map(projekt).filter(Boolean);
+      if (!ps.length || v.soll !== BANK) return v;
+      const kunden = new Set(ps.map((x) => x.kunde)), bereiche = new Set(ps.map((x) => x.bereich));
+      const rang = (e) => ([...e.kunden].some((k) => kunden.has(k)) ? 2 : bereiche.has(e.bereich) ? 1 : 0);
+      const bsp = beispiele.filter((e) => rang(e) > 0).sort((a, b) => rang(b) - rang(a) || (a.datum < b.datum ? 1 : -1))[0];
+      const konto = bsp ? bsp.gegen : v.haben;
+      return Object.assign(v, { haben: konto, text: rechnungsText(ps, konto), sicher: !!bsp && eindeutig && bereiche.size === 1 });
+    }
+
     function zahlPanel() {
       const z = state.bh.zahl;
       if (!z) return '';
@@ -221,11 +265,30 @@
       // Gelernt wird nur aus bestätigten Buchungen.
       const lern = a.paare.filter((x) => x.buchungen.every((b) => !b.vorschlag));
       let pos = state.data.buchungen.reduce((m, b) => Math.max(m, b.pos || 0), 0);
-      for (const n of a.neu) state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos: ++pos, vorschlag: true }, L.bankVorschlag(n, lern, BANK)));
+      // Welche Gutschrift gehört zu welcher Rechnung? Das bestimmt Konto und Text des Vorschlags.
+      const zuRechnung = new Map();
+      for (const x of state.data.projects) if (x.zahlungBank) { const e = zuRechnung.get(x.zahlungBank) || { ids: [], eindeutig: true }; e.ids.push(x.id); zuRechnung.set(x.zahlungBank, e); }
+      if (state.bh.zahl) for (const e of state.bh.zahl.fast) zuRechnung.set(e.schluessel, { ids: e.projekte, eindeutig: false });
+      const beispiele = zuRechnung.size ? rechnungsBeispiele(lern) : [];
+      const vorschlag = (zeile) => {
+        const v = L.bankVorschlag(zeile, lern, BANK), r = zuRechnung.get(zeile.schluessel);
+        return r ? mitRechnung(v, r.ids, r.eindeutig, beispiele) : v;
+      };
+      let geaendert = 0;
+      for (const n of a.neu) state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos: ++pos, vorschlag: true }, vorschlag(n)));
+      // Bestehende, von Hand noch nicht veränderte Vorschläge nachführen, sobald eine Rechnung dazu bekannt ist.
+      for (const paar of a.paare) {
+        const b = paar.buchungen[0];
+        if (paar.buchungen.length !== 1 || !b.vorschlag || !zuRechnung.has(paar.zeile.schluessel)) continue;
+        const roh = L.bankVorschlag(paar.zeile, lern, BANK);
+        if (b.text !== roh.text || b.soll !== roh.soll || b.haben !== roh.haben) continue;
+        const neu = vorschlag(paar.zeile);
+        if (neu.text !== b.text || neu.haben !== b.haben) { Object.assign(b, { text: neu.text, haben: neu.haben, sicher: neu.sicher }); geaendert++; }
+      }
       const letzte = z[z.length - 1];
       state.bh.bank = { jahr: jahr(), datum: letzte.datum, saldo: letzte.saldo };
       state.bh.tab = 'buchungen'; state.bh.q = '';
-      if (a.neu.length || bezahlt) persist();
+      if (a.neu.length || bezahlt || geaendert) persist();
       render();
       const offenV = a.paare.length - lern.length;
       toast(`${a.paare.length + a.neu.length + a.ignoriert} Bewegungen gelesen: ${lern.length} schon verbucht, ${a.neu.length} ${a.neu.length === 1 ? 'neuer Vorschlag' : 'neue Vorschläge'}${offenV ? `, ${offenV} noch unbestätigt` : ''}${a.ignoriert ? `, ${a.ignoriert} früher verworfen` : ''}.${zusatz}`);
