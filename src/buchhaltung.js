@@ -112,13 +112,13 @@
         ? `<tr class="bh-edit" data-id="${b.id}">${formZeile(state.bh.editForm, 'be', 'edit')}
             <td class="r"><button class="btn small primary" data-bh="edit-save">Speichern</button> <button class="btn small" data-bh="edit-cancel">Abbrechen</button> <button class="btn small danger" data-bh="del" data-id="${b.id}">Löschen</button></td></tr>`
         : `<tr class="bh-row" data-bh="edit" data-id="${b.id}" tabindex="0">
-            <td class="num">${fmtDate(b.datum)}</td><td>${esc(b.beleg)}</td><td class="bt">${esc(b.text)}</td>
+            <td class="num">${fmtDate(b.datum)}</td><td>${esc(b.beleg)}</td><td class="bt" title="${esc(b.text)}">${esc(b.text)}</td>
             <td class="num" title="${esc(kontoName(b.soll))}">${esc(b.soll)}</td><td class="num" title="${esc(kontoName(b.haben))}">${esc(b.haben)}</td>
             <td class="num r">${chf(b.betrag)}</td><td></td></tr>`);
       return `
       ${kontoListe()}<datalist id="bh-texte">${texte.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       <div class="bh-wrap"><table class="bh-tab">
-        <colgroup><col style="width:128px"><col style="width:84px"><col><col style="width:84px"><col style="width:84px"><col style="width:118px"><col style="width:272px"></colgroup>
+        <colgroup><col style="width:120px"><col style="width:62px"><col><col style="width:68px"><col style="width:68px"><col style="width:104px"><col style="width:${state.bh.edit ? 272 : 196}px"></colgroup>
         <thead><tr><th>Datum</th><th>Beleg</th><th>Beschreibung</th><th>Soll</th><th>Haben</th><th class="r">Betrag CHF</th>
           <th class="r"><input type="search" id="bh-q" placeholder="Suchen" value="${esc(state.bh.q)}" data-bh="suche"></th></tr></thead>
         <tbody>
@@ -374,7 +374,7 @@
       <div class="bh-wrap"><table class="bh-tab">
         <colgroup><col style="width:100px"><col style="width:84px"><col><col style="width:84px"><col style="width:118px"><col style="width:118px"><col style="width:126px"></colgroup>
         <thead><tr><th>Datum</th><th>Beleg</th><th>Beschreibung</th><th>Gegenkto.</th><th class="r">Soll CHF</th><th class="r">Haben CHF</th><th class="r">Saldo CHF</th></tr></thead>
-        <tbody>${k.zeilen.map((z) => `<tr><td class="num">${fmtDate(z.datum)}</td><td>${esc(z.beleg)}</td><td class="bt">${esc(z.text)}</td><td class="num" title="${esc(kontoName(z.gegenkonto))}">${esc(z.gegenkonto)}</td>
+        <tbody>${k.zeilen.map((z) => `<tr><td class="num">${fmtDate(z.datum)}</td><td>${esc(z.beleg)}</td><td class="bt" title="${esc(z.text)}">${esc(z.text)}</td><td class="num" title="${esc(kontoName(z.gegenkonto))}">${esc(z.gegenkonto)}</td>
           <td class="num r">${chf(z.soll)}</td><td class="num r">${chf(z.haben)}</td><td class="num r">${chf(z.saldo)}</td></tr>`).join('') || '<tr><td colspan="7" class="dim">Keine Bewegungen.</td></tr>'}</tbody>
         <tfoot><tr><td colspan="4">Totalsumme Bewegungen</td><td class="num r">${chf(k.soll)}</td><td class="num r">${chf(k.haben)}</td><td class="num r">${chf(k.saldo)}</td></tr></tfoot>
       </table></div>`;

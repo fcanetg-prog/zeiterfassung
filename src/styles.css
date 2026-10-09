@@ -395,7 +395,7 @@ th.r { text-align: right; }
 .bh-tab tbody tr { scroll-margin-top: 96px; scroll-margin-bottom: 44px; }
 .bh-tab th input[type=search] { width: 100%; padding: 4px 8px; font-weight: 400; }
 .bh-tab td { padding: 5px 8px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bh-tab td.bt { white-space: normal; }
+.bh-tab td.bt { white-space: nowrap; }
 .bh-tab tfoot td { position: sticky; bottom: 0; background: #eef3f3; font-weight: 600; border-top: 1px solid var(--line); border-bottom: 0; }
 .bh-row { cursor: pointer; }
 .bh-row:hover td { background: #f2f8f8; }
