@@ -157,7 +157,7 @@
     const m = C.invoiceModelGroup(gruppe(p), S(), heute);
     if (m.fehler.length) return { ok: false, text: m.fehler[0] };
     if (!String(p.rechnungsEmail || '').trim()) return { ok: false, text: 'Die E-Mail für die Rechnung fehlt.' };
-    return { ok: true, modell: m, text: p.rechnungGeplant <= heute ? 'Entwurf fällig' : `Entwurf am ${fmtDate(p.rechnungGeplant)}` };
+    return { ok: true, modell: m, text: p.rechnungGeplant <= heute ? 'Entwurf fällig' : `Entwurf ${fmtDate(p.rechnungGeplant).slice(0, 6)}` };
   }
 
   const gmailZiel = () => ({ url: state.data.settings.gmailUrl || '', schluessel: state.data.settings.gmailSchluessel || '' });
@@ -859,7 +859,7 @@
     if (!gmailAktiv()) return '';
     const st = entwurfStatus(p);
     if (!st) return '';
-    return ` <span class="pill ${st.ok ? 's-gestellt' : 's-offen'}" title="${esc(st.ok ? 'Die Rechnung wird ans Google-Skript geschickt.' : 'Kein Gmail-Entwurf: ' + st.text)}">${esc(st.ok ? st.text : 'Entwurf nicht möglich')}</span>`;
+    return ` <span class="pill ${st.ok ? 's-gestellt' : 's-offen'}" title="${esc(st.ok ? 'Die Rechnung liegt fürs Google-Skript bereit; der Gmail-Entwurf entsteht am Rechnungsdatum.' : 'Kein Gmail-Entwurf möglich: ' + st.text)}">${esc(st.ok ? st.text : 'kein Entwurf')}</span>`;
   }
 
   function viewRechnungen() {
@@ -874,8 +874,8 @@
     const bezahlt = by.bezahlt.slice().sort((a, b) => (a.zahlungsdatum < b.zahlungsdatum ? 1 : -1));
 
     const gezeigt = new Set();
-    const knoepfe = (p, cols) => `${cols.includes('btn-gestellt') ? `<button class="btn small" data-action="p-invoice" data-id="${p.id}">PDF</button> <button class="btn small" data-action="p-today" data-key="rechnungsdatum" data-id="${p.id}">Heute gestellt</button>` : ''}
-          ${cols.includes('btn-bezahlt') ? `<button class="btn small" data-action="p-today" data-key="zahlungsdatum" data-id="${p.id}">Heute bezahlt</button>` : ''}`;
+    const knoepfe = (p, cols) => `${cols.includes('btn-gestellt') ? `<button class="btn small" data-action="p-invoice" data-id="${p.id}">PDF</button> <button class="btn small" data-action="p-today" data-key="rechnungsdatum" data-id="${p.id}" title="Rechnung heute gestellt">Gestellt</button>` : ''}
+          ${cols.includes('btn-bezahlt') ? `<button class="btn small" data-action="p-today" data-key="zahlungsdatum" data-id="${p.id}" title="Zahlung heute eingegangen">Bezahlt</button>` : ''}`;
     const row = (p, cols, inGruppe) => {
       const f = figs(p);
       return `<tr class="${inGruppe ? 'rgm' : ''}">
@@ -883,15 +883,14 @@
         <td class="pj" title="${esc(p.name)}"><button class="link" data-action="open-project" data-id="${p.id}">${esc(p.name)}</button></td>
         <td class="r num">${fmtH(f.stundenEff)}</td>
         <td class="r num">${p.abrechnung === 'ohne' ? fmtCHF(f.netto) : fmtCHF(f.rechnungsbetrag)}</td>
-        ${cols.includes('geplant') ? `<td><input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="rg-${p.id}" aria-label="Rechnungsdatum"></td>` : ''}
-        ${cols.includes('gestellt') ? `<td><input type="date" class="inline" value="${p.rechnungsdatum || ''}" data-action="p-date" data-key="rechnungsdatum" data-id="${p.id}" id="rd-${p.id}" aria-label="Rechnung gestellt am"></td>` : ''}
-        ${cols.includes('bezahlt') ? `<td><input type="date" class="inline" value="${p.zahlungsdatum || ''}" data-action="p-date" data-key="zahlungsdatum" data-id="${p.id}" id="zd-${p.id}" aria-label="Zahlung erhalten am"></td>` : ''}
-        <td>${statusPill(f.status)}${inGruppe ? '' : entwurfTag(p)}</td>
+        ${[['geplant', 'rechnungGeplant', 'rg', 'Rechnungsdatum'], ['gestellt', 'rechnungsdatum', 'rd', 'Rechnung gestellt am'], ['bezahlt', 'zahlungsdatum', 'zd', 'Zahlung erhalten am']].map(([c, key, pre, label]) =>
+          `<td class="dt">${cols.includes(c) ? `<input type="date" class="inline" value="${p[key] || ''}" data-action="p-date" data-key="${key}" data-id="${p.id}" id="${pre}-${p.id}" aria-label="${label}">` : ''}</td>`).join('')}
+        <td class="st">${statusPill(f.status)}${inGruppe ? '' : entwurfTag(p)}</td>
         <td class="r">${inGruppe ? '' : knoepfe(p, cols)}</td>
       </tr>`;
     };
     /** Zeilen einer Liste; Projekte derselben Rechnung stehen zusammen unter einer Kopfzeile. */
-    const zeilen = (list, cols, spalten) => list.map((p) => {
+    const zeilen = (list, cols) => list.map((p) => {
       if (gezeigt.has(p.id)) return '';
       const g = gruppe(p);
       g.forEach((x) => gezeigt.add(x.id));
@@ -899,18 +898,18 @@
       const m = C.invoiceModelGroup(g, S(), heute);
       const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
       return `<tbody class="sammel-block"><tr class="rg"><td colspan="3"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
-        <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
+        <td colspan="4" class="st">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
     }).join('');
     const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
     const jetzt = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant <= heute).sort(nachDatum);
     const spaeter = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant > heute).sort(nachDatum);
     const ohneDatum = zuStellen.filter((p) => !p.rechnungGeplant);
     const teil = (titel, hinweis, list, cls) => (list.length ? `<div class="teil ${cls}"><h3>${titel} <span class="dim">${list.length}</span><small>${hinweis}, total ${fmtCHF(sum(list))}</small></h3>
-      ${table(list, ['geplant', 'gestellt', 'btn-gestellt'], ['Rechnungsdatum', 'Gestellt am'])}</div>` : '');
-    const breiteKnoepfe = (cols) => (cols.includes('btn-gestellt') ? 172 : cols.includes('btn-bezahlt') ? 116 : 8);
-    const table = (list, cols, heads) => `<div class="table-flat"><table class="list re" style="min-width:${380 + 62 + 96 + heads.length * 132 + 160 + breiteKnoepfe(cols)}px">
-      <colgroup><col class="c-k"><col class="c-pj"><col style="width:62px"><col style="width:96px">${heads.map(() => '<col style="width:132px">').join('')}<col style="width:160px"><col style="width:${breiteKnoepfe(cols)}px"></colgroup>
-      <thead><tr><th>Kunde</th><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead>${zeilen(list, cols, heads.length + 1)}</table></div>`;
+      ${table(list, ['geplant', 'gestellt', 'btn-gestellt'])}</div>` : '');
+    // Alle Listen dieser Seite haben dieselben Spalten in derselben festen Breite, damit sie untereinander fluchten.
+    const table = (list, cols) => `<div class="table-flat"><table class="list re">
+      <colgroup><col class="c-k"><col class="c-pj"><col class="c-std"><col class="c-chf"><col class="c-dt"><col class="c-dt"><col class="c-dt"><col class="c-st"><col class="c-btn"></colgroup>
+      <thead><tr><th>Kunde</th><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th><th>Rechnungsdatum</th><th>Gestellt am</th><th>Bezahlt am</th><th>Status</th><th></th></tr></thead>${zeilen(list, cols)}</table></div>`;
 
     return `
     <header class="head"><h1>Rechnungen ${state.year}</h1></header>
@@ -926,18 +925,18 @@
       ${teil('Später stellen', 'Rechnungsdatum liegt in der Zukunft', spaeter, '')}
       ${teil('Noch ohne Rechnungsdatum', 'Stunden erfasst, aber noch kein Datum gesetzt', ohneDatum, '')}
       ${by.geplant.length ? `<button class="link more" data-action="toggle-leere">${state.zeigeLeere ? 'Ausblenden' : `${by.geplant.length} weitere Projekte ohne erfasste Stunden zeigen`}</button>
-        ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt'], ['Rechnungsdatum', 'Gestellt am']) : ''}` : ''}
+        ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt']) : ''}` : ''}
     </section>
 
     <section class="sec"><h2>Warten auf Zahlung <span class="dim">${offen.length}</span></h2>
-      ${offen.length ? table(offen, ['gestellt', 'bezahlt', 'btn-bezahlt'], ['Gestellt am', 'Bezahlt am']) : '<div class="empty">Keine offenen Rechnungen.</div>'}
+      ${offen.length ? table(offen, ['geplant', 'gestellt', 'bezahlt', 'btn-bezahlt']) : '<div class="empty">Keine offenen Rechnungen.</div>'}
     </section>
 
     ${by.pruefen.length ? `<section class="sec"><h2>Zahlung ohne Rechnung prüfen <span class="dim">${by.pruefen.length}</span></h2>
-      ${table(by.pruefen, ['bezahlt', 'btn-bezahlt'], ['Bezahlt am'])}</section>` : ''}
+      ${table(by.pruefen, ['bezahlt', 'btn-bezahlt'])}</section>` : ''}
 
     <section class="sec"><h2>Bezahlt <span class="dim">${bezahlt.length}</span></h2>
-      ${bezahlt.length ? table(bezahlt, ['gestellt', 'bezahlt'], ['Gestellt am', 'Bezahlt am']) : '<div class="empty">Noch keine Zahlungen erfasst.</div>'}
+      ${bezahlt.length ? table(bezahlt, ['geplant', 'gestellt', 'bezahlt']) : '<div class="empty">Noch keine Zahlungen erfasst.</div>'}
     </section>`;
   }
 

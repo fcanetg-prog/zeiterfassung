@@ -299,11 +299,16 @@ th.r { text-align: right; }
 
 /* Sammelrechnung: eingerahmter Block innerhalb der Liste */
 .list tbody tr:last-child td { border-bottom: 1px solid var(--line-soft); }
-.list tbody.sammel-block { border: 1px solid #a9c4c5; border-left: 4px solid var(--teal); }
+.list tbody.sammel-block td:first-child { box-shadow: inset 4px 0 0 var(--teal); }
+.list tbody.sammel-block tr.rg td { box-shadow: inset 0 1px 0 #a9c4c5; }
+.list tbody.sammel-block tr.rg td:first-child { box-shadow: inset 4px 0 0 var(--teal), inset 0 1px 0 #a9c4c5; }
+.list tbody.sammel-block td:last-child { box-shadow: inset -1px 0 0 #a9c4c5; }
+.list tbody.sammel-block tr.rg td:last-child { box-shadow: inset -1px 0 0 #a9c4c5, inset 0 1px 0 #a9c4c5; }
+.list tbody.sammel-block tr:last-child td { border-bottom: 1px solid #a9c4c5; }
 .list tbody.sammel-block td { background: #f6fafa; }
 .list tr.rg td { font-weight: 600; border-bottom: 1px solid #cfdcdd; padding-top: 8px; padding-bottom: 8px; }
 .list tr.rgm td:first-child { padding-left: 26px; }
-.list tr.rgm:last-child td { border-bottom: 0; }
+
 .sammel-marke { display: inline-block; font-size: 11.5px; font-weight: 700; color: #fff; background: var(--teal-deep); border-radius: 4px; padding: 1px 7px; margin-right: 8px; }
 .nav .zahl { float: right; background: #e0a43a; color: #2b1c00; font-size: 11.5px; font-weight: 700; border-radius: 9px; padding: 0 7px; line-height: 18px; margin-top: 2px; }
 
@@ -318,15 +323,24 @@ th.r { text-align: right; }
 
 .head .bignum + .bignum { margin-left: 26px; padding-left: 26px; border-left: 1px solid var(--line); }
 
-/* Rechnungslisten: feste Spalten, damit alle Teil-Tabellen untereinander fluchten; Kunde und Projekt je einzeilig */
-.list.re { table-layout: fixed; }
-.list.re col.c-k { width: 55%; }
-.list.re col.c-pj { width: 45%; }
-.list.re td { overflow: hidden; }
-.list.re td.k, .list.re td.pj, .list.re td:first-child { white-space: nowrap; text-overflow: ellipsis; }
+/* Rechnungslisten: überall dieselben Spalten in fester Breite, damit alle Listen untereinander fluchten */
+.list.re { table-layout: fixed; width: 1136px; font-size: 12.5px; }
+.list.re col.c-k { width: 168px; }
+.list.re col.c-pj { width: 150px; }
+.list.re col.c-std { width: 62px; }
+.list.re col.c-chf { width: 82px; }
+.list.re col.c-dt { width: 108px; }
+.list.re col.c-st { width: 232px; }
+.list.re col.c-btn { width: 118px; }
+.list.re td, .list.re th { padding: 5px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .list.re td.k .link, .list.re td.pj .link { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list.re td:nth-last-child(2) { white-space: normal; line-height: 1.9; }
-.list.re input[type=date].inline { width: 100%; }
+.list.re td.dt { padding-left: 2px; padding-right: 2px; }
+.list.re input[type=date].inline { width: 100%; font-size: 12.5px; padding: 3px 0 3px 3px; }
+.list.re input[type=date]::-webkit-calendar-picker-indicator { margin-left: 0; padding: 0 1px; }
+.list.re .pill { font-size: 11px; padding: 1px 6px; }
+.list.re td.st .pill + .pill { margin-left: 4px; }
+.list.re .btn.small { font-size: 11.5px; padding: 2px 7px; }
+.list.re tr.rgm td:first-child { padding-left: 20px; }
 
 /* Schmales Fenster (halber Bildschirm): Navigation oben statt links */
 @media (max-width: 1020px) {
@@ -364,9 +378,9 @@ th.r { text-align: right; }
   .week { grid-template-columns: repeat(7, 1fr) 42px; }
 }
 
-.list.re td, .list.re th { padding-left: 6px; padding-right: 6px; }
-.list.re input[type=date].inline { padding-left: 2px; padding-right: 0; }
 .settings code { overflow-wrap: anywhere; }
 .settings .fld input { width: 100%; }
 
 @media (max-width: 620px) { .addform { grid-template-columns: 1fr 1fr; } .addform .f-notiz { grid-column: 1 / -1; } .addform .btn { grid-column: 1 / -1; } }
+.list.re th { font-size: 11.5px; padding-left: 4px; padding-right: 2px; letter-spacing: -0.01em; }
+.list.re th.r { padding-right: 6px; }
