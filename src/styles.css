@@ -116,7 +116,7 @@ label { font-size: 12.5px; color: var(--muted); }
 .erfassen { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 18px; align-items: start; }
 @media (max-width: 1180px) { .erfassen { grid-template-columns: 1fr; } }
 
-.addform { display: grid; grid-template-columns: minmax(220px, 1fr) 92px minmax(140px, .6fr) auto; gap: 10px; align-items: end; }
+.addform { display: grid; grid-template-columns: minmax(200px, 1fr) 108px 84px minmax(120px, .55fr) auto; gap: 10px; align-items: end; }
 .addform > div { display: flex; flex-direction: column; gap: 4px; }
 .addform input { width: 100%; padding: 8px 10px; }
 .f-std input { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -349,7 +349,7 @@ th.r { text-align: right; }
   .tile { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 10px 14px; }
   .tile b { font-size: 19px; }
   .erfassen { grid-template-columns: 1fr; }
-  .addform { grid-template-columns: 92px 1fr auto; }
+  .addform { grid-template-columns: 108px 84px 1fr auto; }
   .addform .combo { grid-column: 1 / -1; }
   .combo-list { right: 0; }
   .pane, .sec { padding: 14px; }
@@ -368,3 +368,5 @@ th.r { text-align: right; }
 .list.re input[type=date].inline { padding-left: 2px; padding-right: 0; }
 .settings code { overflow-wrap: anywhere; }
 .settings .fld input { width: 100%; }
+
+@media (max-width: 620px) { .addform { grid-template-columns: 1fr 1fr; } .addform .f-notiz { grid-column: 1 / -1; } .addform .btn { grid-column: 1 / -1; } }

@@ -73,7 +73,7 @@
     zu: new Set(),
     drawer: null,
     combo: { q: '', projectId: null, open: false, idx: 0 },
-    form: { stunden: '', notiz: '' },
+    form: { stunden: '', notiz: '', beginn: '' },
     zeigeLeere: false,
   };
 
@@ -126,6 +126,7 @@
     state.data = normalize(daten);
     merkeAbbild();
     recompute();
+    ladeEntwurf();
     if (state.drawer && state.drawer.id && !projById(state.drawer.id)) state.drawer = null;
     render();
   }
@@ -409,6 +410,8 @@
             <input id="combo-input" type="text" placeholder="Kunde oder Projekt suchen" value="${esc(sel ? projLabelJahr(sel) : state.combo.q)}" data-action="combo-input" role="combobox" aria-expanded="${state.combo.open}">
             <div id="combo-list" class="combo-list ${state.combo.open ? 'open' : ''}">${state.combo.open ? comboListHtml() : ''}</div>
           </div>
+          <div class="f-beg"><label for="f-beginn">Begonnen</label>
+            <input id="f-beginn" type="text" placeholder="ab 08.45" value="${esc(state.form.beginn)}" data-action="form-beginn" title="Merkhilfe: wann du mit dem Projekt angefangen hast. Bleibt stehen, bis du die Stunden einträgst."></div>
           <div class="f-std"><label for="f-stunden">Stunden</label>
             <input id="f-stunden" type="text" inputmode="decimal" value="${esc(state.form.stunden)}" data-action="form-stunden"></div>
           <div class="f-notiz"><label for="f-notiz">Notiz</label>
@@ -1125,7 +1128,7 @@
 
   function setDate(iso) {
     state.date = iso; state.calMonth = iso.slice(0, 7); state.year = +iso.slice(0, 4);
-    state.combo = { q: '', projectId: null, open: false, idx: 0 };
+    state.combo = { q: '', projectId: state.combo.projectId, open: false, idx: 0 };
   }
 
   function addEntry() {
@@ -1134,13 +1137,29 @@
     if (std == null || std <= 0 || std > 24) { toast('Gib die Stunden als Zahl ein, zum Beispiel 1.5 oder 1:30.', { fehler: true }); $('#f-stunden').focus(); return; }
     state.data.entries.push({ id: uid('e'), datum: state.date, projectId: state.combo.projectId, stunden: Math.round(std * 100) / 100, notiz: state.form.notiz.trim() });
     state.combo = { q: '', projectId: null, open: false, idx: 0 };
-    state.form = { stunden: '', notiz: '' };
+    state.form = { stunden: '', notiz: '', beginn: '' };
+    merkeEntwurf();
     persist(); render();
     $('#combo-input').focus();
   }
 
+  /* Das angefangene Formular (Projekt, «Begonnen», Notiz) wird mitgespeichert, damit es einen Neustart
+     übersteht und auf dem anderen Rechner sichtbar ist. */
+  function merkeEntwurf() {
+    const e = { projectId: state.combo.projectId || null, beginn: state.form.beginn.trim(), notiz: state.form.notiz.trim() };
+    if (e.projectId || e.beginn || e.notiz) state.data.settings.erfassenEntwurf = e;
+    else delete state.data.settings.erfassenEntwurf;
+  }
+  function ladeEntwurf() {
+    const e = state.data && state.data.settings.erfassenEntwurf;
+    if (!e || document.activeElement && ['combo-input', 'f-beginn', 'f-notiz', 'f-stunden'].includes(document.activeElement.id)) return;
+    state.combo.projectId = e.projectId && projById(e.projectId) ? e.projectId : null;
+    state.form.beginn = e.beginn || ''; state.form.notiz = e.notiz || '';
+  }
+
   function pickCombo(id) {
     state.combo.projectId = id; state.combo.open = false; state.combo.q = '';
+    merkeEntwurf(); persist();
     render();
     $('#f-stunden').focus();
   }
@@ -1278,6 +1297,7 @@
       const list = $('#combo-list'); list.classList.add('open'); list.innerHTML = comboListHtml();
     } else if (a === 'form-stunden') state.form.stunden = el.value;
     else if (a === 'form-notiz') state.form.notiz = el.value;
+    else if (a === 'form-beginn') state.form.beginn = el.value;
     else if (a === 'filter-q') { state.filter.q = el.value; render(); }
     else if (a === 'd-field') {
       state.drawer.draft[el.dataset.key] = el.value;
@@ -1293,6 +1313,7 @@
     if (!a) return;
     if (a === 'year') { state.year = +el.value; if (+state.date.slice(0, 4) !== state.year) { state.date = state.year === +heute.slice(0, 4) ? heute : `${state.year}-01-01`; state.calMonth = state.date.slice(0, 7); } render(); }
     else if (a === 'filter-status') { state.filter.status = el.value; render(); }
+    else if (a === 'form-beginn' || a === 'form-notiz') { merkeEntwurf(); persist(); }
     else if (a === 'absender') { absender()[el.dataset.key] = el.value.trim(); persist(); }
     else if (a === 'gmail-set') { const v = el.value.trim(); if (v) state.data.settings[el.dataset.key] = v; else delete state.data.settings[el.dataset.key]; state.sync = null; persist(); }
     else if (a === 'logo-file') {
@@ -1345,6 +1366,7 @@
       else if (ev.key === 'Tab' && state.combo.open && !state.combo.projectId && state.combo.q && list.length) { ev.preventDefault(); pickCombo(list[state.combo.idx].p.id); }
       return;
     }
+    if (el.id === 'f-beginn' && ev.key === 'Enter') { ev.preventDefault(); merkeEntwurf(); persist(); toast('Beginn gemerkt'); $('#f-stunden').focus(); return; }
     if (ev.key === 'Escape' && state.drawer) { state.drawer = null; render(); return; }
     if (ev.key === 'Enter' && el.classList && el.classList.contains('prow')) { openDrawer(projById(el.dataset.id)); }
   });
@@ -1357,7 +1379,7 @@
       state.info = await api.info();
       const r = await api.load();
       if (r.error) state.fehler = r.error;
-      if (r.data) { state.data = normalize(r.data); merkeAbbild(); recompute(); }
+      if (r.data) { state.data = normalize(r.data); merkeAbbild(); recompute(); ladeEntwurf(); }
       if (r.eingearbeitet) setTimeout(() => toast('Änderungen von einem anderen Rechner wurden eingearbeitet.'), 400);
       if (api.onChanged) api.onChanged(holeAenderungen);
     } catch (e) {
