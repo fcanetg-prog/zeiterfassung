@@ -12,6 +12,18 @@
     return buchungen.slice().sort((a, b) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : (a.pos || 0) - (b.pos || 0)));
   }
 
+  /**
+   * Reihenfolge wie im E-Banking: Buchungen mit bekannter Bankbewegung stehen am Buchungsdatum der Bank
+   * und in der Reihenfolge der Exportdatei; alle übrigen an ihrem eigenen Datum, danach.
+   */
+  function bankSortiert(buchungen) {
+    const tag = (b) => b.bankDatum || b.datum;
+    const hat = (b) => b.bankNr != null;
+    return buchungen.slice().sort((a, b) => (tag(a) < tag(b) ? -1 : tag(a) > tag(b) ? 1
+      : hat(a) !== hat(b) ? (hat(a) ? -1 : 1)
+      : hat(a) && a.bankNr !== b.bankNr ? a.bankNr - b.bankNr : (a.pos || 0) - (b.pos || 0)));
+  }
+
   /** Soll, Haben und Saldo (Soll minus Haben) pro Konto. */
   function saldi(buchungen) {
     const m = new Map();
@@ -236,7 +248,7 @@
       const b = p.buchungen[0];
       bsp.push({ text: b.text, gegen: b.soll === konto ? b.haben : b.soll, datum: b.datum, betrag: p.zeile.betrag });
     }
-    const basis = { datum: zeile.datum, betrag: Math.abs(zeile.betrag), bankText: zeile.text, bankSchluessel: zeile.schluessel };
+    const basis = { datum: zeile.datum, betrag: Math.abs(zeile.betrag), bankText: zeile.text, bankSchluessel: zeile.schluessel, bankDatum: zeile.datum, bankNr: zeile.nr };
     const fertig = (text, gegen, sicher) => Object.assign(basis, { text, soll: zeile.betrag > 0 ? konto : gegen, haben: zeile.betrag > 0 ? gegen : konto, sicher });
     if (!bsp.length) return fertig(zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '').slice(0, 90), '', false);
     // Gleicher Betrag wie früher schlägt alles; sonst die häufigste Kombination, bei Gleichstand die jüngste.
@@ -254,5 +266,5 @@
     return fertig(beste.x.text, beste.x.gegen, konten.size === 1);
   }
 
-  return { round2, sortiert, saldi, auswertung, totalsummen, kontoauszug, eroeffnung, naechsterBeleg, abschnitte, parseBankCsv, bankKern, bankAbgleich, bankVorschlag };
+  return { round2, sortiert, bankSortiert, saldi, auswertung, totalsummen, kontoauszug, eroeffnung, naechsterBeleg, abschnitte, parseBankCsv, bankKern, bankAbgleich, bankVorschlag };
 });

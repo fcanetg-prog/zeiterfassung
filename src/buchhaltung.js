@@ -16,7 +16,7 @@
     // Vorschläge aus dem Bankabgleich zählen erst, wenn sie bestätigt sind.
     const buchungen = () => state.data.buchungen.filter((b) => b.jahr === jahr() && !b.vorschlag);
     // Neueste zuoberst, wie in der Liste der Buchungen.
-    const vorschlaege = () => L.sortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag)).reverse();
+    const vorschlaege = () => L.bankSortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag)).reverse();
     const BANK = '1010';
     const konten = () => (plan() || []).filter((z) => z.konto);
     const kontoName = (nr) => { const z = konten().find((x) => x.konto === nr); return z ? z.text : ''; };
@@ -103,7 +103,7 @@
     }
 
     function viewBuchungen() {
-      const alle = L.sortiert(buchungen());
+      const alle = L.bankSortiert(buchungen());
       const q = state.bh.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const liste = alle.filter((b) => !q.length || q.every((t) => `${fmtDate(b.datum)} ${b.beleg} ${b.text} ${b.soll} ${b.haben} ${b.betrag.toFixed(2)}`.toLowerCase().includes(t))).reverse();
       const texte = [...new Set(alle.map((b) => b.text))].sort();
@@ -275,6 +275,10 @@
         return r ? mitRechnung(v, r.ids, r.eindeutig, beispiele) : v;
       };
       let geaendert = 0;
+      // Platz jeder Buchung im E-Banking merken, damit die Liste dieselbe Reihenfolge zeigt.
+      for (const paar of a.paare) for (const b of paar.buchungen) {
+        if (b.bankNr !== paar.zeile.nr || b.bankDatum !== paar.zeile.datum) { b.bankNr = paar.zeile.nr; b.bankDatum = paar.zeile.datum; geaendert++; }
+      }
       for (const n of a.neu) state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos: ++pos, vorschlag: true }, vorschlag(n)));
       // Bestehende, von Hand noch nicht veränderte Vorschläge nachführen, sobald eine Rechnung dazu bekannt ist.
       for (const paar of a.paare) {

@@ -140,5 +140,8 @@ console.log('Alle Prüfungen bestanden.');
   // Schon verwendete Gutschrift zahlt keine zweite Rechnung
   ps[0].zahlungsdatum = '2026-03-20'; ps[0].zahlungBank = zz[2].schluessel; ps.push(P('p7', { betrag: 1000, rechnungsdatum: '2026-03-10' }));
   assert.strictEqual(C.zahlungenZuordnen(zz.slice(0, 3), ps, {}).treffer.length, 0);
+  // Reihenfolge wie im E-Banking
+  const bs = L.bankSortiert([{ id: 'x', datum: '2026-10-31', bankDatum: '2026-09-30', bankNr: 7, pos: 1 }, { id: 'y', datum: '2026-10-01', pos: 2 }, { id: 'z', datum: '2026-09-30', bankDatum: '2026-09-30', bankNr: 5, pos: 9 }, { id: 'w', datum: '2026-09-30', pos: 3 }]);
+  assert.deepStrictEqual(bs.map((x) => x.id), ['z', 'x', 'w', 'y']);
   console.log('Bankabgleich bestanden.');
 }
