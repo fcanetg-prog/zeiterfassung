@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld('api', {
   info: () => ipcRenderer.invoke('app:info'),
   invoicePush: (jobs, absender, ziel, erzwingen) => ipcRenderer.invoke('invoice:push', jobs, absender, ziel, erzwingen),
   invoicePdf: (modell, absender) => ipcRenderer.invoke('invoice:pdf', modell, absender),
+  savePdf: (html, opts) => ipcRenderer.invoke('pdf:save', html, opts),
   onChanged: (fn) => ipcRenderer.on('data:changed', () => fn()),
 });

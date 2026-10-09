@@ -23,7 +23,7 @@
   }
 
   function emptyData() {
-    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {} };
+    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {} };
   }
 
   /** Stunden pro Projekt: Map projectId -> Summe */
@@ -327,11 +327,20 @@
       .sort((x, y) => (x.datum < y.datum ? -1 : x.datum > y.datum ? 1 : x.id < y.id ? -1 : 1));
     projects.sort((x, y) => (x.jahr - y.jahr) || (x.sort - y.sort) || (x.id < y.id ? -1 : 1));
     const neuer = (b.settingsMod || 0) > (a.settingsMod || 0) ? b : a;
+    // Buchhaltung: Buchungen einzeln zusammenführen, Kontenplan pro Jahr als Ganzes (jüngere Fassung gewinnt).
+    const buchungen = mergeList(a.buchungen, b.buchungen)
+      .sort((x, y) => (x.datum < y.datum ? -1 : x.datum > y.datum ? 1 : (x.pos || 0) - (y.pos || 0)));
+    const kontenplaene = {};
+    for (const quelle of [a.kontenplaene || {}, b.kontenplaene || {}]) {
+      for (const [jahr, plan] of Object.entries(quelle)) {
+        if (!kontenplaene[jahr] || (plan.mod || 0) > (kontenplaene[jahr].mod || 0)) kontenplaene[jahr] = plan;
+      }
+    }
     return {
       version: 1,
       settings: neuer.settings || a.settings || b.settings,
       settingsMod: neuer.settingsMod || 0,
-      projects, entries, geloescht,
+      projects, entries, geloescht, buchungen, kontenplaene,
       history: Object.assign({}, b.history || {}, a.history || {}),
     };
   }

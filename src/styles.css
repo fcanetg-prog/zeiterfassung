@@ -384,3 +384,39 @@ th.r { text-align: right; }
 @media (max-width: 620px) { .addform { grid-template-columns: 1fr 1fr; } .addform .f-notiz { grid-column: 1 / -1; } .addform .btn { grid-column: 1 / -1; } }
 .list.re th { font-size: 11.5px; padding-left: 4px; padding-right: 2px; letter-spacing: -0.01em; }
 .list.re th.r { padding-right: 6px; }
+
+/* ---------- Buchhaltung ---------- */
+.main.view-buchhaltung { overflow: hidden; padding-bottom: 16px; }
+.bh-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.bh-bar2 { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.bh-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.bh-tab { table-layout: fixed; min-width: 900px; font-size: 13px; }
+.bh-tab th { position: sticky; top: 0; z-index: 3; background: #eef3f3; padding: 0 8px; height: 40px; border-bottom: 1px solid var(--line); }
+.bh-tab tbody tr { scroll-margin-top: 96px; scroll-margin-bottom: 44px; }
+.bh-tab th input[type=search] { width: 100%; padding: 4px 8px; font-weight: 400; }
+.bh-tab td { padding: 5px 8px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-tab td.bt { white-space: normal; }
+.bh-tab tfoot td { position: sticky; bottom: 0; background: #eef3f3; font-weight: 600; border-top: 1px solid var(--line); border-bottom: 0; }
+.bh-row { cursor: pointer; }
+.bh-row:hover td { background: #f2f8f8; }
+.bh-neu td, .bh-edit td { background: #f6fafa; padding: 6px 4px; overflow: visible; }
+.bh-neu td { position: sticky; top: 40px; z-index: 2; border-bottom: 2px solid var(--teal); }
+.bh-neu input, .bh-edit input { width: 100%; padding: 5px 6px; font-size: 13px; }
+.bh-neu td:last-child, .bh-edit td:last-child { white-space: nowrap; font-size: 12px; text-align: left; padding-left: 8px; overflow: hidden; text-overflow: ellipsis; }
+.bh-edit td:last-child { text-align: right; }
+.bh-tab.konten tr.k-sek td { font-weight: 700; font-size: 14px; background: #e3ecec; padding-top: 9px; padding-bottom: 9px; }
+.bh-tab.konten tr.k-grp td { font-weight: 600; background: #f6f9f9; }
+.bh-tab.konten tr.k-grp.gross td { font-size: 14px; background: #edf3f3; }
+.bh-tab.konten .link { font-size: 12px; color: var(--teal-deep); }
+.bh-kform { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.bh-kform .fld { margin-bottom: 0; }
+.bh-kform .fld.grow { flex: 1; min-width: 200px; }
+.bh-zwei { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; overflow: auto; flex: 1; min-height: 0; }
+.bh-zwei .sec + .sec { margin-top: 16px; }
+.bh-ab { font-size: 13px; }
+.bh-ab td { padding: 3px 6px; border-bottom: 1px solid var(--line-soft); }
+.bh-ab td:first-child { width: 56px; color: var(--muted); }
+.bh-ab td:last-child { width: 120px; }
+.bh-ab tr.g td { font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: 7px; }
+.bh-ab tr.gross td { font-size: 14.5px; background: #f1f6f6; }
+@media (max-width: 1020px) { .bh-zwei { grid-template-columns: 1fr; } }

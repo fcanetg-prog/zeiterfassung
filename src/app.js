@@ -55,6 +55,7 @@
     async info() { return { version: 'Vorschau', dataPath: 'Browser-Vorschau' }; },
     async invoicePdf() { return { fehler: ['Rechnungen als PDF gibt es nur in der Desktop-App.'] }; },
     async invoicePush() { return { ok: false, fehler: 'Nur in der Desktop-App.' }; },
+    async savePdf() { return { fehler: 'PDF gibt es nur in der Desktop-App.' }; },
   };
 
   /* ============ Zustand ============ */
@@ -87,12 +88,14 @@
 
   /* Änderungsstempel: Damit zwei Rechner ihre Stände zusammenführen können, bekommt jedes geänderte
      Projekt und jeder geänderte Zeiteintrag beim Speichern die aktuelle Zeit, Gelöschtes einen Löschvermerk. */
-  let abbild = { p: new Map(), e: new Map(), s: '' };
+  let abbild = { p: new Map(), e: new Map(), b: new Map(), k: {}, s: '' };
   const ohneMod = (r) => JSON.stringify(Object.assign({}, r, { mod: undefined }));
   function merkeAbbild() {
     abbild = {
       p: new Map(state.data.projects.map((r) => [r.id, ohneMod(r)])),
       e: new Map(state.data.entries.map((r) => [r.id, ohneMod(r)])),
+      b: new Map(state.data.buchungen.map((r) => [r.id, ohneMod(r)])),
+      k: Object.fromEntries(Object.entries(state.data.kontenplaene).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
       s: JSON.stringify(state.data.settings),
     };
   }
@@ -100,7 +103,7 @@
     const jetzt = Date.now();
     const d = state.data;
     if (!d.geloescht) d.geloescht = {};
-    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e]]) {
+    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b]]) {
       const da = new Set();
       for (const r of liste) {
         da.add(r.id);
@@ -109,6 +112,7 @@
       for (const id of alt.keys()) if (!da.has(id)) d.geloescht[id] = jetzt;
     }
     if (JSON.stringify(d.settings) !== abbild.s) d.settingsMod = jetzt;
+    for (const [j, pl] of Object.entries(d.kontenplaene)) if (JSON.stringify(pl.zeilen) !== abbild.k[j]) pl.mod = jetzt;
     merkeAbbild();
   }
 
@@ -212,6 +216,14 @@
     out.settings = Object.assign({}, C.DEFAULTS, d.settings || {});
     out.history = d.history || {};
     out.geloescht = Object.assign({}, d.geloescht || {});
+    out.buchungen = (d.buchungen || []).filter((b) => b && b.datum && C.isNum(b.betrag)).map((b, i) => ({
+      id: b.id || uid('b'), jahr: +b.jahr || +b.datum.slice(0, 4), datum: b.datum, beleg: String(b.beleg == null ? '' : b.beleg), text: b.text || '',
+      soll: String(b.soll), haben: String(b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
+    }));
+    out.kontenplaene = {};
+    for (const [jahr, plan] of Object.entries(d.kontenplaene || {})) {
+      out.kontenplaene[jahr] = { mod: plan.mod || 0, zeilen: (plan.zeilen || []).map((z) => ({ sektion: z.sektion || '', gruppe: z.gruppe || '', konto: z.konto || '', text: z.text || '', bklasse: String(z.bklasse || ''), summe_in: z.summe_in || '' })) };
+    }
     out.settingsMod = d.settingsMod || 0;
     out.projects = d.projects.map((p, i) => ({
       id: p.id || uid('p'), jahr: +p.jahr || state.year, sort: C.isNum(p.sort) ? p.sort : i,
@@ -239,6 +251,7 @@
     ['erfassen', 'Erfassen'],
     ['projekte', 'Projekte'],
     ['rechnungen', 'Rechnungen'],
+    ['buchhaltung', 'Buchhaltung'],
     ['auswertung', 'Auswertung'],
     ['einstellungen', 'Einstellungen'],
   ];
@@ -247,6 +260,7 @@
     const ys = new Set([+heute.slice(0, 4), state.year]);
     for (const p of state.data.projects) ys.add(p.jahr);
     for (const e of state.data.entries) ys.add(+e.datum.slice(0, 4));
+    for (const y of Object.keys(state.data.kontenplaene || {})) ys.add(+y);
     return [...ys].sort((a, b) => b - a);
   }
 
@@ -276,7 +290,7 @@
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
 
-    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, auswertung: viewAuswertung, einstellungen: viewEinstellungen };
+    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), auswertung: viewAuswertung, einstellungen: viewEinstellungen };
     const wocheH = weekTotal(heute);
     $('#app').innerHTML = `
       <nav class="side">
@@ -1188,6 +1202,20 @@
     const r = await api.importFile();
     if (!r || r.canceled) return;
     if (r.error) { toast(r.error, { fehler: true }); return; }
+    if (r.data && r.data.typ === 'buchhaltung') {
+      if (!state.data) state.data = C.emptyData();
+      const j = +r.data.jahr, neueB = r.data.buchungen || [], alte = state.data.buchungen.filter((b) => b.jahr === j);
+      if (!j || !Array.isArray(r.data.kontenplan)) { toast('Die Datei enthält keine Buchhaltung.', { fehler: true }); return; }
+      if ((alte.length || state.data.kontenplaene[j]) && !confirm(`Für ${j} gibt es schon eine Buchhaltung mit ${alte.length} Buchungen. Der Import ersetzt sie durch den Kontenplan und die ${neueB.length} Buchungen aus der Datei. Projekte und Stunden bleiben unverändert. Fortfahren?`)) return;
+      await api.save(state.data, { sicherungErzwingen: true });
+      state.data.buchungen = state.data.buchungen.filter((b) => b.jahr !== j).concat(neueB.map((b) => Object.assign({}, b, { jahr: j })));
+      state.data.kontenplaene[j] = { zeilen: r.data.kontenplan, mod: 0 };
+      state.data = normalize(state.data);
+      await persist();
+      state.year = j; state.view = 'buchhaltung'; render();
+      toast(`Buchhaltung ${j} importiert: ${neueB.length} Buchungen, ${r.data.kontenplan.filter((z) => z.konto).length} Konten`);
+      return;
+    }
     if (r.data && r.data.typ === 'ergaenzung') {
       if (!state.data) { toast('Importiere zuerst deine Projekte.', { fehler: true }); return; }
       const z = ergaenze(r.data.regeln || []);
@@ -1210,6 +1238,8 @@
       if (!confirm(`Der Import ersetzt alle vorhandenen Daten (${state.data.projects.length} Projekte, ${state.data.entries.length} Einträge) durch ${neu.projects.length} Projekte und ${neu.entries.length} Einträge aus der Datei. Der bisherige Stand wird vorher gesichert. Fortfahren?`)) return;
       await api.save(state.data, { sicherungErzwingen: true });
     }
+    // Eine Importdatei ohne Buchhaltung (z. B. der Excel-Import) lässt die vorhandene Buchhaltung stehen.
+    if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; }
     neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;
     await persist({ ersetzen: true });
@@ -1390,6 +1420,7 @@
     const ci = $('#combo-input'); if (ci) ci.focus();
   }
 
+  const BH = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid });
   window.__zeit = { state, render };
   start();
 })();

@@ -70,3 +70,35 @@ console.log('Alle Prüfungen bestanden.');
   }
   console.log('Sammelrechnung und Zusammenführen bestanden.');
 }
+
+// Buchhaltung
+{
+  const L = require('../src/ledger.js');
+  const plan = [
+    { sektion: '1', gruppe: '', konto: '', text: 'AKTIVEN' },
+    { konto: '1010', text: 'Bank', bklasse: '1', summe_in: '100' }, { gruppe: '100', text: 'Flüssige Mittel', summe_in: '1' }, { gruppe: '1', text: 'Total Aktiven', summe_in: '00' },
+    { sektion: '2', gruppe: '', konto: '', text: 'PASSIVEN' },
+    { konto: '2800', text: 'Kapital', bklasse: '2', summe_in: '28' }, { konto: '2970', text: 'Vortrag', bklasse: '2', summe_in: '297' },
+    { gruppe: '29A', text: 'Jahresgewinn', summe_in: '297' }, { gruppe: '297', text: 'Bilanzgewinn', summe_in: '28' }, { gruppe: '28', text: 'Eigenkapital', summe_in: '2' }, { gruppe: '2', text: 'Total Passiven', summe_in: '00' },
+    { sektion: '*', gruppe: '', konto: '', text: 'ERFOLGSRECHNUNG' },
+    { konto: '3400', text: 'Ertrag', bklasse: '4', summe_in: 'E7' }, { konto: '6600', text: 'Werbung', bklasse: '3', summe_in: 'E7' }, { gruppe: 'E7', text: 'Jahresgewinn', summe_in: '29A' }, { gruppe: '00', text: 'Differenz', summe_in: '' },
+  ];
+  const b = [
+    { id: 'a', datum: '2026-01-01', beleg: '1', text: 'Eröffnung', soll: '1010', haben: '2800', betrag: 20000, pos: 1 },
+    { id: 'b', datum: '2026-03-01', beleg: '2', text: 'Honorar', soll: '1010', haben: '3400', betrag: 1081.05, pos: 2 },
+    { id: 'c', datum: '2026-02-01', beleg: '3a', text: 'Werbung', soll: '6600', haben: '1010', betrag: 81.05, pos: 3 },
+  ];
+  const a = L.auswertung(plan, b);
+  assert.strictEqual(a.konto.get('1010').saldo, 21000); assert.strictEqual(a.gruppe.get('1'), 21000); assert.strictEqual(a.gruppe.get('E7'), -1000);
+  assert.strictEqual(a.gruppe.get('2'), -21000); assert.strictEqual(a.gruppe.get('00'), 0);
+  const t = L.totalsummen(plan, b); assert.strictEqual(t.bilanz, 1000); assert.strictEqual(t.erfolg, -1000); assert.strictEqual(t.differenz, 0);
+  const k = L.kontoauszug('1010', b); assert.deepStrictEqual(k.zeilen.map((z) => z.saldo), [20000, 19918.95, 21000]); assert.strictEqual(k.zeilen[1].gegenkonto, '6600');
+  const e = L.eroeffnung(plan, b, 2027, '2970'); assert.deepStrictEqual(e.map((x) => [x.soll, x.haben, x.betrag]), [['1010', '2970', 21000], ['2970', '2800', 20000]]);
+  assert.strictEqual(L.saldi(e).get('2970').saldo, -1000); assert.strictEqual(L.naechsterBeleg(b), '4');
+  const ab = L.abschnitte(plan); assert.strictEqual(ab.aktiven.length, 3); assert.strictEqual(ab.erfolg.length, 4);
+  // Zusammenführen zweier Rechner
+  const M = C.mergeData({ projects: [], entries: [], buchungen: [Object.assign({}, b[0], { mod: 1 })], kontenplaene: { 2026: { mod: 1, zeilen: plan } } },
+    { projects: [], entries: [], buchungen: [Object.assign({}, b[0], { mod: 5, betrag: 1 }), Object.assign({}, b[1], { mod: 2 })], kontenplaene: { 2026: { mod: 3, zeilen: plan.slice(0, 2) }, 2027: { mod: 1, zeilen: [] } } });
+  assert.deepStrictEqual(M.buchungen.map((x) => x.id + ':' + x.betrag), ['a:1', 'b:1081.05']); assert.strictEqual(M.kontenplaene[2026].zeilen.length, 2); assert.ok(M.kontenplaene[2027]);
+  console.log('Buchhaltung bestanden.');
+}

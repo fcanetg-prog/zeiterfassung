@@ -162,13 +162,21 @@ function starteWaechter() {
 /* ---------- Rechnung als PDF ---------- */
 
 /** Lädt das HTML in ein unsichtbares Fenster und druckt es als A4-PDF. */
-async function renderPdf(html) {
+async function renderPdf(html, fuss) {
   const tmp = path.join(app.getPath('temp'), `zeiterfassung-rechnung-${Date.now()}.html`);
   fs.writeFileSync(tmp, html, 'utf8');
   const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
   try {
     await w.loadFile(tmp);
-    return await w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+    if (fuss == null) return await w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+    // Mehrseitige Berichte: Ränder in Zoll, unten Datum und Seitenzahl wie im Banana-Ausdruck.
+    const sicher = String(fuss).replace(/[<>&]/g, '');
+    return await w.webContents.printToPDF({
+      pageSize: 'A4', printBackground: true, displayHeaderFooter: true,
+      margins: { top: 0.55, bottom: 0.7, left: 0.72, right: 0.6 },
+      headerTemplate: '<span></span>',
+      footerTemplate: `<div style="width:100%;font-family:Arial,sans-serif;font-size:8px;padding:0 44px;display:flex;justify-content:space-between;"><span></span><span>${sicher}</span><span>-<span class="pageNumber"></span>-</span></div>`,
+    });
   } finally {
     w.destroy();
     try { fs.unlinkSync(tmp); } catch { /* egal */ }
@@ -336,6 +344,21 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath() }));
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
+    });
+    ipcMain.handle('pdf:save', async (_e, html, opts) => {
+      try {
+        const ordner = path.basename(String((opts && opts.ordner) || 'Berichte'));
+        const name = path.basename(String((opts && opts.name) || 'Bericht.pdf')).replace(/[\\/:*?"<>|]/g, '_');
+        const pdf = await renderPdf(html, (opts && opts.fuss) || '');
+        const dir = path.join(dataDir(), ordner);
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, pdf);
+        if (!process.env.ZEITERFASSUNG_KEIN_OEFFNEN) shell.openPath(file);
+        return { path: file };
+      } catch (err) {
+        return { fehler: `Das PDF konnte nicht erstellt werden: ${err.message}` };
+      }
     });
     ipcMain.handle('invoice:pdf', async (_e, modell, absender) => {
       try {
