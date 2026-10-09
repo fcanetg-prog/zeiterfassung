@@ -876,7 +876,8 @@
     const row = (p, cols, inGruppe) => {
       const f = figs(p);
       return `<tr class="${inGruppe ? 'rgm' : ''}">
-        <td><button class="link" data-action="open-project" data-id="${p.id}"><b>${esc(p.kunde)}</b> ${esc(p.name)}</button></td>
+        <td class="k" title="${esc(p.kunde)}"><button class="link" data-action="open-project" data-id="${p.id}"><b>${esc(p.kunde)}</b></button></td>
+        <td class="pj" title="${esc(p.name)}"><button class="link" data-action="open-project" data-id="${p.id}">${esc(p.name)}</button></td>
         <td class="r num">${fmtH(f.stundenEff)}</td>
         <td class="r num">${p.abrechnung === 'ohne' ? fmtCHF(f.netto) : fmtCHF(f.rechnungsbetrag)}</td>
         ${cols.includes('geplant') ? `<td><input type="date" class="inline" value="${p.rechnungGeplant || ''}" data-action="p-date" data-key="rechnungGeplant" data-id="${p.id}" id="rg-${p.id}" aria-label="Rechnungsdatum"></td>` : ''}
@@ -894,7 +895,7 @@
       if (g.length === 1) return `<tbody>${row(p, cols, false)}</tbody>`;
       const m = C.invoiceModelGroup(g, S(), heute);
       const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
-      return `<tbody class="sammel-block"><tr class="rg"><td colspan="2"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
+      return `<tbody class="sammel-block"><tr class="rg"><td colspan="3"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
         <td colspan="${spalten}">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
     }).join('');
     const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
@@ -903,7 +904,10 @@
     const ohneDatum = zuStellen.filter((p) => !p.rechnungGeplant);
     const teil = (titel, hinweis, list, cls) => (list.length ? `<div class="teil ${cls}"><h3>${titel} <span class="dim">${list.length}</span><small>${hinweis}, total ${fmtCHF(sum(list))}</small></h3>
       ${table(list, ['geplant', 'gestellt', 'btn-gestellt'], ['Rechnungsdatum', 'Gestellt am'])}</div>` : '');
-    const table = (list, cols, heads) => `<div class="table-flat"><table class="list"><thead><tr><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead>${zeilen(list, cols, heads.length + 1)}</table></div>`;
+    const breiteKnoepfe = (cols) => (cols.includes('btn-gestellt') ? 172 : cols.includes('btn-bezahlt') ? 116 : 8);
+    const table = (list, cols, heads) => `<div class="table-flat"><table class="list re" style="min-width:${380 + 62 + 96 + heads.length * 132 + 160 + breiteKnoepfe(cols)}px">
+      <colgroup><col class="c-k"><col class="c-pj"><col style="width:62px"><col style="width:96px">${heads.map(() => '<col style="width:132px">').join('')}<col style="width:160px"><col style="width:${breiteKnoepfe(cols)}px"></colgroup>
+      <thead><tr><th>Kunde</th><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th>${heads.map((h) => `<th>${h}</th>`).join('')}<th>Status</th><th></th></tr></thead>${zeilen(list, cols, heads.length + 1)}</table></div>`;
 
     return `
     <header class="head"><h1>Rechnungen ${state.year}</h1></header>

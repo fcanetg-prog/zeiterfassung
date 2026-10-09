@@ -113,7 +113,7 @@ label { font-size: 12.5px; color: var(--muted); }
 /* ---------- Erfassen ---------- */
 
 .daynav { display: flex; gap: 6px; }
-.erfassen { display: grid; grid-template-columns: minmax(520px, 1fr) 372px; gap: 18px; align-items: start; }
+.erfassen { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 18px; align-items: start; }
 @media (max-width: 1180px) { .erfassen { grid-template-columns: 1fr; } }
 
 .addform { display: grid; grid-template-columns: minmax(220px, 1fr) 92px minmax(140px, .6fr) auto; gap: 10px; align-items: end; }
@@ -317,3 +317,54 @@ th.r { text-align: right; }
 .bereiche tfoot td.dim { font-weight: 400; }
 
 .head .bignum + .bignum { margin-left: 26px; padding-left: 26px; border-left: 1px solid var(--line); }
+
+/* Rechnungslisten: feste Spalten, damit alle Teil-Tabellen untereinander fluchten; Kunde und Projekt je einzeilig */
+.list.re { table-layout: fixed; }
+.list.re col.c-k { width: 55%; }
+.list.re col.c-pj { width: 45%; }
+.list.re td { overflow: hidden; }
+.list.re td.k, .list.re td.pj, .list.re td:first-child { white-space: nowrap; text-overflow: ellipsis; }
+.list.re td.k .link, .list.re td.pj .link { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list.re td:nth-last-child(2) { white-space: normal; line-height: 1.9; }
+.list.re input[type=date].inline { width: 100%; }
+
+/* Schmales Fenster (halber Bildschirm): Navigation oben statt links */
+@media (max-width: 1020px) {
+  #app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .side { flex-direction: row; align-items: center; gap: 6px; padding: 8px 10px; flex-wrap: wrap; }
+  .brand div, .side-foot { display: none; }
+  .brand { padding: 0 4px 0 2px; }
+  .brand svg { width: 24px; height: 24px; }
+  .navlist { flex-direction: row; flex-wrap: wrap; gap: 2px; flex: 1; }
+  .nav { padding: 6px 9px; font-size: 13.5px; }
+  .nav.on { box-shadow: inset 0 -3px 0 #4fd0cc; }
+  .nav .zahl { float: none; margin: 0 0 0 6px; display: inline-block; }
+  .yearpick { padding: 0; gap: 6px; }
+  .main { padding: 16px 14px 30px; }
+  .head { gap: 12px; margin-bottom: 14px; }
+  h1 { font-size: 20px; }
+  .bignum b { font-size: 24px; }
+  .head .bignum + .bignum { margin-left: 14px; padding-left: 14px; }
+  .tiles { grid-template-columns: 1fr; gap: 8px; }
+  .tile { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 10px 14px; }
+  .tile b { font-size: 19px; }
+  .erfassen { grid-template-columns: 1fr; }
+  .addform { grid-template-columns: 92px 1fr auto; }
+  .addform .combo { grid-column: 1 / -1; }
+  .combo-list { right: 0; }
+  .pane, .sec { padding: 14px; }
+  .teil h3 { flex-wrap: wrap; }
+  .teil h3 small { margin-left: 0; flex-basis: 100%; }
+  .cols3 { grid-template-columns: 1fr 1fr; }
+  .tools input[type=search] { flex: 1; min-width: 120px; }
+}
+@media (max-width: 620px) {
+  .cols2, .cols3 { grid-template-columns: 1fr; }
+  .calc { grid-template-columns: 1fr 1fr; }
+  .week { grid-template-columns: repeat(7, 1fr) 42px; }
+}
+
+.list.re td, .list.re th { padding-left: 6px; padding-right: 6px; }
+.list.re input[type=date].inline { padding-left: 2px; padding-right: 0; }
+.settings code { overflow-wrap: anywhere; }
+.settings .fld input { width: 100%; }

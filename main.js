@@ -243,8 +243,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1440,
     height: 920,
-    minWidth: 1000,
-    minHeight: 640,
+    minWidth: 520,
+    minHeight: 480,
     backgroundColor: '#f6f8f8',
     title: 'Zeiterfassung',
     autoHideMenuBar: true,
