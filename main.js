@@ -66,10 +66,31 @@ function konfliktDateien(dir) {
   } catch { return []; }
 }
 
+const warte = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Ersetzt die Datendatei durch die fertig geschriebene Zwischendatei.
+ * Dropbox oder ein Virenscanner halten die Datei manchmal kurz gesperrt (EPERM/EBUSY/EACCES):
+ * dann mehrmals versuchen und zuletzt direkt in die Datei schreiben.
+ */
+function ersetzeDatei(tmp, file, data) {
+  let fehler = null;
+  for (let i = 0; i < 8; i++) {
+    try { fs.renameSync(tmp, file); return; }
+    catch (e) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      fehler = e; warte(60 + i * 60);
+    }
+  }
+  try { fs.writeFileSync(file, JSON.stringify(data, null, 1), 'utf8'); }
+  catch (_) { throw fehler; }
+  try { fs.unlinkSync(tmp); } catch (_) { /* bleibt liegen, stört nicht */ }
+}
+
 function schreibe(file, data) {
   const tmp = `${file}.${rechnerName()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
-  fs.renameSync(tmp, file);
+  ersetzeDatei(tmp, file, data);
   bekannt = dateiStand(file);
 }
 
