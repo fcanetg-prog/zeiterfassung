@@ -174,7 +174,7 @@ th.r { text-align: right; }
 /* ---------- Projekte ---------- */
 
 .table-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
-.grid { font-size: 13px; min-width: 1640px; }
+.grid { font-size: 12px; }
 .grid td.datecell { padding: 2px 4px; }
 .grid td.datecell input { font-size: 13px; padding: 3px 4px; }
 .grid th { position: sticky; top: 0; z-index: 3; background: #eef3f3; padding: 9px 8px; border-bottom: 1px solid var(--line); }
@@ -324,14 +324,14 @@ th.r { text-align: right; }
 .head .bignum + .bignum { margin-left: 26px; padding-left: 26px; border-left: 1px solid var(--line); }
 
 /* Rechnungslisten: überall dieselben Spalten in fester Breite, damit alle Listen untereinander fluchten */
-.list.re { table-layout: fixed; width: 1136px; font-size: 12.5px; }
-.list.re col.c-k { width: 168px; }
-.list.re col.c-pj { width: 150px; }
-.list.re col.c-std { width: 62px; }
-.list.re col.c-chf { width: 82px; }
-.list.re col.c-dt { width: 108px; }
-.list.re col.c-st { width: 232px; }
-.list.re col.c-btn { width: 118px; }
+.list.re { table-layout: fixed; width: 100%; min-width: 1136px; font-size: 12.5px; }
+.list.re col.c-k { width: 15%; }
+.list.re col.c-pj { width: 13%; }
+.list.re col.c-std { width: 5.5%; }
+.list.re col.c-chf { width: 7.5%; }
+.list.re col.c-dt { width: 9.3%; }
+.list.re col.c-st { width: 20.6%; }
+.list.re col.c-btn { width: 10.5%; }
 .list.re td, .list.re th { padding: 5px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .list.re td.k .link, .list.re td.pj .link { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list.re td.dt { padding-left: 2px; padding-right: 2px; }
@@ -420,3 +420,20 @@ th.r { text-align: right; }
 .bh-ab tr.g td { font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: 7px; }
 .bh-ab tr.gross td { font-size: 14.5px; background: #f1f6f6; }
 @media (max-width: 1020px) { .bh-zwei { grid-template-columns: 1fr; } }
+
+/* Projektliste kompakt, damit sie auf einem Breitbild ohne seitliches Schieben Platz hat */
+.grid th { padding: 8px 5px; font-size: 11.5px; }
+.grid td { padding: 5px 5px; }
+.grid th:nth-child(1), .grid td.kunde { min-width: 138px; max-width: 138px; }
+.grid th:nth-child(2), .grid td.pname { left: 138px; min-width: 150px; max-width: 200px; }
+.grid td.datecell { padding: 1px 2px; }
+.grid td.datecell input { font-size: 12px; padding: 2px 0 2px 2px; width: 104px; }
+.grid td.datecell input::-webkit-calendar-picker-indicator { margin-left: 0; padding: 0 1px; }
+.grid .pill { font-size: 11px; padding: 1px 6px; }
+.grid .note-dot { font-size: 10.5px; padding: 0 3px; margin-left: 3px; }
+.grid .effort i { width: 6px; height: 6px; }
+.grid .effort { gap: 2px; }
+.grp td { top: 33px; padding: 6px 5px; }
+
+.list.re input[type=date].inline { max-width: 124px; }
+@media (min-width: 1700px) { .list.re { font-size: 13px; } .list.re input[type=date].inline { font-size: 13px; } }

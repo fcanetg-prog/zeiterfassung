@@ -659,9 +659,9 @@
       <thead><tr>
         <th>Kunde</th><th>Projekt</th><th>Effort</th>
         <th class="r" title="Offerierter Betrag ohne Mehrwertsteuer">Ansatz</th><th class="r" title="Kosten für Dritte">Kosten</th><th class="r" title="Ansatz minus Kosten">Mein Teil</th>
-        <th class="r">Std. Offerte</th><th class="r">Std. Ziel</th><th class="r">Std. effektiv</th>
-        <th class="r" title="Mein Teil ÷ Zielstunden × ${S().lohnFaktor}">CHF/h Ziel</th><th class="r" title="Mein Teil ÷ effektive Stunden × ${S().lohnFaktor}">CHF/h effektiv</th>
-        <th>MwSt.</th><th class="r">Rechnungsbetrag</th><th title="Datum, an dem oder ab dem du die Rechnung stellen willst">Rechnungsdatum</th><th>Rechnung gestellt</th><th>Zahlung erhalten</th><th>Status</th>
+        <th class="r" title="Stunden gemäss Offerte">Std. Off.</th><th class="r" title="Zielstunden">Std. Ziel</th><th class="r" title="Effektiv erfasste Stunden">Std. eff.</th>
+        <th class="r" title="Mein Teil ÷ Zielstunden × ${S().lohnFaktor}">CHF/h Ziel</th><th class="r" title="Mein Teil ÷ effektive Stunden × ${S().lohnFaktor}">CHF/h eff.</th>
+        <th>MwSt.</th><th class="r" title="Rechnungsbetrag">Rechn.-Betrag</th><th title="Datum, an dem oder ab dem du die Rechnung stellen willst">Rechn.-Datum</th><th title="Rechnung gestellt am">Gestellt</th><th title="Zahlung erhalten am">Bezahlt</th><th>Status</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr><td colspan="2">Total ${list.length} Projekte</td><td></td>
