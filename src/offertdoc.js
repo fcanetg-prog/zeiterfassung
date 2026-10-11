@@ -6,7 +6,8 @@
   'use strict';
 
   const ARTEN = { offerte: 'Offerte', kostenvoranschlag: 'Kostenvoranschlag' };
-  const PREIS = ['auto', 'inklusive', 'null'];   // berechnet, «inklusive» (nicht verrechnet), 0.00 (Position entfällt)
+  const PREIS = ['auto', 'inklusive', 'offeriert', 'null'];   // berechnet, «inklusive» und «offeriert» (nicht verrechnet), 0.00 (Position entfällt)
+  const OHNE = { inklusive: 'inklusive', offeriert: 'offeriert' };   // Wörter statt eines Betrags
   const round2 = (x) => Math.round(x * 100 + 1e-6) / 100;
   const zahl = (x) => {
     if (typeof x === 'number') return isFinite(x) ? x : 0;
@@ -64,7 +65,7 @@
     if (a.menge == null || !a.einheit) return `${n} Fr.`;
     return `${n} Fr./${a.einheit}`;
   }
-  const preisText = (z) => (z.preis === 'inklusive' ? 'inklusive' : fr(zeilenPreis(z)));
+  const preisText = (z) => OHNE[z.preis] || fr(zeilenPreis(z));
   const kopf = (d, t) => `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}:`;
   /** Kurzfassung für Listen: «1a 3750.00 · 1b 3320.00» */
   /** Preis nach Abzug eines Rabatts. */
@@ -82,6 +83,7 @@
   // Folienformat 16:9. Alles steht auf einer Zeile: Die Schriftgrösse richtet sich nach dem längsten Eintrag und der Zeilenzahl.
   const SEITE = { b: 338.67, h: 190.5, rand: 13, kopf: 27, fuss: 12 };
   const PT = 0.3528;          // mm pro Punkt
+  const SCHRIFT = 10.5;       // Standardgrösse der Tabellen in Punkt
   const ZEICHEN = 0.54;       // mittlere Zeichenbreite in em (vorsichtig geschätzt)
 
   // Zeilenhöhen in em, passend zu den Abständen im CSS: Kopf- und Preiszeilen, Blocktitel, normale Zeilen.
@@ -103,21 +105,25 @@
     }
     const nachBreite = (breite - fest - 6) / (laengste * ZEICHEN * PT);
     const nachHoehe = (PLATZ - 10) / (tabelleEm(t) * PT);
-    return Math.max(5, Math.min(10.5, nachBreite * 0.94, nachHoehe));
+    return Math.max(5, Math.min(SCHRIFT, nachBreite * 0.94, nachHoehe));
   }
+  /**
+   * Eine Schriftgrösse für alle Folien einer Offerte. Im Normalfall ist das die feste Standardgrösse,
+   * also dieselbe in jeder Offerte; kleiner wird sie nur, wenn sonst etwas umbrechen oder nicht auf die Folie passen würde.
+   */
+  const schriftDoc = (d) => Math.min(SCHRIFT, ...d.teile.map((t) => schriftFuer(t, istEinfach(t))));
   /**
    * Abstand der Tabelle vom oberen Rand des freien Bereichs, gleich für alle Folien:
    * Die höchste Tabelle steht mittig, alle anderen beginnen auf derselben Höhe.
    */
   function tabellenOben(d) {
-    const hoechste = Math.max(0, ...d.teile.map((t) => tabelleEm(t) * schriftFuer(t, istEinfach(t)) * PT));
+    const hoechste = Math.max(0, ...d.teile.map((t) => tabelleEm(t) * schriftDoc(d) * PT));
     return Math.max(4, (PLATZ - hoechste) / 2);
   }
 
-  function teilHtml(d, t, oben) {
+  function teilHtml(d, t, oben, pt) {
     const einfach = istEinfach(t);
     const spalten = einfach ? 2 : 5;
-    const pt = schriftFuer(t, einfach);
     let zeilen = '';
     t.bloecke.forEach((b) => {
       if (!b.zeilen.length && !b.titel.trim()) return;
@@ -126,7 +132,7 @@
         zeilen += einfach
           ? `<tr><td>${esc(z.was)}</td><td class="r">${preisText(z)}</td></tr>`
           : `<tr class="${z.preis === 'null' ? 'entf' : ''}"><td>${esc(z.was)}</td><td>${esc(z.aufwand)}</td><td class="r">${esc(ansatzText(z))}</td>
-              <td class="r ${z.preis === 'inklusive' ? 'ink' : ''}">${preisText(z)}</td><td></td></tr>`;
+              <td class="r ${OHNE[z.preis] ? 'ink' : ''}">${preisText(z)}</td><td></td></tr>`;
       });
     });
     const titel = `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}`;
@@ -208,7 +214,8 @@
         ${m.kunde ? `<p class="kunde">${esc(m.kunde)}</p>` : ''}${m.name ? `<p class="projekt">${esc(m.name)}</p>` : ''}
         ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;
     const oben = tabellenOben(d);
-    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t, oben)).join('\n')}`;
+    const pt = schriftDoc(d);
+    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t, oben, pt)).join('\n')}`;
     // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
     const b = m.bestaetigung;
     return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Vertrag' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
@@ -299,7 +306,7 @@
       if (b.titel.trim()) out.push(einfach ? `\\textbf{${tex(b.titel)}} & \\\\` : `\\textbf{${tex(b.titel)}} & & & & \\\\`);
       b.zeilen.forEach((z, i) => {
         const letzte = i === b.zeilen.length - 1;
-        const preis = z.preis === 'inklusive' ? '\\textcolor{inklusive}{inklusive}' : tex(preisText(z));
+        const preis = OHNE[z.preis] ? `\\textcolor{inklusive}{${OHNE[z.preis]}}` : tex(preisText(z));
         out.push(einfach ? `${tex(z.was)} & ${preis} \\\\`
           : `${tex(z.was)} & ${tex(z.aufwand)} & ${tex(ansatzText(z))} & ${preis} & ${letzte ? tex(fr(blockTotal(b))) : ''} \\\\`);
       });
@@ -425,7 +432,9 @@ ${FORMAT}
     }
     const aufwand = zellen[1] || '', ansatz = betragAus(zellen[2]), preisZ = zellen[3] || '';
     const z = { was, aufwand, ansatz: ansatz || 0, preis: 'auto' };
-    if (/inkl/i.test(preisZ)) z.preis = 'inklusive';
+    // Ein Wort statt eines Betrags heisst: wird nicht verrechnet.
+    if (/offerier|geschenk|gratis|kostenlos|offert\b/i.test(preisZ)) z.preis = 'offeriert';
+    else if (/inkl/i.test(preisZ) || (preisZ.trim() && betragAus(preisZ) == null && /[a-zäöü]{4,}/i.test(preisZ))) z.preis = 'inklusive';
     else {
       const p = betragAus(preisZ);
       if (ansatz == null && p != null) { z.ansatz = p; }

@@ -172,6 +172,26 @@
       </tbody>`;
     }
 
+    /* Wird das Einlesen von PDF verbessert, liest die App die abgelegten Originale einmal neu ein.
+       Alte Offerten lassen sich in der App nicht bearbeiten, es geht dabei also nichts verloren. */
+    const LESER = 2;
+    let liestNeu = false;
+    async function alteNeuLesen() {
+      if (liestNeu || !api.offertOriginalLesen) return;
+      const offen2 = []; for (const p of liste()) for (const v of p.versionen) if (v.original && (v.gelesen || 1) < LESER) offen2.push(v);
+      if (!offen2.length) return;
+      liestNeu = true;
+      try {
+        for (const v of offen2) {
+          const r = await api.offertOriginalLesen(v.original);
+          const e = r && r.seiten ? O.ausPdf(r.seiten) : null;
+          if (e && e.doc) { v.doc = e.doc; v.lesbar = true; }
+          v.gelesen = LESER;
+        }
+        persist(); render();
+      } finally { liestNeu = false; }
+    }
+
     async function originalOeffnen(v) {
       const r = api.offertOriginal ? await api.offertOriginal(v.original) : { ok: false, error: 'Nur in der Desktop-App.' };
       if (!r.ok) toast('Das Original lässt sich nicht öffnen: ' + r.error, { fehler: true });
@@ -192,7 +212,7 @@
         const titel = (m ? m[4] : basis).replace(/[_]+/g, ' ').trim() || basis;
         const doc = e.doc || O.leer(/kostenvoranschlag/i.test(basis) ? 'kostenvoranschlag' : 'offerte');
         liste().push({ id: uid('of'), name: titel, kunde: '', kundeLinks: [], auftraggeber: '', status: 'alt', zugesagtId: null, erstellt: Date.now() + gelesen + nur, mod: 0,
-          versionen: [{ id: uid('ov'), datum, erstellt: Date.now(), doc, original: d.datei, lesbar: !!e.doc }] });
+          versionen: [{ id: uid('ov'), datum, erstellt: Date.now(), doc, original: d.datei, lesbar: !!e.doc, gelesen: LESER }] });
         if (e.doc) gelesen++; else nur++;
       }
       state.off.auf.add('alt'); persist(); render();
@@ -262,8 +282,8 @@
               <td>${feld(`t.${i}.b.${j}.z.${k}.aufwand`, z.aufwand, 'placeholder="2h, pauschal" aria-label="Aufwand"')}</td>
               <td>${feld(`t.${i}.b.${j}.z.${k}.ansatz`, z.ansatz || '', 'class="r" inputmode="decimal" aria-label="Ansatz"')}</td>
               <td><select data-of="f" data-pfad="t.${i}.b.${j}.z.${k}.preis" aria-label="Preisart">
-                <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
-              <td class="r num ${z.preis === 'inklusive' ? 'of-ink' : ''}" id="os-z${i}-${j}-${k}">${O.preisText(z)}</td><td></td>
+                <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="offeriert" ${z.preis === 'offeriert' ? 'selected' : ''}>offeriert</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
+              <td class="r num ${(z.preis === 'inklusive' || z.preis === 'offeriert') ? 'of-ink' : ''}" id="os-z${i}-${j}-${k}">${O.preisText(z)}</td><td></td>
               <td><button class="btn small ghost" data-of="z-del" data-t="${i}" data-b="${j}" data-z="${k}" title="Zeile löschen">×</button></td></tr>`).join('')}
             <tr class="of-plus"><td colspan="7"><button class="btn small" data-of="z-neu" data-t="${i}" data-b="${j}">+ Zeile</button></td></tr>`).join('')}
           </tbody>
@@ -316,7 +336,7 @@
       </div></div>`;
     }
 
-    function view() { return state.off.edit ? viewEditor() : viewListe(); }
+    function view() { setTimeout(alteNeuLesen, 0); return state.off.edit ? viewEditor() : viewListe(); }
 
     /* ---------- Aktionen ---------- */
 
@@ -339,7 +359,7 @@
         const ee = $(`#os-e${i}`); if (ee) ee.textContent = O.fr(O.preis2Betrag(t));
         t.bloecke.forEach((b, j) => {
           const eb = $(`#os-b${i}-${j}`); if (eb) eb.textContent = O.fr(O.blockTotal(b));
-          b.zeilen.forEach((z, k) => { const ez = $(`#os-z${i}-${j}-${k}`); if (ez) { ez.textContent = O.preisText(z); ez.classList.toggle('of-ink', z.preis === 'inklusive'); } });
+          b.zeilen.forEach((z, k) => { const ez = $(`#os-z${i}-${j}-${k}`); if (ez) { ez.textContent = O.preisText(z); ez.classList.toggle('of-ink', z.preis === 'inklusive' || z.preis === 'offeriert'); } });
         });
       });
     }

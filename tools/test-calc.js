@@ -197,5 +197,9 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(O.teilEnd(d3.teile[0]), 3000); assert.strictEqual(O.preis2Betrag(d3.teile[0]), 3000); assert.ok(O.kurz(d3).startsWith('1a 3000.00'));
   const h3 = O.html(d3); assert.ok(h3.includes('−750.00 Fr.')); assert.ok(h3.includes('3000.00 Fr.')); assert.ok(h3.indexOf('Beitrag') < h3.indexOf('Preis nach Abzug'));
   const l3 = O.ausLatex(O.latex(d3)).doc; assert.deepStrictEqual(l3.teile[0].rabatt, { label: 'Beitrag', betrag: 750 }); assert.strictEqual(l3.teile[0].preis2.label, 'Preis nach Abzug');
+  // «offeriert» wird wie «inklusive» nicht verrechnet; alle Folien haben dieselbe Schriftgrösse
+  const d4 = O.ausLatex(O.latex(d).replace('\\textcolor{inklusive}{inklusive}', 'offeriert')).doc;
+  assert.strictEqual(d4.teile[0].bloecke[0].zeilen[0].preis, 'offeriert'); assert.strictEqual(O.teilTotal(d4.teile[0]), 3750); assert.ok(O.html(d4).includes('>offeriert<'));
+  assert.strictEqual(new Set(O.html(d4).match(/<main style="font-size:[\d.]+pt/g)).size, 1); assert.ok(O.html(d4).includes('<main style="font-size:10.50pt'));
   console.log('Offerten bestanden.');
 }
