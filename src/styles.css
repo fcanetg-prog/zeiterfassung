@@ -471,3 +471,4 @@ th.r { text-align: right; }
 .bh-zahl-panel td { padding: 4px 8px 4px 0; border-top: 1px solid #cfe6dd; vertical-align: top; }
 .bh-zahl-panel td:first-child { width: 84px; } .bh-zahl-panel td:nth-child(2) { width: 90px; } .bh-zahl-panel td:last-child { width: 170px; padding-right: 0; }
 .bh-zahl-panel .x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
+.head.aus-kopf { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }

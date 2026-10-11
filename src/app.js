@@ -260,11 +260,10 @@
   /* ============ Rahmen ============ */
 
   const NAV = [
-    ['erfassen', 'Erfassen'],
+    ['erfassen', 'Zeiterfassung'],
     ['projekte', 'Projekte'],
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung'],
-    ['auswertung', 'Auswertung'],
     ['einstellungen', 'Einstellungen'],
   ];
 
@@ -302,7 +301,7 @@
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
 
-    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), auswertung: viewAuswertung, einstellungen: viewEinstellungen };
+    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), einstellungen: viewEinstellungen };
     const wocheH = weekTotal(heute);
     $('#app').innerHTML = `
       <nav class="side">
@@ -461,7 +460,8 @@
         </table>` : `<div class="empty">Für diesen Tag ist noch nichts erfasst.</div>`}
       </section>
       <aside class="pane cal">${calendarHtml()}</aside>
-    </div>`;
+    </div>
+    ${viewAuswertung()}`;
   }
 
   function calendarHtml() {
@@ -1044,7 +1044,7 @@
     });
 
     return `
-    <header class="head"><h1>Auswertung ${y}</h1>
+    <header class="head aus-kopf"><h1>Auswertung ${y}</h1>
       ${pensum == null ? '' : `<div class="bignum" title="Schnitt der letzten 7 Tage bis gestern, hochgerechnet auf 5 Arbeitstage, mit Zuschlag ${s.stundenZuschlag}, im Verhältnis zu ${s.stundenProTag} Stunden pro Tag"><b>${Math.round(pensum)}%</b><span>Aktuelles Pensum</span></div>`}
       <div class="bignum"><b class="${letzte && letzte.ueberzeit < 0 ? 'neg' : ''}">${letzte ? (letzte.ueberzeit > 0 ? '+' : '') + fmtH1(letzte.ueberzeit) : '–'}</b><span>Überzeit kumuliert</span></div>
     </header>
