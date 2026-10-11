@@ -207,7 +207,7 @@
     }
     async function pdf(doc, name, p, v) {
       const r = await api.savePdf(O.html(doc, { kunde: p && p.kunde, name: p && p.name, datum: v && v.datum }), { ordner: 'Offerten', name, roh: true, offerte: true });
-      if (r && r.fehler) toast(r.fehler, { fehler: true }); else if (r && r.path) toast('PDF gespeichert und geöffnet');
+      if (r && r.fehler) toast(r.fehler, { fehler: true }); else if (r && r.path) toast(r.ohneTitelbild ? 'PDF gespeichert. Das Titelbild fehlt noch: Einstellungen → Offerten → Titelbild wählen.' : 'PDF gespeichert und geöffnet', r.ohneTitelbild ? { dauer: 9000 } : undefined);
     }
     async function texDatei(doc, name) {
       const r = await api.saveText(O.latex(doc), { ordner: 'Offerten', name });

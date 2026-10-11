@@ -246,8 +246,7 @@ function bildAlsCss(basis) {
 /** Setzt Titelbild und Logo aus dem Ordner «Vorlagen» in die Offerte ein; fehlen sie, steht der Firmenname als Text. */
 function offertBilder(html) {
   const titel = bildAlsCss('offerte-titel'), logo = bildAlsCss('offerte-logo');
-  return html.split('__OFFERTE_TITELBILD__').join(titel || '').split('__OFFERTE_LOGO__').join(logo || 'none')
-    .split('__OFFERTE_FIRMA_TITEL__').join(titel ? 'none' : 'block').split('__OFFERTE_FIRMA_KOPF__').join(logo ? 'none' : 'block');
+  return html.split('__OFFERTE_TITELBILD__').join(titel || '').split('__OFFERTE_LOGO__').join(logo || 'none');
 }
 function speichereOffertBilder(bilder) {
   const dir = path.join(dataDir(), VORLAGEN_DIR);
@@ -445,7 +444,7 @@ if (!app.requestSingleInstanceLock()) {
       starteWaechter();
       return { path: ziel, vorhanden };
     });
-    ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath() }));
+    ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath(), offertBilder: { titel: !!bildAlsCss('offerte-titel'), logo: !!bildAlsCss('offerte-logo') } }));
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
     });
@@ -463,6 +462,21 @@ if (!app.requestSingleInstanceLock()) {
       }
     });
     ipcMain.handle('offerte:bilder', (_e, bilder) => { try { return speichereOffertBilder(bilder); } catch (err) { return { ok: false, error: err.message }; } });
+    ipcMain.handle('offerte:bildWaehlen', async (_e, art) => {
+      const basis = art === 'logo' ? 'offerte-logo' : 'offerte-titel';
+      const r = await dialog.showOpenDialog(win, { title: art === 'logo' ? 'Logo für das Kopfband wählen' : 'Titelbild wählen (16:9)', filters: [{ name: 'Bild', extensions: ['png', 'jpg', 'jpeg'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return { canceled: true };
+      try {
+        const roh = fs.readFileSync(r.filePaths[0]);
+        const png = roh.slice(1, 4).toString('latin1') === 'PNG';
+        if (!png && !(roh[0] === 0xff && roh[1] === 0xd8)) return { ok: false, error: 'Bitte ein PNG- oder JPG-Bild wählen.' };
+        const dir = path.join(dataDir(), VORLAGEN_DIR);
+        fs.mkdirSync(dir, { recursive: true });
+        for (const e of ['jpg', 'jpeg', 'png']) { try { fs.unlinkSync(path.join(dir, `${basis}.${e}`)); } catch { /* gab es nicht */ } }
+        fs.writeFileSync(path.join(dir, `${basis}.${png ? 'png' : 'jpg'}`), roh);
+        return { ok: true };
+      } catch (err) { return { ok: false, error: err.message }; }
+    });
     ipcMain.handle('offerte:open', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'Vorlage wählen (PDF oder LaTeX)', filters: [{ name: 'Offerte', extensions: ['pdf', 'tex', 'txt', 'json'] }], properties: ['openFile'] });
       if (r.canceled || !r.filePaths[0]) return { canceled: true };
@@ -498,6 +512,7 @@ if (!app.requestSingleInstanceLock()) {
         const ordner = path.basename(String((opts && opts.ordner) || 'Berichte'));
         const name = path.basename(String((opts && opts.name) || 'Bericht.pdf')).replace(/[\\/:*?"<>|]/g, '_');
         // «roh»: Seitenformat und Ränder kommen aus dem Dokument selbst (z. B. Offerten im Querformat).
+        const ohneTitelbild = !!(opts && opts.offerte) && !bildAlsCss('offerte-titel');
         if (opts && opts.offerte) html = offertBilder(String(html));
         const pdf = await renderPdf(html, opts && opts.roh ? undefined : (opts && opts.fuss) || '', opts && opts.roh);
         const dir = path.join(dataDir(), ordner);
@@ -505,7 +520,7 @@ if (!app.requestSingleInstanceLock()) {
         const file = path.join(dir, name);
         fs.writeFileSync(file, pdf);
         if (!process.env.ZEITERFASSUNG_KEIN_OEFFNEN) shell.openPath(file);
-        return { path: file };
+        return { path: file, ohneTitelbild };
       } catch (err) {
         return { fehler: `Das PDF konnte nicht erstellt werden: ${err.message}` };
       }

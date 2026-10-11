@@ -1157,6 +1157,13 @@
         <div class="row"><button class="btn" data-action="gmail-sync">Jetzt abgleichen</button></div>
         ${state.sync ? `<p class="hint ${state.sync.fehler ? 'warn' : ''}">${esc(state.sync.fehler || state.sync.text)}</p>` : ''}
       </section>
+      <section class="sec"><h2>Offerten</h2>
+        <p>Titelbild der ersten Folie und Logo im Kopfband. Die Bilder liegen im Ordner «Vorlagen» neben deinen Daten und gelten damit für beide Rechner.</p>
+        <div class="row">
+          <button class="btn" data-action="offert-bild" data-art="titel">Titelbild wählen</button><span class="${(state.info.offertBilder || {}).titel ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).titel ? 'vorhanden' : 'fehlt: die Titelfolie ist einfarbig blau'}</span>
+          <button class="btn" data-action="offert-bild" data-art="logo">Logo wählen</button><span class="${(state.info.offertBilder || {}).logo ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).logo ? 'vorhanden' : 'fehlt'}</span>
+        </div>
+      </section>
       <section class="sec"><h2>Daten</h2>
         <p>Version ${esc(state.info.version)}. Enthalten sind ${state.data.projects.length} Projekte, ${state.data.entries.length} Zeiteinträge, ${state.data.buchungen.filter((b) => !b.vorschlag).length} Buchungen (${Object.keys(state.data.kontenplaene).join(', ') || 'keine Buchhaltung'}) und ${state.data.offerten.length} Offerten-Projekte. Auf beiden Rechnern müssen hier dieselben Zahlen stehen.</p>
         <p>Gespeichert in <code>${esc(state.info.dataPath)}</code>. Jede Änderung wird sofort gesichert; im Unterordner «Sicherungen» liegt pro Tag eine Kopie des Vortagsstands.</p>
@@ -1239,6 +1246,7 @@
     if (r.error) { toast(r.error, { fehler: true }); return; }
     if (r.data && r.data.typ === 'offertbilder') {
       const e = api.offertBilder ? await api.offertBilder(r.data) : { ok: false, error: 'Nur in der Desktop-App.' };
+      if (e.ok) state.info = await api.info();
       toast(e.ok ? `Titelbild und Logo für die Offerten sind gespeichert (${e.anzahl} Bilder).` : 'Die Bilder konnten nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
       return;
     }
@@ -1353,6 +1361,14 @@
       case 'export': { const r = await api.exportFile(state.data); if (r && r.path) toast('Exportiert nach ' + r.path); break; }
       case 'export-csv': { const r = await api.exportCsv(`Projekte-${state.year}.csv`, projectsCsv()); if (r && r.path) toast('Exportiert nach ' + r.path); break; }
       case 'open-folder': api.openFolder(); break;
+      case 'offert-bild': {
+        if (!api.offertBildWaehlen) { toast('Nur in der Desktop-App.', { fehler: true }); break; }
+        const r = await api.offertBildWaehlen(el.dataset.art);
+        if (!r || r.canceled) break;
+        if (!r.ok) { toast('Das Bild konnte nicht übernommen werden: ' + r.error, { fehler: true }); break; }
+        state.info = await api.info(); render(); toast('Bild übernommen');
+        break;
+      }
       case 'choose-folder': {
         const r = await api.chooseFolder();
         if (!r || r.canceled) break;

@@ -57,8 +57,9 @@
   const fr = (x) => `${round2(x).toFixed(2)} Fr.`;
   function ansatzText(z) {
     const a = aufwandTeile(z.aufwand);
-    if (a.menge == null || !a.einheit) return fr(z.ansatz);
+    // Ansätze ohne Nachkommastellen, solange es ganze Franken sind.
     const n = Number.isInteger(z.ansatz) ? String(z.ansatz) : z.ansatz.toFixed(2);
+    if (a.menge == null || !a.einheit) return `${n} Fr.`;
     return `${n} Fr./${a.einheit}`;
   }
   const preisText = (z) => (z.preis === 'inklusive' ? 'inklusive' : fr(zeilenPreis(z)));
@@ -87,7 +88,7 @@
     }
     const nachBreite = (breite - fest - 6) / (laengste * ZEICHEN * PT);
     const nachHoehe = (SEITE.h - SEITE.kopf - SEITE.fuss - 16) / (zeilen * 1.95 * PT);
-    return Math.max(5, Math.min(11.5, nachBreite, nachHoehe));
+    return Math.max(5, Math.min(10.5, nachBreite * 0.94, nachHoehe * 0.94));
   }
 
   function teilHtml(d, t) {
@@ -108,20 +109,20 @@
     const titel = `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}`;
     // Titel im Kopfband ebenfalls einzeilig halten
     const platz = SEITE.b - 2 * SEITE.rand - 92;
-    const tpt = Math.max(7, Math.min(15, platz / ((titel.length + t.titel.length + 3) * 0.56 * PT)));
+    const tpt = Math.max(6, Math.min(11, platz / ((t.titel.length + 2) * 0.56 * PT)));
     return `<section class="folie">
-      <header><div class="logo"><span>Fabio Canetg GmbH</span></div>
-        <h2 style="font-size:${tpt.toFixed(2)}pt"><b>${esc(titel)}</b>${t.titel.trim() ? `<span>${esc(t.titel)}</span>` : ''}</h2></header>
+      <header><div class="logo"></div>
+        <h2><b>${esc(titel)}</b>${t.titel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(t.titel)}</span>` : ''}</h2></header>
       <main style="font-size:${pt.toFixed(2)}pt">
       <table class="${einfach ? 'einfach' : ''}">
         <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th class="r">Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
         <tbody>${zeilen}</tbody>
         <tfoot><tr><td colspan="${spalten - 1}">Preis</td><td class="r">${fr(teilTotal(t))}</td></tr></tfoot>
       </table></main>
-      <footer>Alle Preise exklusive Mehrwertsteuer</footer></section>`;
+      <footer>Alle Preise exkl. Mehrwertsteuer</footer></section>`;
   }
 
-  const NAVY = '#18334e', TEAL = '#27b9bf';
+  const NAVY = '#18334e', TEAL = '#27b9bf', TEAL_DUNKEL = '#1a8f96';
   const CSS = `
     @page { size: ${SEITE.b}mm ${SEITE.h}mm; margin: 0; }
     * { box-sizing: border-box; }
@@ -132,7 +133,6 @@
     /* Titelfolie */
     .titel { background: ${NAVY} __OFFERTE_TITELBILD__ center / cover no-repeat; color: #fff; }
     .titel .block { position: absolute; left: 6.4mm; top: 70mm; width: 80mm; }
-    .titel .firma { display: __OFFERTE_FIRMA_TITEL__; font-family: Georgia, "Times New Roman", serif; font-size: 22pt; font-weight: 700; position: absolute; left: 6.4mm; top: 48mm; }
     .titel .art { font-size: 17pt; font-weight: 700; letter-spacing: .02em; margin: 0 0 3mm; }
     .titel .strich { width: 16mm; height: .9mm; background: ${TEAL}; margin: 0 0 4mm; }
     .titel .kunde { font-size: 11.5pt; font-weight: 700; margin: 0 0 1.2mm; }
@@ -141,15 +141,16 @@
     /* Inhaltsfolien */
     header { position: absolute; left: 0; top: 0; width: 100%; height: ${SEITE.kopf}mm; background: ${NAVY}; color: #fff; display: flex; align-items: center; padding: 0 ${SEITE.rand}mm 0 ${SEITE.rand - 3}mm; border-bottom: 1.1mm solid ${TEAL}; }
     .logo { flex: none; width: 82mm; height: 14mm; background: __OFFERTE_LOGO__ left center / contain no-repeat; }
-    .logo span { display: __OFFERTE_FIRMA_KOPF__; font-family: Georgia, "Times New Roman", serif; font-size: 15pt; font-weight: 700; line-height: 14mm; white-space: nowrap; }
-    h2 { margin: 0 0 0 auto; font-weight: 400; white-space: nowrap; text-align: right; }
-    h2 b { font-weight: 700; }
-    h2 span { color: #cfe9ea; margin-left: 3mm; }
-    main { position: absolute; left: ${SEITE.rand}mm; right: ${SEITE.rand}mm; top: ${SEITE.kopf + 9}mm; }
+    h2 { margin: 0 0 0 auto; font-weight: 400; white-space: nowrap; text-align: right; line-height: 1.25; }
+    h2 b { display: block; font-weight: 700; font-size: 16pt; }
+    h2 span { display: block; color: #cfe9ea; margin-top: .8mm; }
+    /* Tabelle mittig zwischen Kopfband und Fusszeile */
+    main { position: absolute; left: ${SEITE.rand}mm; right: ${SEITE.rand}mm; top: ${SEITE.kopf + 1.1}mm; bottom: ${SEITE.fuss}mm; display: flex; align-items: center; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: .42em .9em .42em 0; text-align: left; white-space: nowrap; line-height: 1.1; }
     th:last-child, td:last-child { padding-right: 0; }
-    th { font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #6a7a88; border-bottom: .35mm solid ${NAVY}; padding-bottom: .6em; }
+    th { font-size: .8em; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #fff; background: ${TEAL_DUNKEL}; padding-top: .7em; padding-bottom: .7em; }
+    th:first-child { padding-left: .75em; } th:last-child { padding-right: .75em; }
     td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
     td:first-child, th:first-child { width: 100%; }
     table:not(.einfach) th:nth-child(n+2), table:not(.einfach) td:nth-child(n+2) { padding-left: 1.4em; }
@@ -163,7 +164,7 @@
     tfoot td { font-weight: 700; font-size: 1.12em; color: #fff; background: ${NAVY}; padding: .6em .55em; }
     tfoot td:last-child { padding-right: .55em; }
     tbody tr:not(.bt) td:last-child { padding-right: .6em; }
-    footer { position: absolute; right: ${SEITE.rand}mm; bottom: 5mm; font-size: 7pt; color: #6a7a88; }
+    footer { position: absolute; right: ${SEITE.rand}mm; bottom: 4.6mm; font-size: 9pt; color: #55656f; }
   `;
 
   const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -175,7 +176,7 @@
    */
   function html(doc, meta) {
     const d = normalize(doc), m = meta || {};
-    const titel = `<section class="folie titel"><div class="firma">Fabio Canetg GmbH</div><div class="block">
+    const titel = `<section class="folie titel"><div class="block">
         <p class="art">${ARTEN[d.art]}</p><div class="strich"></div>
         ${m.kunde ? `<p class="kunde">${esc(m.kunde)}</p>` : ''}${m.name ? `<p class="projekt">${esc(m.name)}</p>` : ''}
         ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;

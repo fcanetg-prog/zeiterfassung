@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   invoicePdf: (modell, absender) => ipcRenderer.invoke('invoice:pdf', modell, absender),
   openText: (titel, endungen) => ipcRenderer.invoke('file:openText', titel, endungen),
   savePdf: (html, opts) => ipcRenderer.invoke('pdf:save', html, opts),
+  offertBildWaehlen: (art) => ipcRenderer.invoke('offerte:bildWaehlen', art),
   offertBilder: (bilder) => ipcRenderer.invoke('offerte:bilder', bilder),
   openOfferte: () => ipcRenderer.invoke('offerte:open'),
   saveText: (text, opts) => ipcRenderer.invoke('text:save', text, opts),
