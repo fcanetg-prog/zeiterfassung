@@ -294,7 +294,7 @@
       const v = { id: uid('ov'), datum: n.datum || heute, erstellt: Date.now(), doc };
       let p = n.pid && projekt(n.pid);
       if (p) p.versionen.push(v);
-      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLink: kunden().find((k) => k.toLowerCase() === n.kunde.trim().toLowerCase()) || '', status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
+      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLink: '', status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
       state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: v.id };
       persist(); render();
     }
