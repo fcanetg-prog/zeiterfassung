@@ -123,6 +123,7 @@
       o: new Map(state.data.offerten.map((r) => [r.id, ohneMod(r)])),
       v: new Map(state.data.offertVorlagen.map((r) => [r.id, ohneMod(r)])),
       k: Object.fromEntries(Object.entries(state.data.kontenplaene).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
+      z: Object.fromEntries(Object.entries(state.data.bankZeilen || {}).map(([j, bz]) => [j, JSON.stringify(bz.zeilen)])),
       s: JSON.stringify(state.data.settings),
     };
   }
@@ -140,6 +141,7 @@
     }
     if (JSON.stringify(d.settings) !== abbild.s) d.settingsMod = jetzt;
     for (const [j, pl] of Object.entries(d.kontenplaene)) if (JSON.stringify(pl.zeilen) !== abbild.k[j]) pl.mod = jetzt;
+    for (const [j, bz] of Object.entries(d.bankZeilen || {})) if (JSON.stringify(bz.zeilen) !== (abbild.z || {})[j]) bz.mod = jetzt;
     merkeAbbild();
   }
 
@@ -263,6 +265,10 @@
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc), ...(v.original ? { original: String(v.original), lesbar: !!v.lesbar, gelesen: v.gelesen || 1 } : {}) })),
     }));
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
+    out.bankZeilen = {};
+    for (const [jahr, bz] of Object.entries(d.bankZeilen || {})) {
+      out.bankZeilen[jahr] = { mod: (bz && bz.mod) || 0, zeilen: ((bz && bz.zeilen) || []).filter((z) => z && z.datum && C.isNum(z.betrag)).map((z, i) => ({ datum: z.datum, text: z.text || '', betrag: z.betrag, saldo: C.isNum(z.saldo) ? z.saldo : null, schluessel: z.schluessel || '', nr: C.isNum(z.nr) ? z.nr : i })) };
+    }
     out.kontenplaene = {};
     for (const [jahr, plan] of Object.entries(d.kontenplaene || {})) {
       out.kontenplaene[jahr] = { mod: plan.mod || 0, zeilen: (plan.zeilen || []).map((z) => ({ sektion: z.sektion || '', gruppe: z.gruppe || '', konto: z.konto || '', text: z.text || '', bklasse: String(z.bklasse || ''), summe_in: z.summe_in || '' })) };
@@ -1322,7 +1328,7 @@
       await api.save(state.data, { sicherungErzwingen: true });
     }
     // Eine Importdatei ohne Buchhaltung (z. B. der Excel-Import) lässt die vorhandene Buchhaltung stehen.
-    if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; }
+    if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; neu.bankZeilen = state.data.bankZeilen || {}; }
     if (state.data && !r.data.offerten && !r.data.offertVorlagen) { neu.offerten = state.data.offerten; neu.offertVorlagen = state.data.offertVorlagen; }
     neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;

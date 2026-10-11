@@ -16,7 +16,18 @@
     // Vorschläge aus dem Bankabgleich zählen erst, wenn sie bestätigt sind.
     const buchungen = () => state.data.buchungen.filter((b) => b.jahr === jahr() && !b.vorschlag);
     // Neueste zuoberst, wie in der Liste der Buchungen.
-    const vorschlaege = () => L.bankSortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag)).reverse();
+    /* Reihenfolge wie im E-Banking: Die eingelesenen Bankbewegungen sind gespeichert; daraus ergibt sich der Platz jeder
+       Buchung, auch für später von Hand erfasste oder geänderte Buchungen, ohne dass die Datei neu eingelesen werden muss. */
+    let platzMemo = { sig: '', map: new Map() };
+    function plaetze() {
+      const bz = (state.data.bankZeilen || {})[jahr()];
+      if (!bz || !bz.zeilen.length) return null;
+      const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
+      const sig = `${jahr()}|${bz.zeilen.length}|${bz.mod}|${alle.map((b) => `${b.id}:${b.datum}:${b.betrag}:${b.soll}:${b.haben}:${b.bankSchluessel || ''}`).join(',')}`;
+      if (platzMemo.sig !== sig) platzMemo = { sig, map: L.bankPlaetze(bz.zeilen, alle, BANK) };
+      return platzMemo.map;
+    }
+    const vorschlaege = () => L.bankSortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag), plaetze()).reverse();
     const BANK = '1010';
     const konten = () => (plan() || []).filter((z) => z.konto);
     const kontoName = (nr) => { const z = konten().find((x) => x.konto === nr); return z ? z.text : ''; };
@@ -103,7 +114,7 @@
     }
 
     function viewBuchungen() {
-      const alle = L.bankSortiert(buchungen());
+      const alle = L.bankSortiert(buchungen(), plaetze());
       const q = state.bh.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const liste = alle.filter((b) => !q.length || q.every((t) => `${fmtDate(b.datum)} ${b.beleg} ${b.text} ${b.soll} ${b.haben} ${b.betrag.toFixed(2)}`.toLowerCase().includes(t))).reverse();
       const texte = [...new Set(alle.map((b) => b.text))].sort();
@@ -261,6 +272,12 @@
       const z = p.zeilen.filter((x) => x.datum.startsWith(jahr() + '-'));
       if (!z.length) { if (bezahlt) persist(); render(); toast(`Die Datei enthält keine Bewegungen im Jahr ${jahr()}.${zusatz}`, { fehler: !bezahlt }); return; }
       const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
+      // Bankbewegungen des Jahres merken: Sie bestimmen dauerhaft die Reihenfolge der Buchungen.
+      if (!state.data.bankZeilen) state.data.bankZeilen = {};
+      const gemerkt = state.data.bankZeilen[jahr()] || { mod: 0, zeilen: [] };
+      const zusammen = L.bankZeilenMerge(gemerkt.zeilen, z.filter((x) => Math.abs(x.betrag) > 0.004));
+      const zeilenNeu = JSON.stringify(zusammen) !== JSON.stringify(gemerkt.zeilen);
+      state.data.bankZeilen[jahr()] = { mod: gemerkt.mod, zeilen: zusammen };
       const a = L.bankAbgleich(z, alle, BANK, state.data.settings.bankIgnoriert || []);
       // Gelernt wird nur aus bestätigten Buchungen.
       const lern = a.paare.filter((x) => x.buchungen.every((b) => !b.vorschlag));
@@ -292,7 +309,7 @@
       const letzte = z[z.length - 1];
       state.bh.bank = { jahr: jahr(), datum: letzte.datum, saldo: letzte.saldo };
       state.bh.tab = 'buchungen'; state.bh.q = '';
-      if (a.neu.length || bezahlt || geaendert) persist();
+      if (a.neu.length || bezahlt || geaendert || zeilenNeu) persist();
       render();
       const offenV = a.paare.length - lern.length;
       toast(`${a.paare.length + a.neu.length + a.ignoriert} Bewegungen gelesen: ${lern.length} schon verbucht, ${a.neu.length} ${a.neu.length === 1 ? 'neuer Vorschlag' : 'neue Vorschläge'}${offenV ? `, ${offenV} noch unbestätigt` : ''}${a.ignoriert ? `, ${a.ignoriert} früher verworfen` : ''}.${zusatz}`);
@@ -526,7 +543,8 @@
         toast('Vorschlag verworfen', { actionLabel: 'Rückgängig', action: () => { state.data.buchungen.splice(i, 0, weg); const k = ign.indexOf(weg.bankSchluessel); if (k >= 0) ign.splice(k, 1); persist(); render(); } });
       } else if (a === 'v-alle') {
         let n = 0, rest = 0;
-        for (const v of vorschlaege()) { if (!v.sicher || bestaetige(v)) rest++; else n++; }
+        // In der Reihenfolge der Bank bestätigen (älteste zuerst), damit die Belegnummern gleich laufen.
+        for (const v of vorschlaege().reverse()) { if (!v.sicher || bestaetige(v)) rest++; else n++; }
         persist(); render(); toast(`${n} ${n === 1 ? 'Buchung' : 'Buchungen'} bestätigt${rest ? `, ${rest} ${rest === 1 ? 'bleibt' : 'bleiben'} zum Prüfen` : ''}`);
       }
       else if (a === 'pdf') pdf();

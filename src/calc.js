@@ -23,7 +23,7 @@
   }
 
   function emptyData() {
-    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, offerten: [], offertVorlagen: [] };
+    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [] };
   }
 
   /** Stunden pro Projekt: Map projectId -> Summe */
@@ -428,8 +428,13 @@
         if (!kontenplaene[jahr] || (plan.mod || 0) > (kontenplaene[jahr].mod || 0)) kontenplaene[jahr] = plan;
       }
     }
+    // Gespeicherte Bankbewegungen pro Jahr: die jüngere Fassung gewinnt.
+    const bankZeilen = {};
+    for (const quelle of [a.bankZeilen || {}, b.bankZeilen || {}]) {
+      for (const [jahr, bz] of Object.entries(quelle)) if (!bankZeilen[jahr] || (bz.mod || 0) > (bankZeilen[jahr].mod || 0)) bankZeilen[jahr] = bz;
+    }
     // Teile, die diese Version nicht kennt (aus einer neueren App), unverändert mitnehmen.
-    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'offerten', 'offertVorlagen', 'history']);
+    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'history']);
     const fremd = {};
     for (const q of [a, b]) for (const k of Object.keys(q)) if (!bekanntK.has(k) && fremd[k] === undefined) fremd[k] = q[k];
     return {
@@ -437,7 +442,7 @@
       version: 1,
       settings: neuer.settings || a.settings || b.settings,
       settingsMod: neuer.settingsMod || 0,
-      projects, entries, geloescht, buchungen, kontenplaene,
+      projects, entries, geloescht, buchungen, kontenplaene, bankZeilen,
       offerten: mergeList(a.offerten, b.offerten), offertVorlagen: mergeList(a.offertVorlagen, b.offertVorlagen),
       history: Object.assign({}, b.history || {}, a.history || {}),
     };

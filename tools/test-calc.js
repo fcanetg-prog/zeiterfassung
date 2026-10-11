@@ -143,6 +143,14 @@ console.log('Alle Prüfungen bestanden.');
   // Reihenfolge wie im E-Banking
   const bs = L.bankSortiert([{ id: 'x', datum: '2026-10-31', bankDatum: '2026-09-30', bankNr: 7, pos: 1 }, { id: 'y', datum: '2026-10-01', pos: 2 }, { id: 'z', datum: '2026-09-30', bankDatum: '2026-09-30', bankNr: 5, pos: 9 }, { id: 'w', datum: '2026-09-30', pos: 3 }]);
   assert.deepStrictEqual(bs.map((x) => x.id), ['z', 'x', 'w', 'y']);
+  // Gespeicherte Bankbewegungen: neue Datei ersetzt nur die Tage, die sie enthält; Buchungen erhalten daraus ihren Platz
+  const bzA = L.bankZeilenMerge([], [Z('2026-03-01', -10, 'a'), Z('2026-03-02', -20, 'b'), Z('2026-03-02', 30, 'c')]);
+  const bzB = L.bankZeilenMerge(bzA, [Z('2026-03-02', -20, 'b'), Z('2026-03-02', 30, 'c'), Z('2026-03-02', -5, 'd'), Z('2026-03-03', 7, 'e')]);
+  assert.deepStrictEqual(bzB.map((x) => x.text + x.nr), ['a0', 'b1', 'c2', 'd3', 'e4']);
+  const bb = [{ id: 'm1', datum: '2026-03-02', soll: '1010', haben: '3400', betrag: 30, pos: 1 }, { id: 'm2', datum: '2026-03-02', soll: '6600', haben: '1010', betrag: 20, pos: 2 },
+    { id: 'm3', datum: '2026-03-04', soll: '6600', haben: '1010', betrag: 5, pos: 3 }, { id: 'm4', datum: '2026-03-02', soll: '6600', haben: '2000', betrag: 99, pos: 4 }];
+  const pl = L.bankPlaetze(bzB, bb, '1010');
+  assert.deepStrictEqual(L.bankSortiert(bb, pl).map((x) => x.id), ['m2', 'm1', 'm3', 'm4']);   // m3 steht am Bankdatum 02.03., m4 ohne Bankbewegung danach
   console.log('Bankabgleich bestanden.');
 }
 

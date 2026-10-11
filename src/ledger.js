@@ -16,12 +16,34 @@
    * Reihenfolge wie im E-Banking: Buchungen mit bekannter Bankbewegung stehen am Buchungsdatum der Bank
    * und in der Reihenfolge der Exportdatei; alle übrigen an ihrem eigenen Datum, danach.
    */
-  function bankSortiert(buchungen) {
-    const tag = (b) => b.bankDatum || b.datum;
-    const hat = (b) => b.bankNr != null;
+  function bankSortiert(buchungen, platz) {
+    // platz: optional Map Buchungs-Id -> { bankDatum, bankNr } aus den gespeicherten Bankbewegungen
+    const ort = (b) => (platz && platz.get(b.id)) || b;
+    const tag = (b) => ort(b).bankDatum || b.datum;
+    const nr = (b) => ort(b).bankNr;
+    const hat = (b) => nr(b) != null;
     return buchungen.slice().sort((a, b) => (tag(a) < tag(b) ? -1 : tag(a) > tag(b) ? 1
       : hat(a) !== hat(b) ? (hat(a) ? -1 : 1)
-      : hat(a) && a.bankNr !== b.bankNr ? a.bankNr - b.bankNr : (a.pos || 0) - (b.pos || 0)));
+      : hat(a) && nr(a) !== nr(b) ? nr(a) - nr(b) : (a.pos || 0) - (b.pos || 0)));
+  }
+
+  /**
+   * Führt die gespeicherten Bankbewegungen eines Jahres mit einer neu eingelesenen Datei zusammen.
+   * Für jeden Tag, der in der neuen Datei vorkommt, gilt deren Reihenfolge; die übrigen Tage bleiben.
+   * Die Bewegungen werden durchnummeriert, damit die Buchungen dieselbe Reihenfolge wie bei der Bank bekommen.
+   */
+  function bankZeilenMerge(alt, neu) {
+    const tage = new Set(neu.map((z) => z.datum));
+    const alle = (alt || []).filter((z) => !tage.has(z.datum)).concat(neu);
+    return alle.map((z, i) => ({ z, i })).sort((a, b) => (a.z.datum < b.z.datum ? -1 : a.z.datum > b.z.datum ? 1 : a.i - b.i))
+      .map((x, nr) => ({ datum: x.z.datum, text: x.z.text, betrag: x.z.betrag, saldo: x.z.saldo == null ? null : x.z.saldo, schluessel: x.z.schluessel, nr }));
+  }
+  /** Platz jeder Buchung bei der Bank: Map Buchungs-Id -> { bankDatum, bankNr }. */
+  function bankPlaetze(zeilen, buchungen, konto) {
+    const m = new Map();
+    if (!zeilen || !zeilen.length) return m;
+    for (const paar of bankAbgleich(zeilen, buchungen, konto, []).paare) for (const b of paar.buchungen) m.set(b.id, { bankDatum: paar.zeile.datum, bankNr: paar.zeile.nr });
+    return m;
   }
 
   /** Soll, Haben und Saldo (Soll minus Haben) pro Konto. */
@@ -266,5 +288,5 @@
     return fertig(beste.x.text, beste.x.gegen, konten.size === 1);
   }
 
-  return { round2, sortiert, bankSortiert, saldi, auswertung, totalsummen, kontoauszug, eroeffnung, naechsterBeleg, abschnitte, parseBankCsv, bankKern, bankAbgleich, bankVorschlag };
+  return { round2, sortiert, bankSortiert, bankZeilenMerge, bankPlaetze, saldi, auswertung, totalsummen, kontoauszug, eroeffnung, naechsterBeleg, abschnitte, parseBankCsv, bankKern, bankAbgleich, bankVorschlag };
 });
