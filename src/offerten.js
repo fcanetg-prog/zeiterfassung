@@ -234,10 +234,13 @@
               ${feld(`t.${i}.preisLabel`, t.preisLabel, 'class="of-plabel" placeholder="Preis" aria-label="Bezeichnung der Preiszeile"')}
               ${einfach ? '<span class="dim">einfache Preisliste: im Dokument nur «Was» und «Total»</span>' : ''}</div></td>
             <td class="r num" id="os-t${i}"><b>${O.fr(O.teilTotal(t))}</b></td><td></td></tr>
-            ${t.preis2 ? `<tr><td colspan="5"><div class="of-pzeile"><span class="of-platz"></span>${feld(`t.${i}.preis2.label`, t.preis2.label, 'class="of-plabel" placeholder="Preis pro Folge" aria-label="Bezeichnung der zweiten Preiszeile"')}</div></td>
-              <td>${feld(`t.${i}.preis2.betrag`, t.preis2.betrag || '', 'class="r" inputmode="decimal" placeholder="Betrag" aria-label="Betrag der zweiten Preiszeile"')}</td>
-              <td><button class="btn small ghost" data-of="p2-del" data-t="${i}" title="Zweite Preiszeile entfernen">×</button></td></tr>`
-            : `<tr><td colspan="7"><button class="btn small" data-of="p2-neu" data-t="${i}" title="Zum Beispiel «Preis pro Folge»">+ zweite Preiszeile</button></td></tr>`}</tfoot>
+            ${t.rabatt ? `<tr><td colspan="5"><div class="of-pzeile"><span class="of-platz"></span>${feld(`t.${i}.rabatt.label`, t.rabatt.label, 'class="of-plabel" placeholder="Rabatt" aria-label="Bezeichnung des Rabatts"')}<span class="dim">wird vom Preis abgezogen</span></div></td>
+              <td>${feld(`t.${i}.rabatt.betrag`, t.rabatt.betrag || '', 'class="r" inputmode="decimal" placeholder="Betrag" aria-label="Betrag des Rabatts"')}</td>
+              <td><button class="btn small ghost" data-of="rab-del" data-t="${i}" title="Rabatt entfernen">×</button></td></tr>` : ''}
+            ${t.preis2 ? `<tr><td colspan="5"><div class="of-pzeile"><span class="of-platz"></span>${feld(`t.${i}.preis2.label`, t.preis2.label, 'class="of-plabel" placeholder="Preis pro Folge" aria-label="Bezeichnung der zweiten Preiszeile"')}${t.rabatt ? '<span class="dim">Preis minus Rabatt</span>' : ''}</div></td>
+              <td class="r num">${t.rabatt ? `<b id="os-e${i}">${O.fr(O.preis2Betrag(t))}</b>` : feld(`t.${i}.preis2.betrag`, t.preis2.betrag || '', 'class="r" inputmode="decimal" placeholder="Betrag" aria-label="Betrag der zweiten Preiszeile"')}</td>
+              <td><button class="btn small ghost" data-of="p2-del" data-t="${i}" title="Zweite Preiszeile entfernen">×</button></td></tr>` : ''}
+            ${t.rabatt && t.preis2 ? '' : `<tr><td colspan="7">${t.rabatt ? '' : `<button class="btn small" data-of="rab-neu" data-t="${i}" title="Eine Zeile, deren Betrag vom Preis abgezogen wird, zum Beispiel «Beitrag Fabio Canetg GmbH»">+ Rabatt</button> `}${t.preis2 ? '' : `<button class="btn small" data-of="p2-neu" data-t="${i}" title="Zum Beispiel «Preis pro Folge»">+ zweite Preiszeile</button>`}</td></tr>`}</tfoot>
         </table>
       </section>`;
     }
@@ -285,6 +288,7 @@
       if (pfad === 'art') { doc.art = wert; return; }
       let ziel = doc.teile[+teile[1]];
       let i = 2;
+      if (teile[2] === 'rabatt') { if (!ziel.rabatt) return; ziel.rabatt[teile[3]] = teile[3] === 'betrag' ? Math.abs(parseFloat(String(wert).replace(/[’'\s]/g, '').replace(',', '.')) || 0) : wert; return; }
       if (teile[2] === 'preis2') { if (!ziel.preis2) return; ziel.preis2[teile[3]] = teile[3] === 'betrag' ? (parseFloat(String(wert).replace(/[’'\s]/g, '').replace(',', '.')) || 0) : wert; return; }
       if (teile[i] === 'b') { ziel = ziel.bloecke[+teile[i + 1]]; i += 2; }
       if (teile[i] === 'z') { ziel = ziel.zeilen[+teile[i + 1]]; i += 2; }
@@ -295,6 +299,7 @@
     function summen(d) {
       d.teile.forEach((t, i) => {
         const e = $(`#os-t${i}`); if (e) e.innerHTML = `<b>${O.fr(O.teilTotal(t))}</b>`;
+        const ee = $(`#os-e${i}`); if (ee) ee.textContent = O.fr(O.preis2Betrag(t));
         t.bloecke.forEach((b, j) => {
           const eb = $(`#os-b${i}-${j}`); if (eb) eb.textContent = O.fr(O.blockTotal(b));
           b.zeilen.forEach((z, k) => { const ez = $(`#os-z${i}-${j}-${k}`); if (ez) { ez.textContent = O.preisText(z); ez.classList.toggle('of-ink', z.preis === 'inklusive'); } });
@@ -420,6 +425,11 @@
           const f = $(`[data-pfad="t.${ds.t}.b.${ds.b}.z.${z.length - 1}.was"]`); if (f) f.focus(); break;
         }
         case 'p2-neu': { o.doc.teile[+ds.t].preis2 = { label: 'Preis pro Folge', betrag: 0 }; persist(); render(); const f = $(`[data-pfad="t.${ds.t}.preis2.betrag"]`); if (f) f.focus(); break; }
+        case 'rab-neu': { const tt = o.doc.teile[+ds.t]; tt.rabatt = { label: 'Rabatt', betrag: 0 };
+          // Der Preis nach Abzug braucht eine eigene Zeile.
+          if (!tt.preis2) tt.preis2 = { label: 'Preis nach Abzug', betrag: 0 };
+          persist(); render(); const f = $(`[data-pfad="t.${ds.t}.rabatt.label"]`); if (f) { f.focus(); f.select(); } break; }
+        case 'rab-del': o.doc.teile[+ds.t].rabatt = null; persist(); render(); break;
         case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
         case 'verk-weg': { p.kundeLinks = (p.kundeLinks || []).filter((k) => k !== ds.key); persist(); render(); break; }
         case 'ab-pdf': auftragsbestaetigung(p); break;

@@ -192,5 +192,10 @@ console.log('Alle Prüfungen bestanden.');
   assert.ok(ab.vorne.includes('Muster &amp; Co. AG<br>Weg 1<br>3000 Bern<br>Schweiz')); assert.ok(!/XX/.test(ab.vorne)); assert.ok(!ab.vorne.includes('AGB'));
   assert.ok(ab.hinten.includes('<h1>AGB</h1>')); assert.ok(ab.hinten.includes('Rund 20% und <i>Buyout</i>.')); assert.ok(!ab.hinten.includes('Kommentar'));
   const hb = O.html(d, { bestaetigung: ab }); assert.ok(hb.indexOf('class="brief"') < hb.indexOf('class="folie')); assert.ok(hb.indexOf('class="brief hinten"') > hb.lastIndexOf('class="folie'));
+  // Rabatt zwischen den Preiszeilen
+  const d3 = O.normalize(JSON.parse(JSON.stringify(d))); d3.teile[0].rabatt = { label: 'Beitrag', betrag: 750 }; d3.teile[0].preis2 = { label: 'Preis nach Abzug', betrag: 0 };
+  assert.strictEqual(O.teilEnd(d3.teile[0]), 3000); assert.strictEqual(O.preis2Betrag(d3.teile[0]), 3000); assert.ok(O.kurz(d3).startsWith('1a 3000.00'));
+  const h3 = O.html(d3); assert.ok(h3.includes('−750.00 Fr.')); assert.ok(h3.includes('3000.00 Fr.')); assert.ok(h3.indexOf('Beitrag') < h3.indexOf('Preis nach Abzug'));
+  const l3 = O.ausLatex(O.latex(d3)).doc; assert.deepStrictEqual(l3.teile[0].rabatt, { label: 'Beitrag', betrag: 750 }); assert.strictEqual(l3.teile[0].preis2.label, 'Preis nach Abzug');
   console.log('Offerten bestanden.');
 }

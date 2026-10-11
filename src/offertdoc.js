@@ -26,6 +26,7 @@
         titel: text(t && t.titel),
         text: text(t && t.text),
         preisLabel: text(t && t.preisLabel).trim() || 'Preis',
+        rabatt: t && t.rabatt && typeof t.rabatt === 'object' ? { label: text(t.rabatt.label).trim() || 'Rabatt', betrag: Math.abs(zahl(t.rabatt.betrag)) } : null,
         preis2: t && t.preis2 && typeof t.preis2 === 'object' ? { label: text(t.preis2.label).trim() || 'Preis pro Folge', betrag: zahl(t.preis2.betrag) } : null,
         bloecke: (Array.isArray(t && t.bloecke) ? t.bloecke : []).map((b) => ({
           titel: text(b && b.titel),
@@ -66,7 +67,11 @@
   const preisText = (z) => (z.preis === 'inklusive' ? 'inklusive' : fr(zeilenPreis(z)));
   const kopf = (d, t) => `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}:`;
   /** Kurzfassung für Listen: «1a 3750.00 · 1b 3320.00» */
-  const kurz = (d) => d.teile.map((t) => `${t.nummer ? t.nummer + ' ' : ''}${round2(teilTotal(t)).toFixed(2)}`).join(' · ');
+  /** Preis nach Abzug eines Rabatts. */
+  const teilEnd = (t) => round2(teilTotal(t) - (t.rabatt ? t.rabatt.betrag : 0));
+  /** Betrag der zweiten Preiszeile: mit Rabatt der Preis nach Abzug, sonst der von Hand eingetragene Betrag. */
+  const preis2Betrag = (t) => (t.rabatt ? teilEnd(t) : t.preis2 ? t.preis2.betrag : 0);
+  const kurz = (d) => d.teile.map((t) => `${t.nummer ? t.nummer + ' ' : ''}${teilEnd(t).toFixed(2)}`).join(' · ');
 
   /* ---------- PDF (HTML) ---------- */
 
@@ -82,7 +87,7 @@
   function schriftFuer(t, einfach) {
     const breite = SEITE.b - 2 * SEITE.rand;
     const fest = einfach ? 34 : 112;                      // Spalten rechts von «Was», in mm
-    let laengste = 12, zeilen = t.preis2 ? 3.2 : 2;                        // Kopf- und Preiszeile
+    let laengste = 12, zeilen = 2 + (t.preis2 ? 1 : 0) + (t.rabatt ? 1 : 0);                        // Kopf- und Preiszeile
     for (const b of t.bloecke) {
       if (b.titel.trim()) { zeilen++; laengste = Math.max(laengste, b.titel.length * 1.08); }
       for (const z of b.zeilen) { zeilen++; laengste = Math.max(laengste, z.was.length); }
@@ -119,7 +124,8 @@
         <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th class="r">Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
         <tbody>${zeilen}</tbody>
         <tfoot><tr><td colspan="${spalten - 1}">${esc(t.preisLabel)}</td><td class="r">${fr(teilTotal(t))}</td></tr>
-          ${t.preis2 ? `<tr class="p2"><td colspan="${spalten - 1}">${esc(t.preis2.label)}</td><td class="r">${fr(t.preis2.betrag)}</td></tr>` : ''}</tfoot>
+          ${t.rabatt ? `<tr class="p2 rab"><td colspan="${spalten - 1}">${esc(t.rabatt.label)}</td><td class="r">−${fr(t.rabatt.betrag)}</td></tr>` : ''}
+          ${t.preis2 ? `<tr class="p2"><td colspan="${spalten - 1}">${esc(t.preis2.label)}</td><td class="r">${fr(preis2Betrag(t))}</td></tr>` : ''}</tfoot>
       </table></main>
       <footer>Alle Preise exkl. Mehrwertsteuer</footer></section>`;
   }
@@ -150,7 +156,7 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: .42em .9em .42em 0; text-align: left; white-space: nowrap; line-height: 1.1; }
     th:last-child, td:last-child { padding-right: 0; }
-    th { font-size: .8em; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #fff; background: ${TEAL_DUNKEL}; padding-top: .7em; padding-bottom: .7em; }
+    th { font-size: .8em; font-weight: 700; letter-spacing: .07em; color: #fff; background: ${TEAL_DUNKEL}; padding-top: .7em; padding-bottom: .7em; }
     th:first-child { padding-left: .75em; } th:last-child { padding-right: .75em; }
     td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
     td:first-child, th:first-child { width: 100%; }
@@ -283,7 +289,8 @@
     });
     const summe = (label, betrag) => (einfach ? `\\textbf{${tex(label)}} & \\textbf{${tex(fr(betrag))}} \\\\ \\hline` : `\\textbf{${tex(label)}} & & & & \\textbf{${tex(fr(betrag))}} \\\\ \\hline`);
     out.push('\\hline', summe(t.preisLabel, teilTotal(t)));
-    if (t.preis2) out.push(summe(t.preis2.label, t.preis2.betrag));
+    if (t.rabatt) out.push(summe(t.rabatt.label, -t.rabatt.betrag).replace(/\\textbf\{-/, '\\textbf{--'));
+    if (t.preis2) out.push(summe(t.preis2.label, preis2Betrag(t)));
     out.push('\\end{tabularx}', '', '\\bigskip\\bigskip', '');
     return out.join('\n');
   }
@@ -410,6 +417,8 @@ ${FORMAT}
   }
   /** Taugt eine Zeile als Titel? Fliesstext (lang oder mit Punkt am Ende) nicht. */
   const alsTitel = (z) => z.length <= 90 && !/[.;,]$/.test(z.trim());
+  /** Beginnt der Betrag mit einem Minuszeichen (Rabattzeile)? */
+  const istAbzug = (z) => /^\s*[-−–]{1,2}\s*\d/.test(text(z));
   const istSumme = (was) => /^(preis|total|gesamt(preis|total)?|summe)\b/i.test(text(was).trim());
 
   /** Liest LaTeX-Code (aus der App oder eigene Vorlagen mit Tabellen) in die feste Form ein. */
@@ -441,8 +450,9 @@ ${FORMAT}
         if (!zellen.some(Boolean)) continue;
         const rest = zellen.slice(1).filter(Boolean);
         if (/^was$/i.test(zellen[0])) continue;
-        if (fett && istSumme(zellen[0]) && rest.length <= 1) {
+        if (fett && rest.length <= 1 && (istSumme(zellen[0]) || t._summe)) {
           if (!t._summe) { t._summe = true; t.preisLabel = zellen[0]; }
+          else if (istAbzug(rest[0]) && !t.rabatt && !t.preis2) t.rabatt = { label: zellen[0], betrag: Math.abs(betragAus(rest[0]) || 0) };
           else if (!t.preis2) t.preis2 = { label: zellen[0], betrag: betragAus(rest[0]) || 0 };
           continue;
         }
@@ -534,7 +544,9 @@ ${FORMAT}
           const summe = istSumme(zellen[0]) && !zellen[1] && !zellen[2] && !zellen[3] && betragAus(zellen[4]) != null;
           if (tab.summe) {
             // Nach der Preiszeile kann eine zweite folgen («Preis pro Folge»); alles andere gehört nicht mehr zur Tabelle.
-            if (summe && !t.preis2) { t.preis2 = { label: zellen[0], betrag: betragAus(zellen[4]) }; continue; }
+            const nach = zellen[0] && !zellen[1] && !zellen[2] && !zellen[3] && betragAus(zellen[4]) != null;
+            if (nach && istAbzug(zellen[4]) && !t.rabatt && !t.preis2) { t.rabatt = { label: zellen[0], betrag: Math.abs(betragAus(zellen[4])) }; continue; }
+            if (nach && !t.preis2 && (summe || t.rabatt)) { t.preis2 = { label: zellen[0], betrag: betragAus(zellen[4]) }; continue; }
             tab = null; block = null;
           } else if (summe) { t.preisLabel = zellen[0]; tab.summe = true; continue; }
           else {
@@ -572,5 +584,5 @@ ${FORMAT}
 
   const leer = (art) => normalize({ art, teile: [{ nummer: '', titel: '', text: '', bloecke: [{ titel: '', zeilen: [{ was: '', aufwand: '', ansatz: 0, preis: 'auto' }] }] }] });
 
-  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer, texZuHtml, bestaetigung, datumLang };
+  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, teilEnd, preis2Betrag, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer, texZuHtml, bestaetigung, datumLang };
 });
