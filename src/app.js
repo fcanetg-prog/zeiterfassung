@@ -249,8 +249,14 @@
       vorschlag: !!b.vorschlag, sicher: !!b.sicher, bankText: b.bankText || '', bankSchluessel: b.bankSchluessel || '', bankDatum: b.bankDatum || null, bankNr: Number.isFinite(b.bankNr) ? b.bankNr : null,
     }));
     const OD = window.OffertDoc;
+    // Frühere Fassungen kannten die Zuweisung zu einem einzelnen Projekt oder nur zum Kundennamen.
+    const alteKundenLinks = (o) => {
+      const key = (q) => `${+q.jahr}\t${q.bereich || ''}\t${q.kunde || ''}`;
+      const treffer = d.projects.filter((q) => q.kunde && (q.offerteId === o.id || (o.kundeLink && q.kunde === o.kundeLink)));
+      return [...new Set(treffer.map(key))];
+    };
     out.offerten = (d.offerten || []).filter((o) => o && o.id).map((o) => ({
-      id: o.id, name: o.name || '', kunde: o.kunde || '', kundeLink: o.kundeLink || ((d.projects.find((q) => q.offerteId === o.id) || {}).kunde) || '', status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
+      id: o.id, name: o.name || '', kunde: o.kunde || '', kundeLinks: Array.isArray(o.kundeLinks) ? o.kundeLinks.map(String) : alteKundenLinks(o), status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
       zugesagtId: o.zugesagtId || null, erstellt: o.erstellt || 0, mod: o.mod || 0,
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc) })),
     }));
@@ -792,7 +798,7 @@
             ${fld('d-kunde', 'Kunde', 'kunde', 'list="dl-kunde"')}${fld('d-name', 'Projekt', 'name')}
             ${fld('d-bereich', 'Bereich', 'bereich', 'list="dl-bereich"')}${fld('d-kategorie', 'Unterbereich', 'kategorie', 'list="dl-kategorie"')}
           </div>
-          ${OFF.projektZeile(d.kunde)}
+          ${OFF.projektZeile(d)}
           ${datalist('dl-kunde', 'kunde')}${datalist('dl-bereich', 'bereich')}${datalist('dl-kategorie', 'kategorie')}
           <div class="cols2">
             <div class="fld"><label>Jahr</label>${seg('jahr', jahrOptionen(d.jahr).map((y) => [y, String(y)]))}</div>

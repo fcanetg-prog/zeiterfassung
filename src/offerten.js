@@ -49,31 +49,38 @@
         </td></tr>`;
     }
 
-    /* Zuweisung zu einem Kunden der Zeiterfassung: In dessen Projekten lässt sich so die neuste Offerte öffnen. */
-    function kunden() {
-      return [...new Set(state.data.projects.filter((x) => x.abrechnung !== 'intern' && x.kunde).map((x) => x.kunde))].sort((a, b) => a.localeCompare(b, 'de'));
+    /* Zuweisung zu Kunden aus dem Reiter Projekte. Ein Kunde zählt pro Jahr und Bereich einzeln
+       (z. B. «Bank WIR · Moderationen · 2027»); eine Offerte kann zu mehreren gehören. */
+    const kKey = (x) => `${x.jahr}\t${x.bereich}\t${x.kunde}`;
+    function kundenEintraege() {
+      const m = new Map();
+      for (const x of state.data.projects) if (x.abrechnung !== 'intern' && x.kunde && !m.has(kKey(x))) m.set(kKey(x), { key: kKey(x), jahr: x.jahr, bereich: x.bereich, kunde: x.kunde });
+      return [...m.values()].sort((a, b) => a.kunde.localeCompare(b.kunde, 'de') || b.jahr - a.jahr || a.bereich.localeCompare(b.bereich, 'de'));
     }
+    const kLabel = (e) => [e.kunde, e.bereich, e.jahr].filter(Boolean).join(' · ');
+    const kAusKey = (key) => { const [jahr, bereich, ...rest] = key.split('\t'); return { key, jahr: +jahr, bereich, kunde: rest.join(' ') }; };
+    const kunden = () => [...new Set(state.data.projects.filter((x) => x.abrechnung !== 'intern' && x.kunde).map((x) => x.kunde))].sort((a, b) => a.localeCompare(b, 'de'));
     function verknuepfZeile(p) {
-      const alle = kunden();
-      const fehlt = p.kundeLink && !alle.includes(p.kundeLink);
+      const alle = kundenEintraege(), gewaehlt = p.kundeLinks || [];
+      const frei = alle.filter((e) => !gewaehlt.includes(e.key));
       return `<tr class="of-vz"><td colspan="3"><div class="of-verk">
-        <label for="ok-${p.id}" class="dim">Gehört zu Kunde:</label>
-        <select id="ok-${p.id}" data-of="verk-kunde" data-pid="${p.id}">
-          <option value="">nicht zugewiesen</option>
-          ${fehlt ? `<option value="${esc(p.kundeLink)}" selected>${esc(p.kundeLink)} (kein Projekt mehr)</option>` : ''}
-          ${alle.map((k) => `<option value="${esc(k)}" ${p.kundeLink === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
+        <span class="dim">Gehört zu Kunde:</span>
+        ${gewaehlt.map((key) => { const e = alle.find((x) => x.key === key) || kAusKey(key); return `<span class="of-chip">${esc(kLabel(e))}<button data-of="verk-weg" data-pid="${p.id}" data-key="${esc(key)}" title="Zuweisung entfernen" aria-label="Zuweisung entfernen">×</button></span>`; }).join('')}
+        <select data-of="verk-neu" data-pid="${p.id}" aria-label="Einem Kunden zuweisen">
+          <option value="">${gewaehlt.length ? 'weiteren Kunden hinzufügen …' : 'Kunde wählen …'}</option>
+          ${frei.map((e) => `<option value="${esc(e.key)}">${esc(kLabel(e))}</option>`).join('')}
         </select></div></td></tr>`;
     }
-    /** Zeilen im Projektfenster: die neuste Offerte jedes Offerten-Projekts, das dem Kunden zugewiesen ist. */
-    function projektZeile(kunde) {
-      const ps = kunde ? liste().filter((p) => p.kundeLink === kunde && p.versionen.length) : [];
+    /** Zeilen im Projektfenster: die neuste Offerte jedes Offerten-Eintrags, der diesem Kunden (Jahr, Bereich) zugewiesen ist. */
+    function projektZeile(d) {
+      const key = d && d.kunde ? kKey(d) : null;
+      const ps = key ? liste().filter((p) => (p.kundeLinks || []).includes(key) && p.versionen.length) : [];
       if (!ps.length) return '';
       const neuste = (p) => fassungen(p).pop();
       ps.sort((a, b) => (neuste(a).datum < neuste(b).datum ? 1 : -1));
-      const status = { offen: 'offen', zugesagt: 'zugesagt', abgesagt: 'abgesagt', abgeschlossen: 'abgeschlossen' };
-      return `<div class="fld of-pfld"><label>${ps.length === 1 ? 'Offerte' : 'Offerten'} für ${esc(kunde)}</label>
+      return `<div class="fld of-pfld"><label>${ps.length === 1 ? 'Offerte' : 'Offerten'} für ${esc(d.kunde)}</label>
         ${ps.map((p) => { const v = neuste(p), n = p.versionen.length; return `<div class="row">
-          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${status[p.status]}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
+          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
           <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button>
           <button class="btn small" type="button" data-action="offerte-zeigen" data-id="${p.id}">Unter Offerten zeigen</button></div>`; }).join('')}</div>`;
     }
@@ -134,11 +141,7 @@
       const n = state.off.neu;
       if (!n) return '';
       const zu = n.pid && projekt(n.pid);
-      const offene = liste().filter((p) => p.status === 'offen').sort((x, y) => pTitel(x).localeCompare(pTitel(y), 'de'));
       return `<form class="pane of-neu" data-of-form="neu" autocomplete="off">
-        <div><label for="on-pid">Gehört zu</label><select id="on-pid" data-of="n-feld" data-key="pid">
-          <option value="">Neuer Kunde / neues Projekt</option>
-          ${offene.map((p) => `<option value="${p.id}" ${n.pid === p.id ? 'selected' : ''}>${esc(pTitel(p))} (${p.versionen.length} ${p.versionen.length === 1 ? 'Offerte' : 'Offerten'})</option>`).join('')}</select></div>
         <div><label for="on-kunde">Kunde</label><input id="on-kunde" type="text" value="${esc(zu ? zu.kunde : n.kunde)}" data-of="n-feld" data-key="kunde" list="on-kunden" ${zu ? 'disabled' : ''}><datalist id="on-kunden">${kunden().map((k) => `<option value="${esc(k)}">`).join('')}</datalist></div>
         <div><label for="on-name">Projekt</label><input id="on-name" type="text" value="${esc(zu ? zu.name : n.name)}" data-of="n-feld" data-key="name" ${zu ? 'disabled' : ''}></div>
         <div><label for="on-datum">Datum</label><input id="on-datum" type="date" value="${esc(n.datum)}" data-of="n-feld" data-key="datum"></div>
@@ -294,7 +297,7 @@
       const v = { id: uid('ov'), datum: n.datum || heute, erstellt: Date.now(), doc };
       let p = n.pid && projekt(n.pid);
       if (p) p.versionen.push(v);
-      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLink: '', status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
+      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLinks: [], status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
       state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: v.id };
       persist(); render();
     }
@@ -385,6 +388,7 @@
         }
         case 'p2-neu': { o.doc.teile[+ds.t].preis2 = { label: 'Preis pro Folge', betrag: 0 }; persist(); render(); const f = $(`[data-pfad="t.${ds.t}.preis2.betrag"]`); if (f) f.focus(); break; }
         case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
+        case 'verk-weg': { p.kundeLinks = (p.kundeLinks || []).filter((k) => k !== ds.key); persist(); render(); break; }
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
         // LaTeX-Code einfügen
@@ -435,6 +439,11 @@
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
         if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
       }
+      else if (a === 'verk-neu' && el.value) { const zp = projekt(el.dataset.pid); if (zp) { (zp.kundeLinks || (zp.kundeLinks = [])).push(el.value); persist(); render(); toast(`Zugewiesen: ${kLabel(kAusKey(el.value))}`); } }
+      else if (a === 'n-aus' && el.value && state.off.neu) {
+        const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
+        if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
+      }
       else if (a === 'verk-kunde') { const zp = projekt(el.dataset.pid); if (zp) { zp.kundeLink = el.value; persist(); toast(el.value ? `Dem Kunden ${el.value} zugewiesen` : 'Zuweisung entfernt'); } }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
@@ -444,7 +453,6 @@
         const x = state.data.projects.find((q) => q.id === el.value);
         if (x) { x.offerteId = el.dataset.pid; persist(); render(); toast(`Verknüpft mit ${zLabel(x)}`); }
       }
-      else if (a === 'n-feld' && el.dataset.key === 'pid') { const zp = projekt(el.value), lz = zp && fassungen(zp).pop(); if (lz && !state.off.neu.doc) state.off.neu.art = lz.doc.art; render(); }
     });
 
     return { view, beginneMit, projektZeile, oeffneAktuelle, zeige };
