@@ -6,8 +6,8 @@
   'use strict';
 
   const ARTEN = { offerte: 'Offerte', kostenvoranschlag: 'Kostenvoranschlag' };
-  const PREIS = ['auto', 'inklusive', 'offeriert', 'null'];   // berechnet, «inklusive» und «offeriert» (nicht verrechnet), 0.00 (Position entfällt)
-  const OHNE = { inklusive: 'inklusive', offeriert: 'offeriert' };   // Wörter statt eines Betrags
+  const PREIS = ['auto', 'inklusive', 'null'];   // berechnet, «inklusive» (nicht verrechnet), 0.00 (Position entfällt)
+  const OHNE = { inklusive: 'inklusive' };   // Wort statt eines Betrags
   const round2 = (x) => Math.round(x * 100 + 1e-6) / 100;
   const zahl = (x) => {
     if (typeof x === 'number') return isFinite(x) ? x : 0;
@@ -35,7 +35,8 @@
             was: text(z && z.was),
             aufwand: text(z && z.aufwand).trim(),
             ansatz: zahl(z && z.ansatz),
-            preis: PREIS.includes(z && z.preis) ? z.preis : 'auto',
+            // «offeriert» aus alten Offerten heisst dasselbe wie «inklusive»: wird nicht verrechnet.
+            preis: z && z.preis === 'offeriert' ? 'inklusive' : PREIS.includes(z && z.preis) ? z.preis : 'auto',
           })),
         })),
       })),

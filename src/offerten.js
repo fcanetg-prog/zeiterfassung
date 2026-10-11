@@ -282,7 +282,7 @@
               <td>${feld(`t.${i}.b.${j}.z.${k}.aufwand`, z.aufwand, 'placeholder="2h, pauschal" aria-label="Aufwand"')}</td>
               <td>${feld(`t.${i}.b.${j}.z.${k}.ansatz`, z.ansatz || '', 'class="r" inputmode="decimal" aria-label="Ansatz"')}</td>
               <td><select data-of="f" data-pfad="t.${i}.b.${j}.z.${k}.preis" aria-label="Preisart">
-                <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="offeriert" ${z.preis === 'offeriert' ? 'selected' : ''}>offeriert</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
+                <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
               <td class="r num ${(z.preis === 'inklusive' || z.preis === 'offeriert') ? 'of-ink' : ''}" id="os-z${i}-${j}-${k}">${O.preisText(z)}</td><td></td>
               <td><button class="btn small ghost" data-of="z-del" data-t="${i}" data-b="${j}" data-z="${k}" title="Zeile löschen">×</button></td></tr>`).join('')}
             <tr class="of-plus"><td colspan="7"><button class="btn small" data-of="z-neu" data-t="${i}" data-b="${j}">+ Zeile</button></td></tr>`).join('')}
