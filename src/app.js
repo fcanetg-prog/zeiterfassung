@@ -56,6 +56,7 @@
     async invoicePdf() { return { fehler: ['Rechnungen als PDF gibt es nur in der Desktop-App.'] }; },
     async invoicePush() { return { ok: false, fehler: 'Nur in der Desktop-App.' }; },
     async savePdf() { return { fehler: 'PDF gibt es nur in der Desktop-App.' }; },
+    async saveText() { return { fehler: 'Dateien speichert nur die Desktop-App.' }; },
     openText() {
       return new Promise((res) => {
         const inp = document.createElement('input'); inp.type = 'file';
@@ -99,13 +100,15 @@
 
   /* Änderungsstempel: Damit zwei Rechner ihre Stände zusammenführen können, bekommt jedes geänderte
      Projekt und jeder geänderte Zeiteintrag beim Speichern die aktuelle Zeit, Gelöschtes einen Löschvermerk. */
-  let abbild = { p: new Map(), e: new Map(), b: new Map(), k: {}, s: '' };
+  let abbild = { p: new Map(), e: new Map(), b: new Map(), o: new Map(), v: new Map(), k: {}, s: '' };
   const ohneMod = (r) => JSON.stringify(Object.assign({}, r, { mod: undefined }));
   function merkeAbbild() {
     abbild = {
       p: new Map(state.data.projects.map((r) => [r.id, ohneMod(r)])),
       e: new Map(state.data.entries.map((r) => [r.id, ohneMod(r)])),
       b: new Map(state.data.buchungen.map((r) => [r.id, ohneMod(r)])),
+      o: new Map(state.data.offerten.map((r) => [r.id, ohneMod(r)])),
+      v: new Map(state.data.offertVorlagen.map((r) => [r.id, ohneMod(r)])),
       k: Object.fromEntries(Object.entries(state.data.kontenplaene).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
       s: JSON.stringify(state.data.settings),
     };
@@ -114,7 +117,7 @@
     const jetzt = Date.now();
     const d = state.data;
     if (!d.geloescht) d.geloescht = {};
-    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b]]) {
+    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v]]) {
       const da = new Set();
       for (const r of liste) {
         da.add(r.id);
@@ -232,6 +235,13 @@
       soll: String(b.soll == null ? '' : b.soll), haben: String(b.haben == null ? '' : b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
       vorschlag: !!b.vorschlag, sicher: !!b.sicher, bankText: b.bankText || '', bankSchluessel: b.bankSchluessel || '', bankDatum: b.bankDatum || null, bankNr: Number.isFinite(b.bankNr) ? b.bankNr : null,
     }));
+    const OD = window.OffertDoc;
+    out.offerten = (d.offerten || []).filter((o) => o && o.id).map((o) => ({
+      id: o.id, name: o.name || '', kunde: o.kunde || '', status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
+      zugesagtId: o.zugesagtId || null, erstellt: o.erstellt || 0, mod: o.mod || 0,
+      versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, doc: OD.normalize(v.doc) })),
+    }));
+    out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
     out.kontenplaene = {};
     for (const [jahr, plan] of Object.entries(d.kontenplaene || {})) {
       out.kontenplaene[jahr] = { mod: plan.mod || 0, zeilen: (plan.zeilen || []).map((z) => ({ sektion: z.sektion || '', gruppe: z.gruppe || '', konto: z.konto || '', text: z.text || '', bklasse: String(z.bklasse || ''), summe_in: z.summe_in || '' })) };
@@ -262,6 +272,7 @@
   const NAV = [
     ['erfassen', 'Zeiterfassung'],
     ['projekte', 'Projekte'],
+    ['offerten', 'Offerten'],
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung'],
     ['einstellungen', 'Einstellungen'],
@@ -301,7 +312,7 @@
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
 
-    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), einstellungen: viewEinstellungen };
+    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), offerten: () => OFF.view(), einstellungen: viewEinstellungen };
     const wocheH = weekTotal(heute);
     $('#app').innerHTML = `
       <nav class="side">
@@ -1214,6 +1225,13 @@
     const r = await api.importFile();
     if (!r || r.canceled) return;
     if (r.error) { toast(r.error, { fehler: true }); return; }
+    if (r.data && r.data.typ === 'offertvorlage') {
+      if (!state.data) state.data = C.emptyData();
+      state.data.offertVorlagen.push({ id: uid('ov'), name: r.data.name || 'Vorlage', doc: window.OffertDoc.normalize(r.data.doc), mod: 0 });
+      await persist(); state.view = 'offerten'; state.off.tab = 'vorlagen'; render();
+      toast('Vorlage übernommen. Alles andere ist unverändert.');
+      return;
+    }
     if (r.data && r.data.typ === 'buchhaltung') {
       if (!state.data) state.data = C.emptyData();
       const j = +r.data.jahr, neueB = r.data.buchungen || [], alte = state.data.buchungen.filter((b) => b.jahr === j);
@@ -1252,6 +1270,7 @@
     }
     // Eine Importdatei ohne Buchhaltung (z. B. der Excel-Import) lässt die vorhandene Buchhaltung stehen.
     if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; }
+    if (state.data && !r.data.offerten && !r.data.offertVorlagen) { neu.offerten = state.data.offerten; neu.offertVorlagen = state.data.offertVorlagen; }
     neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;
     await persist({ ersetzen: true });
@@ -1433,6 +1452,7 @@
   }
 
   const BH = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid });
+  const OFF = window.Offerten({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
   window.__zeit = { state, render };
   start();
 })();

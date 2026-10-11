@@ -145,3 +145,25 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(bs.map((x) => x.id), ['z', 'x', 'w', 'y']);
   console.log('Bankabgleich bestanden.');
 }
+
+// Offerten
+{
+  const O = require('../src/offertdoc.js');
+  const d = O.normalize({ art: 'kostenvoranschlag', teile: [{ nummer: '1a', titel: 'Test & Co.', text: 'Die *Firma* offeriert.', bloecke: [
+    { titel: 'A', zeilen: [{ was: 'PM', aufwand: '2h', ansatz: 215, preis: 'inklusive' }, { was: 'Recherche', aufwand: '10h', ansatz: '215' }] },
+    { titel: 'B', zeilen: [{ was: 'Vor Ort', aufwand: '4h', ansatz: 275 }, { was: 'Abend', aufwand: 'pauschal', ansatz: 500, preis: 'null' }, { was: 'Auswärts', aufwand: 'pauschal', ansatz: 500 }] }] },
+    { titel: 'Liste', bloecke: [{ zeilen: [{ was: 'Werbewoche', ansatz: 1980 }] }] }] });
+  assert.strictEqual(O.blockTotal(d.teile[0].bloecke[0]), 2150); assert.strictEqual(O.teilTotal(d.teile[0]), 3750); assert.strictEqual(O.teilTotal(d.teile[1]), 1980);
+  assert.strictEqual(O.ansatzText(d.teile[0].bloecke[0].zeilen[1]), '215 Fr./h'); assert.strictEqual(O.ansatzText(d.teile[0].bloecke[1].zeilen[1]), '500.00 Fr.');
+  assert.ok(!O.istEinfach(d.teile[0])); assert.ok(O.istEinfach(d.teile[1])); assert.strictEqual(O.kurz(d), '1a 3750.00 · 1980.00');
+  const h = O.html(d); assert.ok(h.includes('Kostenvoranschlag 1a:')); assert.ok(h.includes('Test &amp; Co.')); assert.ok(h.includes('<i>Firma</i>')); assert.ok(h.includes('3750.00 Fr.'));
+  assert.ok(O.html(Object.assign({}, d, { art: 'offerte' })).includes('Offerte 1a:'));
+  const t = O.latex(d); assert.ok(t.includes('Test \\& Co.')); assert.ok(t.includes('\\textit{Firma}')); assert.ok(t.includes('\\textbf{3750.00 Fr.}'));
+  const r = O.ausAntwort('Gerne:\n```json\n' + JSON.stringify(d) + '\n```\nFertig.'); assert.ok(!r.fehler); assert.deepStrictEqual(r.doc, d);
+  assert.ok(O.ausAntwort('kein json').fehler); assert.ok(O.ausAntwort('{"a":1}').fehler);
+  assert.ok(O.promptAnpassen(d).includes('"nummer": "1a"'));
+  const C2 = require('../src/calc.js');
+  const m = C2.mergeData({ projects: [], entries: [], offerten: [{ id: 'o1', status: 'offen', mod: 1 }] }, { projects: [], entries: [], offerten: [{ id: 'o1', status: 'zugesagt', mod: 2 }], offertVorlagen: [{ id: 'v1', mod: 1 }] });
+  assert.strictEqual(m.offerten[0].status, 'zugesagt'); assert.strictEqual(m.offertVorlagen.length, 1);
+  console.log('Offerten bestanden.');
+}

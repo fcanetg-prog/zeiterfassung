@@ -23,7 +23,7 @@
   }
 
   function emptyData() {
-    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {} };
+    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, offerten: [], offertVorlagen: [] };
   }
 
   /** Stunden pro Projekt: Map projectId -> Summe */
@@ -433,6 +433,7 @@
       settings: neuer.settings || a.settings || b.settings,
       settingsMod: neuer.settingsMod || 0,
       projects, entries, geloescht, buchungen, kontenplaene,
+      offerten: mergeList(a.offerten, b.offerten), offertVorlagen: mergeList(a.offertVorlagen, b.offertVorlagen),
       history: Object.assign({}, b.history || {}, a.history || {}),
     };
   }

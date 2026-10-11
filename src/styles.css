@@ -472,3 +472,51 @@ th.r { text-align: right; }
 .bh-zahl-panel td:first-child { width: 84px; } .bh-zahl-panel td:nth-child(2) { width: 90px; } .bh-zahl-panel td:last-child { width: 170px; padding-right: 0; }
 .bh-zahl-panel .x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
 .head.aus-kopf { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+
+/* ---------- Offerten ---------- */
+.of-zahl { display: inline-block; background: var(--line-soft); color: var(--ink, #1c2b2b); font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 6px; margin-left: 4px; line-height: 16px; }
+.seg button.on .of-zahl { background: rgba(255,255,255,.25); color: #fff; }
+.of-karte { padding: 10px 14px 8px; margin-bottom: 12px; }
+.of-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.of-kopf .of-kunde { font-weight: 700; width: 220px; font-size: 14px; }
+.of-kopf .of-name { width: 300px; font-size: 14px; }
+.of-liste { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.of-liste td { padding: 6px 6px 6px 0; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.of-liste tr:last-child td { border-bottom: 0; }
+.of-art { width: 250px; font-weight: 600; white-space: nowrap; }
+.of-kurz { color: var(--muted); }
+.of-akt { white-space: nowrap; }
+.of-haken { margin-right: 12px; font-weight: 600; cursor: pointer; }
+.of-haken input { vertical-align: -2px; margin-right: 4px; }
+.of-mehr { border: 0; background: none; color: var(--teal-deep); cursor: pointer; font-size: 12px; padding: 4px 0 2px; }
+.of-vname { width: 100%; min-width: 260px; font-weight: 600; }
+.of-neu { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 12px; }
+.of-neu label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.of-neu input { width: 220px; }
+.of-hilfe { padding: 14px 18px; margin-bottom: 12px; font-size: 13px; }
+.of-hilfe h2 { margin-bottom: 6px; } .of-hilfe ol { margin: 6px 0 12px 20px; padding: 0; } .of-hilfe .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.of-ebar label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.of-ebar .of-vname2 { width: 320px; }
+.of-fest { background: #fbeccb; border: 1px solid #e9cf96; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px; }
+.of-teil { padding: 12px 14px; margin-bottom: 12px; }
+.of-tkopf { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.of-tkopf .of-nr { width: 56px; font-weight: 700; } .of-tkopf .of-titel { flex: 1; font-weight: 600; min-width: 120px; }
+.of-umbruch { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.of-teil textarea { width: 100%; font: inherit; font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; margin-bottom: 8px; }
+.of-tab { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.of-tab th { text-align: left; font-size: 11.5px; color: var(--muted); padding: 2px 4px; border-bottom: 1px solid var(--line); }
+.of-tab th.r, .of-tab td.r { text-align: right; }
+.of-tab td { padding: 2px 3px; vertical-align: middle; }
+.of-tab input, .of-tab select { width: 100%; padding: 4px 6px; font-size: 12px; }
+.of-tab input.r { text-align: right; }
+.of-tab tr.of-bt td { padding-top: 8px; } .of-tab tr.of-bt input { font-weight: 700; }
+.of-tab tr.of-plus td { padding: 3px 3px 6px; border-bottom: 1px solid var(--line-soft); }
+.of-tab tfoot td { padding-top: 8px; } .of-preis { margin-left: 12px; }
+.of-ink { color: #d9691f; }
+.of-unten { margin-bottom: 30px; }
+.of-schleier { position: fixed; inset: 0; background: rgba(15, 35, 38, .45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.of-dialog { background: var(--surface); border-radius: 10px; padding: 18px 20px; width: min(720px, 92vw); box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.of-dialog h2 { margin-bottom: 6px; } .of-dialog p { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+.of-dialog label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; } .of-dialog label input { display: block; width: 100%; margin-top: 3px; }
+.of-dialog textarea { width: 100%; font-family: Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 12px; }
+.of-dialog .row { display: flex; gap: 10px; }

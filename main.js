@@ -183,12 +183,13 @@ function starteWaechter() {
 /* ---------- Rechnung als PDF ---------- */
 
 /** Lädt das HTML in ein unsichtbares Fenster und druckt es als A4-PDF. */
-async function renderPdf(html, fuss) {
+async function renderPdf(html, fuss, roh) {
   const tmp = path.join(app.getPath('temp'), `zeiterfassung-rechnung-${Date.now()}.html`);
   fs.writeFileSync(tmp, html, 'utf8');
   const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
   try {
     await w.loadFile(tmp);
+    if (roh) return await w.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true });
     if (fuss == null) return await w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
     // Mehrseitige Berichte: Ränder in Zoll, unten Datum und Seitenzahl wie im Banana-Ausdruck.
     const sicher = String(fuss).replace(/[<>&]/g, '');
@@ -379,11 +380,26 @@ if (!app.requestSingleInstanceLock()) {
         return { fehler: `Die Datei konnte nicht gelesen werden: ${err.message}` };
       }
     });
+    ipcMain.handle('text:save', async (_e, text, opts) => {
+      try {
+        const ordner = path.basename(String((opts && opts.ordner) || 'Berichte'));
+        const name = path.basename(String((opts && opts.name) || 'Datei.txt')).replace(/[\\/:*?"<>|]/g, '_');
+        const dir = path.join(dataDir(), ordner);
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, String(text), 'utf8');
+        if (!process.env.ZEITERFASSUNG_KEIN_OEFFNEN) shell.showItemInFolder(file);
+        return { path: file };
+      } catch (err) {
+        return { fehler: `Die Datei konnte nicht gespeichert werden: ${err.message}` };
+      }
+    });
     ipcMain.handle('pdf:save', async (_e, html, opts) => {
       try {
         const ordner = path.basename(String((opts && opts.ordner) || 'Berichte'));
         const name = path.basename(String((opts && opts.name) || 'Bericht.pdf')).replace(/[\\/:*?"<>|]/g, '_');
-        const pdf = await renderPdf(html, (opts && opts.fuss) || '');
+        // «roh»: Seitenformat und Ränder kommen aus dem Dokument selbst (z. B. Offerten im Querformat).
+        const pdf = await renderPdf(html, opts && opts.roh ? undefined : (opts && opts.fuss) || '', opts && opts.roh);
         const dir = path.join(dataDir(), ordner);
         fs.mkdirSync(dir, { recursive: true });
         const file = path.join(dir, name);
