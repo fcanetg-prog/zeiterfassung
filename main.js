@@ -367,6 +367,21 @@ function createWindow() {
       sandbox: true,
     },
   });
+  // Vergrössern und verkleinern wie im Browser: Ctrl und +, − oder 0, oder Ctrl und Mausrad. Die Stufe bleibt gespeichert.
+  const zoomSetzen = (stufe) => {
+    const z = Math.max(-3, Math.min(5, Math.round(stufe * 2) / 2));
+    win.webContents.setZoomLevel(z);
+    const cfg = readConfig(); if (cfg.zoom !== z) { cfg.zoom = z; try { writeConfig(cfg); } catch { /* egal */ } }
+  };
+  win.webContents.on('did-finish-load', () => { const z = readConfig().zoom; if (typeof z === 'number') win.webContents.setZoomLevel(z); });
+  win.webContents.on('zoom-changed', (_e, richtung) => zoomSetzen(win.webContents.getZoomLevel() + (richtung === 'in' ? 0.5 : -0.5)));
+  win.webContents.on('before-input-event', (ev, input) => {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
+    const k = input.key;
+    if (k === '+' || k === '=' || input.code === 'NumpadAdd') { zoomSetzen(win.webContents.getZoomLevel() + 0.5); ev.preventDefault(); }
+    else if (k === '-' || k === '_' || input.code === 'NumpadSubtract') { zoomSetzen(win.webContents.getZoomLevel() - 0.5); ev.preventDefault(); }
+    else if (k === '0' || input.code === 'Numpad0') { zoomSetzen(0); ev.preventDefault(); }
+  });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:|^mailto:/.test(url)) shell.openExternal(url);

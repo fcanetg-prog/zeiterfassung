@@ -188,7 +188,7 @@ console.log('Alle Prüfungen bestanden.');
     '\\noindent\\textbf{Auftraggeber}\\\\', '\\noindent XX\\\\', '\\noindent XX\\\\', '\\noindent XX', '', '\\section*{Unterschriften}', 'Bern, XX', '', '\\noindent \\textbf{Unterschrift Auftraggeber:}\\\\', '\\noindent XXXX', '',
     '\\newpage', '\\begin{center}', '{\\LARGE \\textbf{AGB}}', '\\end{center}', '\\section*{1. Test}', 'Rund 20\\% und \\textit{Buyout}. % Kommentar', '\\end{document}'].join('\n');
   const ab = O.bestaetigung(vorl, { offerteVom: '2026-10-08', auftraggeber: 'Muster & Co. AG\nWeg 1\n3000 Bern\nSchweiz', heute: '2026-10-11' });
-  assert.ok(ab.vorne.includes('<h1>Auftragsbestätigung</h1>')); assert.ok(ab.vorne.includes('Gemäss Offerte vom: 8. Oktober 2026')); assert.ok(ab.vorne.includes('Bern, 11. Oktober 2026'));
+  assert.ok(ab.vorne.includes('<h1>Vertrag</h1>')); assert.ok(ab.vorne.includes('Muster &amp; Co. AG (per E-Mail)')); assert.ok(ab.vorne.includes('Gemäss Offerte vom: 8. Oktober 2026')); assert.ok(ab.vorne.includes('Bern, 11. Oktober 2026'));
   assert.ok(ab.vorne.includes('Muster &amp; Co. AG<br>Weg 1<br>3000 Bern<br>Schweiz')); assert.ok(!/XX/.test(ab.vorne)); assert.ok(!ab.vorne.includes('AGB'));
   assert.ok(ab.hinten.includes('<h1>AGB</h1>')); assert.ok(ab.hinten.includes('Rund 20% und <i>Buyout</i>.')); assert.ok(!ab.hinten.includes('Kommentar'));
   const hb = O.html(d, { bestaetigung: ab }); assert.ok(hb.indexOf('class="brief"') < hb.indexOf('class="folie')); assert.ok(hb.indexOf('class="brief hinten"') > hb.lastIndexOf('class="folie'));

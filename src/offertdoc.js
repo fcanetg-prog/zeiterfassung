@@ -185,7 +185,7 @@
     const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t)).join('\n')}`;
     // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
     const b = m.bestaetigung;
-    return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Auftragsbestätigung' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
+    return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Vertrag' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
       ${b ? `<div class="brief">${b.vorne}</div>` : ''}
       ${folien}
       ${b && b.hinten ? `<div class="brief hinten">${b.hinten}</div>` : ''}</body></html>`;
@@ -243,7 +243,11 @@
     t = t.replace(/(Offerte vom:?\s*)X{2,}/, (_, v) => v + sicher(datumLang(a.offerteVom)));
     t = t.replace(/(Auftraggeber\}?\s*\\\\\s*\n)((?:\s*(?:\\noindent\s*)?X{2,}\s*(?:\\\\)?\s*\n?)+)/, (_, kopf) => `${kopf}${zeilen.map((z) => `\\noindent ${sicher(z)}`).join('\\\\\n')}\n`);
     t = t.replace(/(Bern,\s*)X{2,}/, (_, v) => v + sicher(datumLang(a.heute)));
-    t = t.replace(/X{4,}/g, sicher(zeilen[0] || ''));
+    t = t.replace(/X{4,}/g, `${sicher(zeilen[0] || '')} (per E-Mail)`);
+    // Auch der Auftragnehmer unterschreibt per E-Mail.
+    t = t.replace(/(Unterschrift Auftragnehmer:?\}?\s*\\\\\s*\n[^\n]*?)[ \t]*(\n|$)/, (m, v, ende) => (/per E-Mail/i.test(v) ? m : `${v} (per E-Mail)${ende}`));
+    // Das Dokument heisst «Vertrag».
+    t = t.replace(/(\\begin\{center\}[\s\S]*?)Auftragsbestätigung([\s\S]*?\\end\{center\})/, '$1Vertrag$2');
     const i = t.search(/\\(newpage|clearpage)\b/);
     return i < 0 ? { vorne: texZuHtml(t), hinten: '' } : { vorne: texZuHtml(t.slice(0, i)), hinten: texZuHtml('\\begin{document}' + t.slice(i).replace(/^\\(newpage|clearpage)/, '')) };
   }

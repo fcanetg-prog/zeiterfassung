@@ -1167,12 +1167,21 @@
         ${state.sync ? `<p class="hint ${state.sync.fehler ? 'warn' : ''}">${esc(state.sync.fehler || state.sync.text)}</p>` : ''}
       </section>
       <section class="sec"><h2>Offerten</h2>
-        <p>Titelbild der ersten Folie sowie die LaTeX-Vorlage für Auftragsbestätigung und AGB. Beides liegt im Ordner «Vorlagen» neben deinen Daten und gilt damit für beide Rechner.</p>
+        <p>Titelbild der ersten Folie sowie der Text für Vertrag und AGB. Beides liegt im Ordner «Vorlagen» neben deinen Daten und gilt damit für beide Rechner.</p>
         <div class="row">
-          <button class="btn" data-action="offert-agb">Vorlage für Auftragsbestätigung und AGB wählen</button><span class="${(state.info.offertBilder || {}).agb ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).agb ? 'vorhanden' : 'fehlt'}</span>
+          <button class="btn ${state.agbEdit ? '' : 'primary'}" data-action="agb-bearbeiten" ${state.agbEdit ? 'disabled' : ''}>Vertrag und AGB bearbeiten</button>
+          <button class="btn" data-action="offert-agb" title="Den ganzen Text durch eine LaTeX-Datei ersetzen">Aus LaTeX-Datei laden</button><span class="${(state.info.offertBilder || {}).agb ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).agb ? 'vorhanden' : 'fehlt'}</span>
           <button class="btn" data-action="offert-bild" data-art="titel">Titelbild wählen</button><span class="${(state.info.offertBilder || {}).titel ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).titel ? 'vorhanden' : 'fehlt: die Titelfolie ist einfarbig blau'}</span>
         </div>
       </section>
+      ${state.agbEdit ? `<section class="sec agb-edit"><h2>Vertrag und AGB bearbeiten</h2>
+        <p>Der Text ist LaTeX-Code. Überschriften stehen in <code>\\section*{…}</code>, Absätze sind durch eine Leerzeile getrennt, <code>\\textit{…}</code> setzt kursiv, <code>\\textbf{…}</code> fett, ein Prozentzeichen schreibst du als <code>\\%</code>. Die Platzhalter XX (Datum der Offerte, Auftraggeber, Datum) und XXXX (Unterschrift) füllt die App aus.</p>
+        <label for="agb-vorne">Vertrag (erste Seite)</label>
+        <textarea id="agb-vorne" rows="16" data-action="agb-feld" data-key="vorne" spellcheck="false">${esc(state.agbEdit.vorne)}</textarea>
+        <label for="agb-hinten">Allgemeine Vertragsbedingungen (AGB)</label>
+        <textarea id="agb-hinten" rows="26" data-action="agb-feld" data-key="hinten" spellcheck="false">${esc(state.agbEdit.hinten)}</textarea>
+        <div class="row"><button class="btn primary" data-action="agb-speichern">Speichern</button><button class="btn" data-action="agb-zu">Abbrechen</button></div>
+      </section>` : ''}
       <section class="sec"><h2>Daten</h2>
         <p>Version ${esc(state.info.version)}. Enthalten sind ${state.data.projects.length} Projekte, ${state.data.entries.length} Zeiteinträge, ${state.data.buchungen.filter((b) => !b.vorschlag).length} Buchungen (${Object.keys(state.data.kontenplaene).join(', ') || 'keine Buchhaltung'}) und ${state.data.offerten.length} Offerten-Projekte. Auf beiden Rechnern müssen hier dieselben Zahlen stehen.</p>
         <p>Gespeichert in <code>${esc(state.info.dataPath)}</code>. Jede Änderung wird sofort gesichert; im Unterordner «Sicherungen» liegt pro Tag eine Kopie des Vortagsstands.</p>
@@ -1256,7 +1265,7 @@
     if (r.data && r.data.typ === 'offertagb') {
       const e = api.offertAgbSpeichern ? await api.offertAgbSpeichern(String(r.data.tex || '')) : { ok: false, error: 'Nur in der Desktop-App.' };
       if (e.ok) state.info = await api.info();
-      render(); toast(e.ok ? 'Die Vorlage für Auftragsbestätigung und AGB ist gespeichert.' : 'Die Vorlage konnte nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
+      render(); toast(e.ok ? 'Der Text für Vertrag und AGB ist gespeichert.' : 'Die Vorlage konnte nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
       return;
     }
     if (r.data && r.data.typ === 'offertbilder') {
@@ -1378,14 +1387,36 @@
       case 'open-folder': api.openFolder(); break;
       case 'offerte-oeffnen': OFF.oeffneAktuelle(el.dataset.id); break;
       case 'offerte-zeigen': state.drawer = null; state.view = 'offerten'; OFF.zeige(el.dataset.id); render(); break;
+      case 'agb-bearbeiten': {
+        if (!api.offertAgb) { toast('Nur in der Desktop-App.', { fehler: true }); break; }
+        const ganz = (await api.offertAgb()).text || '';
+        // Den LaTeX-Vorspann (Pakete, Seitenränder) braucht es zum Bearbeiten nicht: Er bleibt unverändert erhalten.
+        const bd = ganz.indexOf('\\begin{document}'), ed = ganz.lastIndexOf('\\end{document}');
+        const kopf = bd >= 0 ? ganz.slice(0, bd + 16) : '';
+        const t = (bd >= 0 ? ganz.slice(bd + 16, ed > bd ? ed : undefined) : ganz).replace(/^\s+/, '');
+        const i = t.search(/\\(newpage|clearpage)\b/);
+        state.agbEdit = i < 0 ? { kopf, vorne: t, hinten: '' } : { kopf, vorne: t.slice(0, i).replace(/\s*(%+\s*)?$/, '\n'), hinten: t.slice(i).replace(/^\\(newpage|clearpage)\s*(%+\s*)?/, '') };
+        render(); { const f = $('#agb-hinten'); if (f) f.scrollIntoView({ block: 'center' }); }
+        break;
+      }
+      case 'agb-zu': state.agbEdit = null; render(); break;
+      case 'agb-speichern': {
+        const e = state.agbEdit;
+        const rumpf = e.hinten.trim() ? `${e.vorne.trim()}\n\n\\newpage\n\n${e.hinten.trim()}\n` : `${e.vorne.trim()}\n`;
+        const text = e.kopf ? `${e.kopf}\n\n${rumpf}\n\\end{document}\n` : rumpf;
+        const r = await api.offertAgbSpeichern(text);
+        if (!r.ok) { toast('Speichern fehlgeschlagen: ' + r.error, { fehler: true }); break; }
+        state.agbEdit = null; state.info = await api.info(); render(); toast('Vertrag und AGB gespeichert');
+        break;
+      }
       case 'offert-agb': {
         if (!api.offertAgbSpeichern) { toast('Nur in der Desktop-App.', { fehler: true }); break; }
-        const r = await api.openText('LaTeX-Datei mit Auftragsbestätigung und AGB wählen', ['tex', 'txt']);
+        const r = await api.openText('LaTeX-Datei mit Vertrag und AGB wählen', ['tex', 'txt']);
         if (!r || r.canceled) break;
         if (r.fehler || !/\\section|Auftragsbest/.test(r.text || '')) { toast(r.fehler || 'Die Datei sieht nicht nach der LaTeX-Vorlage aus.', { fehler: true }); break; }
         const e = await api.offertAgbSpeichern(r.text);
         if (!e.ok) { toast('Die Vorlage konnte nicht gespeichert werden: ' + e.error, { fehler: true }); break; }
-        state.info = await api.info(); render(); toast('Vorlage übernommen');
+        state.agbEdit = null; state.info = await api.info(); render(); toast('Text übernommen');
         break;
       }
       case 'offert-bild': {
@@ -1412,6 +1443,7 @@
   document.addEventListener('input', (ev) => {
     const el = ev.target, a = el.dataset && el.dataset.action;
     if (!a) return;
+    if (a === 'agb-feld') { if (state.agbEdit) state.agbEdit[el.dataset.key] = el.value; return; }
     if (a === 'combo-input') {
       state.combo.q = el.value; state.combo.projectId = null; state.combo.open = true; state.combo.idx = 0;
       const list = $('#combo-list'); list.classList.add('open'); list.innerHTML = comboListHtml();

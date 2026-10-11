@@ -72,7 +72,7 @@
         </select></div>
         <div class="of-verk of-ag"><label for="oa-${p.id}" class="dim">Auftraggeber:</label>
           <textarea id="oa-${p.id}" rows="3" data-of="p-feld" data-key="auftraggeber" data-pid="${p.id}" placeholder="Firma&#10;Strasse&#10;PLZ Ort">${esc(p.auftraggeber || '')}</textarea>
-          <span class="dim">Steht in der Auftragsbestätigung. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></td></tr>`;
+          <span class="dim">Steht im Vertrag. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></td></tr>`;
     }
     /** Projekte der Zeiterfassung, die zu den zugewiesenen Kunden (Jahr, Bereich) gehören. */
     const zugehoerige = (p) => state.data.projects.filter((x) => (p.kundeLinks || []).includes(kKey(x)));
@@ -95,11 +95,11 @@
       const v = p.versionen.find((x) => x.id === p.zugesagtId) || fassungen(p).pop();
       if (!String(p.auftraggeber || '').trim()) { toast('Trag zuerst den Auftraggeber ein (im aufgeklappten Eintrag).', { fehler: true }); return; }
       const r = api.offertAgb ? await api.offertAgb() : null;
-      if (!r || !r.text) { toast('Die Vorlage für Auftragsbestätigung und AGB fehlt: Einstellungen → Offerten → Vorlage wählen.', { fehler: true, dauer: 9000 }); return; }
+      if (!r || !r.text) { toast('Die Vorlage für Vertrag und AGB fehlt: Einstellungen → Offerten.', { fehler: true, dauer: 9000 }); return; }
       const b = O.bestaetigung(r.text, { offerteVom: v.datum, auftraggeber: p.auftraggeber, heute });
-      const name = `${heute.replace(/-/g, '')}_Auftragsbestaetigung_${sauber(pTitel(p)).replace(/ /g, '_')}.pdf`;
+      const name = `${heute.replace(/-/g, '')}_Vertrag_${sauber(pTitel(p)).replace(/ /g, '_')}.pdf`;
       const e = await api.savePdf(O.html(v.doc, { kunde: p.kunde, name: p.name, datum: v.datum, bestaetigung: b }), { ordner: 'Offerten', name, roh: true, offerte: true });
-      if (e && e.fehler) toast(e.fehler, { fehler: true }); else if (e && e.path) toast('Auftragsbestätigung mit Offerte und AGB gespeichert und geöffnet');
+      if (e && e.fehler) toast(e.fehler, { fehler: true }); else if (e && e.path) toast('Vertrag mit Offerte und AGB gespeichert und geöffnet');
     }
     /** Zeilen im Projektfenster: die neuste Offerte jedes Offerten-Eintrags, der diesem Kunden (Jahr, Bereich) zugewiesen ist. */
     function projektZeile(d) {
@@ -131,11 +131,11 @@
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
           <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
-        zugesagt: `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Auftragsbestätigung, zugesagter Offerte und AGB">Auftragsbestätigung</button>
+        zugesagt: `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>
           <button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
           <button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
-        abgeschlossen: `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Auftragsbestätigung, zugesagter Offerte und AGB">Auftragsbestätigung</button>
+        abgeschlossen: `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>
           <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
       }[st];
       return `<tr class="of-pz ${auf ? 'auf' : ''}">
