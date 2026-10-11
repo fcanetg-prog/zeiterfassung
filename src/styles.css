@@ -528,3 +528,22 @@ th.r { text-align: right; }
   .aus .sec.gleich { display: flex; flex-direction: column; }
   .aus .sec.gleich table { flex: 1; height: 100%; }
 }
+
+/* Offerten: Abschnitte und Projekte zum Aufklappen */
+.of-box { padding: 0; overflow: hidden; }
+.of-box .of-liste td { padding: 0; border-bottom: 1px solid var(--line-soft); }
+.of-abk td { background: #e3ecec; padding: 9px 12px !important; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--line) !important; }
+.of-abk:hover td { background: #d9e5e5; }
+.of-pfeil2 { display: inline-block; width: 14px; color: var(--muted); }
+.of-leer { padding: 14px 16px 14px 34px !important; color: var(--muted); }
+.of-pz .of-kopf { padding: 5px 12px 5px 20px; border-bottom: 0; gap: 6px; }
+.of-pz.auf td { background: #f6f9f9; }
+.of-pfeil { border: 0; background: none; cursor: pointer; width: 22px; color: var(--muted); font-size: 13px; padding: 4px 0; }
+.of-anz { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.of-anz:hover { color: var(--teal-deep); }
+.of-kopf .of-kunde { width: 200px; font-size: 13px; } .of-kopf .of-name { width: 280px; font-size: 13px; }
+.of-box .of-liste tr.of-fz td { padding: 5px 12px 5px 0; }
+.of-box .of-liste tr.of-fz td:first-child { padding-left: 54px; }
+.of-box .of-liste tr.of-fz .of-art { width: 300px; font-weight: 500; }
+.of-vorl .btn { margin-right: 6px; } .of-vinfo { font-size: 12px; color: var(--muted); } .of-vinfo.ok { color: var(--teal-deep); font-weight: 600; }
+.of-nakt { display: flex; gap: 10px; margin-left: auto; }

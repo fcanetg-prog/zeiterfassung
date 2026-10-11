@@ -205,6 +205,30 @@ async function renderPdf(html, fuss, roh) {
   }
 }
 
+/* ---------- PDF einer bestehenden Offerte lesen ---------- */
+
+/** Text aller Seiten mit Position und Schriftschnitt; die Auswertung macht src/offertdoc.js. */
+async function pdfSeiten(data) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data, disableFontFace: true, isEvalSupported: false, useSystemFonts: false, verbosity: 0 }).promise;
+  const seiten = [];
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const vp = page.getViewport({ scale: 1 });
+      const tc = await page.getTextContent();
+      await page.getOperatorList();   // lädt die Schriften, damit fett und kursiv erkennbar sind
+      seiten.push({ items: tc.items.filter((i) => i.str).map((i) => {
+        const m = pdfjs.Util.transform(vp.transform, i.transform);
+        let schrift = '';
+        try { schrift = page.commonObjs.get(i.fontName).name || ''; } catch { /* unbekannt */ }
+        return { s: i.str, x: m[4], y: m[5], w: i.width, fett: /bold|black|heavy|semibold|-bd|bx\d/i.test(schrift), kursiv: /ital|oblique|slant|ti\d/i.test(schrift) };
+      }) });
+    }
+  } finally { await doc.destroy(); }
+  return seiten;
+}
+
 /* ---------- Rechnungen für Gmail bereitstellen ---------- */
 
 let letzterAbgleich = null; // Signatur des letzten erfolgreichen Abgleichs, spart unnötige Anfragen
@@ -376,6 +400,22 @@ if (!app.requestSingleInstanceLock()) {
         // Bankexporte sind je nach Alter UTF-8 oder Windows-1252.
         try { text = new TextDecoder('utf-8', { fatal: true }).decode(roh); } catch { text = new TextDecoder('windows-1252').decode(roh); }
         return { text, name: path.basename(r.filePaths[0]) };
+      } catch (err) {
+        return { fehler: `Die Datei konnte nicht gelesen werden: ${err.message}` };
+      }
+    });
+    ipcMain.handle('offerte:open', async () => {
+      const r = await dialog.showOpenDialog(win, { title: 'Vorlage wählen (PDF oder LaTeX)', filters: [{ name: 'Offerte', extensions: ['pdf', 'tex', 'txt', 'json'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return { canceled: true };
+      const file = r.filePaths[0], name = path.basename(file);
+      try {
+        const roh = fs.readFileSync(file);
+        if (roh.slice(0, 5).toString('latin1') !== '%PDF-') {
+          let text;
+          try { text = new TextDecoder('utf-8', { fatal: true }).decode(roh); } catch { text = new TextDecoder('windows-1252').decode(roh); }
+          return { name, text };
+        }
+        return { name, seiten: await pdfSeiten(new Uint8Array(roh)) };
       } catch (err) {
         return { fehler: `Die Datei konnte nicht gelesen werden: ${err.message}` };
       }

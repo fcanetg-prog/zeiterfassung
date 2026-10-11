@@ -165,5 +165,17 @@ console.log('Alle Prüfungen bestanden.');
   const C2 = require('../src/calc.js');
   const m = C2.mergeData({ projects: [], entries: [], offerten: [{ id: 'o1', status: 'offen', mod: 1 }] }, { projects: [], entries: [], offerten: [{ id: 'o1', status: 'zugesagt', mod: 2 }], offertVorlagen: [{ id: 'v1', mod: 1 }] });
   assert.strictEqual(m.offerten[0].status, 'zugesagt'); assert.strictEqual(m.offertVorlagen.length, 1);
+  // LaTeX hin und zurück, auch nach einer Änderung von Hand
+  const rl = O.ausLatex(O.latex(d)); assert.ok(!rl.fehler); assert.deepStrictEqual(rl.doc, d);
+  const ge = O.ausLatex(O.latex(d).replace('10h & 215 Fr./h', '12h & 220 Fr./h').replace('Test \\& Co.', 'Neu')).doc;
+  assert.strictEqual(O.teilTotal(ge.teile[0]), 12 * 220 + 1100 + 500); assert.strictEqual(ge.teile[0].titel, 'Neu'); assert.strictEqual(ge.art, 'kostenvoranschlag');
+  assert.ok(O.ausLatex('nur Text').fehler); assert.ok(!O.ausDatei({ text: O.latex(d) }).fehler); assert.ok(!O.ausDatei({ text: JSON.stringify(d) }).fehler);
+  // PDF-Stücke: Kopf, Einleitung, Tabelle
+  const I = (s, x, y, w, o) => Object.assign({ s, x, y, w, fett: false, kursiv: false }, o);
+  const pd = O.ausPdf([{ items: [I('Offerte 2:', 40, 50, 60, { fett: true }), I('Referat', 104, 50, 40, { fett: true }), I('Die', 40, 70, 14), I('Firma', 58, 70, 24, { kursiv: true }), I('o', 86, 70, 5), I('ff', 91, 70, 6), I('eriert.', 97, 70, 28),
+    I('Was', 45, 90, 18, { fett: true }), I('Aufwand', 540, 90, 42, { fett: true }), I('Ansatz', 606, 90, 31, { fett: true }), I('Preis', 698, 90, 23, { fett: true }), I('Total', 761, 90, 23, { fett: true }),
+    I('Vorbereitung', 45, 104, 60, { fett: true }), I('Recherche', 45, 116, 50), I('3h', 540, 116, 10), I('215 Fr./h', 606, 116, 40), I('645.00 Fr.', 680, 116, 41), I('645.00 Fr.', 743, 116, 41),
+    I('Preis', 45, 130, 23, { fett: true }), I('645.00 Fr.', 743, 130, 41, { fett: true })] }]);
+  assert.ok(!pd.fehler); assert.deepStrictEqual(pd.doc, O.normalize({ art: 'offerte', teile: [{ nummer: '2', titel: 'Referat', text: 'Die *Firma* offeriert.', bloecke: [{ titel: 'Vorbereitung', zeilen: [{ was: 'Recherche', aufwand: '3h', ansatz: 215 }] }] }] }));
   console.log('Offerten bestanden.');
 }

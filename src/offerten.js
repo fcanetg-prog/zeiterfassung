@@ -7,9 +7,8 @@
     const { state, esc, fmtDate, heute, persist, render, toast, api, uid } = ctx;
     const $ = (sel, root) => (root || document).querySelector(sel);
 
-    state.off = { tab: 'offen', edit: null, neu: null, dialog: null, alle: new Set() };
+    state.off = { edit: null, neu: null, dialog: null, auf: new Set(['offen']), umgekehrt: new Set() };
 
-    const TABS = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen'], ['vorlagen', 'Vorlagen']];
     const liste = () => state.data.offerten;
     const vorlagen = () => state.data.offertVorlagen;
     const projekt = (id) => liste().find((p) => p.id === id);
@@ -29,27 +28,24 @@
 
     /* ---------- Listen ---------- */
 
+    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen']];
+    // Projekte unter «Offen» sind von Anfang an aufgeklappt, die übrigen zu; «umgekehrt» merkt sich die Ausnahmen.
+    const pOffen = (p) => (p.status === 'offen') !== state.off.umgekehrt.has(p.id);
+
     function fassungZeile(p, v, opts) {
-      return `<tr>
-        <td class="of-art">${esc(vTitel(v))}</td>
+      return `<tr class="of-fz">
+        <td class="of-art">${esc(vTitel(v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
         <td class="of-kurz num">${esc(O.kurz(v.doc))}</td>
         <td class="r of-akt">
-          ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde zugesagt. Sie wandert zu den zugesagten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> zugesagt</label>` : ''}
+          ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde zugesagt. Das Projekt wandert zu den zugesagten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> zugesagt</label>` : ''}
           <button class="btn small" data-of="edit" data-pid="${p.id}" data-vid="${v.id}">${opts.fest ? 'Ansehen' : 'Bearbeiten'}</button>
           <button class="btn small" data-of="pdf" data-pid="${p.id}" data-vid="${v.id}">PDF</button>
-          <button class="btn small" data-of="tex" data-pid="${p.id}" data-vid="${v.id}">LaTeX</button>
           ${opts.loeschbar ? `<button class="btn small ghost" data-of="v-del" data-pid="${p.id}" data-vid="${v.id}" title="Diese Fassung löschen">×</button>` : ''}
         </td></tr>`;
     }
 
-    function karte(p) {
-      const fs = fassungen(p), letzte = fs[fs.length - 1];
-      const zugesagt = p.zugesagtId && p.versionen.find((v) => v.id === p.zugesagtId);
-      const st = p.status;
-      // Zugesagt und abgeschlossen zeigen nur die zugesagte Fassung; die früheren lassen sich einblenden.
-      const nurEine = (st === 'zugesagt' || st === 'abgeschlossen') && zugesagt && !state.off.alle.has(p.id);
-      const sicht = nurEine ? [zugesagt] : fs;
-      const fruehere = (st === 'zugesagt' || st === 'abgeschlossen') && zugesagt ? fs.length - 1 : 0;
+    function projektZeilen(p) {
+      const fs = fassungen(p), letzte = fs[fs.length - 1], st = p.status, auf = pOffen(p);
       const knoepfe = {
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}">Neue Fassung</button>
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
@@ -58,19 +54,27 @@
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgeschlossen: `<button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
       }[st];
-      return `<section class="pane of-karte">
-        <div class="of-kopf">
-          <input class="inline of-kunde" type="text" value="${esc(p.kunde)}" placeholder="Kunde" data-of="p-feld" data-key="kunde" data-pid="${p.id}" aria-label="Kunde">
-          <input class="inline of-name" type="text" value="${esc(p.name)}" placeholder="Projekt" data-of="p-feld" data-key="name" data-pid="${p.id}" aria-label="Projekt">
-          <span class="grow"></span>
-          ${knoepfe}
-          <button class="btn small ghost" data-of="p-del" data-pid="${p.id}" title="Projekt mit allen Fassungen löschen">Löschen</button>
-        </div>
-        <table class="of-liste"><tbody>
-          ${sicht.map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1 })).join('')}
-        </tbody></table>
-        ${fruehere > 0 ? `<button class="of-mehr" data-of="alle" data-pid="${p.id}">${state.off.alle.has(p.id) ? 'Nur die zugesagte Fassung zeigen' : `${fruehere} frühere ${fruehere === 1 ? 'Fassung' : 'Fassungen'} zeigen`}</button>` : ''}
-      </section>`;
+      return `<tr class="of-pz ${auf ? 'auf' : ''}">
+          <td colspan="3"><div class="of-kopf">
+            <button class="of-pfeil" data-of="p-auf" data-pid="${p.id}" aria-expanded="${auf}" title="${auf ? 'Fassungen ausblenden' : 'Fassungen zeigen'}">${auf ? '▾' : '▸'}</button>
+            <input class="inline of-kunde" type="text" value="${esc(p.kunde)}" placeholder="Kunde" data-of="p-feld" data-key="kunde" data-pid="${p.id}" aria-label="Kunde">
+            <input class="inline of-name" type="text" value="${esc(p.name)}" placeholder="Projekt" data-of="p-feld" data-key="name" data-pid="${p.id}" aria-label="Projekt">
+            <button class="of-anz" data-of="p-auf" data-pid="${p.id}">${fs.length} ${fs.length === 1 ? 'Fassung' : 'Fassungen'}${auf || !letzte ? '' : `, letzte vom ${fmtDate(letzte.datum)}`}</button>
+            <span class="grow"></span>
+            ${knoepfe}
+            <button class="btn small ghost" data-of="p-del" data-pid="${p.id}" title="Projekt mit allen Fassungen löschen">Löschen</button>
+          </div></td></tr>
+        ${auf ? fs.map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1, zugesagt: v.id === p.zugesagtId })).join('') : ''}`;
+    }
+
+    function abschnitt([key, titel]) {
+      const ps = liste().filter((p) => p.status === key).sort((a, b) => (b.erstellt || 0) - (a.erstellt || 0));
+      const auf = state.off.auf.has(key);
+      const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
+      return `<tbody class="of-ab">
+        <tr class="of-abk" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="of-pfeil2">${auf ? '▾' : '▸'}</span> <b>${titel}</b> <span class="of-zahl">${ps.length}</span></td></tr>
+        ${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText}</td></tr>`) : ''}
+      </tbody>`;
     }
 
     function neuForm() {
@@ -80,44 +84,21 @@
         <div><label for="on-kunde">Kunde</label><input id="on-kunde" type="text" value="${esc(n.kunde)}" data-of="n-feld" data-key="kunde"></div>
         <div><label for="on-name">Projekt</label><input id="on-name" type="text" value="${esc(n.name)}" data-of="n-feld" data-key="name"></div>
         <div><label for="on-art">Dokument</label><select id="on-art" data-of="n-feld" data-key="art">
-          <option value="offerte" ${n.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${n.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option>
-          <option value="" ${n.art === '' ? 'selected' : ''}>wie in der Vorlage</option></select></div>
-        <div><label for="on-vorlage">Vorlage</label><select id="on-vorlage" data-of="n-feld" data-key="vorlage">
-          <option value="">Leer beginnen</option>${vorlagen().map((v) => `<option value="${v.id}" ${n.vorlage === v.id ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></div>
-        <button class="btn primary" type="submit">Anlegen und bearbeiten</button>
-        <button class="btn" type="button" data-of="n-zu">Abbrechen</button>
+          <option value="offerte" ${n.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${n.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option></select></div>
+        <div class="of-vorl"><label>Vorlage</label>
+          <button class="btn" type="button" data-of="n-hoch" title="PDF oder LaTeX-Datei einer bestehenden Offerte. Ihr Inhalt wird übernommen.">Hochladen</button>
+          <button class="btn" type="button" data-of="dialog" data-art="neu" title="LaTeX-Code aus der Zwischenablage einfügen">LaTeX-Code einfügen</button>
+          <span class="of-vinfo ${n.doc ? 'ok' : ''}">${n.doc ? `${esc(n.quelle || 'Vorlage')}: ${n.doc.teile.length} ${n.doc.teile.length === 1 ? 'Teil' : 'Teile'} erkannt` : 'PDF oder LaTeX. Ohne Vorlage beginnst du leer.'}</span></div>
+        <div class="of-nakt"><button class="btn primary" type="submit">Anlegen und bearbeiten</button>
+          <button class="btn" type="button" data-of="n-zu">Abbrechen</button></div>
       </form>`;
     }
 
-    function viewVorlagen() {
-      return `<section class="pane of-hilfe">
-          <h2>Vorlagen</h2>
-          <p>Eine Vorlage ist eine fertige Offerte, aus der du neue Offerten ableitest. So kommt eine bestehende Offerte (PDF oder LaTeX-Code) hinein:</p>
-          <ol><li>«Anleitung für Claude kopieren» klicken.</li><li>Im Claude-Chat einfügen und das PDF oder den LaTeX-Code dazugeben.</li><li>Claudes Antwort kopieren und hier mit «Vorlage einfügen» übernehmen.</li></ol>
-          <div class="row"><button class="btn" data-of="vp-kopieren">Anleitung für Claude kopieren</button>
-            <button class="btn primary" data-of="dialog" data-art="vorlage">Vorlage einfügen</button>
-            <button class="btn" data-of="vo-leer">Leere Vorlage</button></div>
-        </section>
-        ${vorlagen().length ? `<section class="pane of-karte"><table class="of-liste"><tbody>${vorlagen().map((v) => `<tr>
-            <td><input class="inline of-vname" type="text" value="${esc(v.name)}" data-of="vo-name" data-id="${v.id}" aria-label="Name der Vorlage"></td>
-            <td class="of-kurz num">${esc(O.ARTEN[v.doc.art])}: ${esc(O.kurz(v.doc))}</td>
-            <td class="r of-akt"><button class="btn small primary" data-of="neu" data-vorlage="${v.id}">Neue Offerte daraus</button>
-              <button class="btn small" data-of="vo-edit" data-id="${v.id}">Bearbeiten</button>
-              <button class="btn small" data-of="vo-pdf" data-id="${v.id}">PDF</button>
-              <button class="btn small ghost" data-of="vo-del" data-id="${v.id}" title="Vorlage löschen">×</button></td></tr>`).join('')}</tbody></table></section>`
-        : '<div class="empty">Noch keine Vorlagen.</div>'}`;
-    }
-
     function viewListe() {
-      const tab = state.off.tab;
-      const anz = (s) => liste().filter((p) => p.status === s).length;
-      const ps = liste().filter((p) => p.status === tab).sort((a, b) => (b.erstellt || 0) - (a.erstellt || 0));
-      const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[tab];
       return `<header class="head"><h1>Offerten</h1>
           <button class="btn primary" data-of="neu">Neue Offerte</button></header>
-        <div class="bh-bar"><div class="seg">${TABS.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-of="tab" data-tab="${k}">${l}${k !== 'vorlagen' && anz(k) ? ` <span class="of-zahl">${anz(k)}</span>` : ''}</button>`).join('')}</div></div>
         ${neuForm()}
-        ${tab === 'vorlagen' ? viewVorlagen() : ps.length ? ps.map(karte).join('') : `<div class="empty">${leerText}</div>`}
+        <div class="pane of-box"><table class="of-liste">${ABSCHNITTE.map(abschnitt).join('')}</table></div>
         ${dialogHtml()}`;
     }
 
@@ -173,10 +154,9 @@
           ${o.vorlage ? `<label>Name <input type="text" class="of-vname2" value="${esc(o.vorlage.name)}" data-of="vo-name" data-id="${o.vorlage.id}"></label>` : `<label>Datum <input type="date" value="${esc(o.v.datum)}" data-of="v-datum"></label>`}
           <label>Dokument <select data-of="f" data-pfad="art"><option value="offerte" ${d.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${d.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option></select></label>
           <span class="grow"></span>
-          <button class="btn" data-of="kopieren" title="Kopiert die Offerte samt Anleitung. Im Claude-Chat einfügen und sagen oder diktieren, was sich ändern soll.">Für Claude kopieren</button>
-          <button class="btn" data-of="dialog" data-art="antwort" title="Claudes Antwort hier einfügen. Die Offerte wird damit ersetzt.">Antwort einfügen</button>
-          ${o.vorlage ? '' : '<button class="btn" data-of="als-vorlage">Als Vorlage speichern</button>'}
-          <button class="btn" data-of="e-tex">LaTeX</button>
+          <button class="btn" data-of="tex-kopieren" title="Erzeugt den LaTeX-Code dieser Offerte und kopiert ihn. Du kannst ihn in Claude einfügen und dort ändern lassen.">LaTeX-Code kopieren</button>
+          <button class="btn" data-of="dialog" data-art="ersetzen" title="Geänderten LaTeX-Code einfügen. Der Inhalt dieser Offerte wird damit ersetzt.">Durch neuen LaTeX-Code ersetzen</button>
+          <button class="btn" data-of="e-hoch" title="Inhalt durch ein PDF oder eine LaTeX-Datei ersetzen">Hochladen</button>
           <button class="btn primary" data-of="e-pdf">PDF</button>
         </div>
         ${fest ? `<div class="of-fest">Diese Fassung ist ${o.p.status === 'abgesagt' ? 'abgesagt' : 'zugesagt'}. Änderungen sind weiterhin möglich, für eine neue Runde stellst du das Projekt besser zurück auf offen und legst eine neue Fassung an.</div>` : ''}
@@ -188,12 +168,11 @@
     function dialogHtml() {
       const g = state.off.dialog;
       if (!g) return '';
-      const vorlage = g.art === 'vorlage';
-      return `<div class="of-schleier" data-of="dialog-zu-aussen"><div class="of-dialog" role="dialog" aria-label="${vorlage ? 'Vorlage einfügen' : 'Antwort einfügen'}">
-        <h2>${vorlage ? 'Vorlage einfügen' : 'Antwort von Claude einfügen'}</h2>
-        <p>${vorlage ? 'Füge hier Claudes Antwort (das JSON) ein. Daraus entsteht eine neue Vorlage.' : 'Füge hier Claudes Antwort (das JSON) ein. Die offene Offerte wird damit ersetzt; das lässt sich rückgängig machen.'}</p>
-        ${vorlage ? `<label>Name der Vorlage <input type="text" id="od-name" value="${esc(g.name || '')}" data-of="d-name"></label>` : ''}
-        <textarea id="od-text" rows="12" data-of="d-text" placeholder='{ "art": "offerte", "teile": [ … ] }'>${esc(g.text || '')}</textarea>
+      const ersetzen = g.art === 'ersetzen';
+      return `<div class="of-schleier" data-of="dialog-zu-aussen"><div class="of-dialog" role="dialog" aria-label="LaTeX-Code einfügen">
+        <h2>${ersetzen ? 'Durch neuen LaTeX-Code ersetzen' : 'LaTeX-Code als Vorlage einfügen'}</h2>
+        <p>${ersetzen ? 'Füge hier den geänderten LaTeX-Code ein. Der Inhalt dieser Offerte wird damit ersetzt; das lässt sich rückgängig machen.' : 'Füge hier den LaTeX-Code einer bestehenden Offerte ein. Ihr Inhalt wird in die neue Offerte übernommen.'}</p>
+        <textarea id="od-text" rows="14" data-of="d-text" placeholder="\\begin{document} … \\end{document}">${esc(g.text || '')}</textarea>
         <div class="row"><button class="btn primary" data-of="dialog-ok">Übernehmen</button><button class="btn" data-of="dialog-zu">Abbrechen</button></div>
       </div></div>`;
     }
@@ -246,13 +225,27 @@
 
     function anlegen() {
       const n = state.off.neu;
-      const vorlage = vorlagen().find((v) => v.id === n.vorlage);
-      const doc = vorlage ? kopie(vorlage.doc) : O.leer(n.art || 'offerte');
-      if (n.art) doc.art = n.art;
+      const doc = n.doc ? kopie(n.doc) : O.leer(n.art);
+      doc.art = n.art;
       const p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [{ id: uid('ov'), datum: heute, doc }] };
       liste().push(p);
-      state.off.neu = null; state.off.tab = 'offen'; state.off.edit = { pid: p.id, vid: p.versionen[0].id };
+      state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: p.versionen[0].id };
       persist(); render();
+    }
+
+    /** PDF, LaTeX-Datei oder JSON wählen und einlesen. */
+    async function hochladen() {
+      const r = await api.openOfferte();
+      if (!r || r.canceled) return null;
+      if (r.fehler) { toast(r.fehler, { fehler: true }); return null; }
+      const e = O.ausDatei(r);
+      if (e.fehler) { toast(e.fehler, { fehler: true }); return null; }
+      return { doc: e.doc, name: r.name || 'Datei' };
+    }
+    /** Von aussen (Import einer Vorlagendatei): neue Offerte mit diesem Inhalt beginnen. */
+    function beginneMit(doc, quelle) {
+      const d = O.normalize(doc);
+      state.off.edit = null; state.off.neu = { kunde: '', name: '', art: d.art, doc: d, quelle };
     }
 
     document.addEventListener('submit', (ev) => {
@@ -267,15 +260,18 @@
       const v = p && ds.vid ? p.versionen.find((x) => x.id === ds.vid) : null;
       const o = offen();
       switch (a) {
-        case 'tab': state.off.tab = ds.tab; state.off.neu = null; render(); break;
-        case 'neu': state.off.neu = { kunde: '', name: '', art: ds.vorlage ? '' : 'offerte', vorlage: ds.vorlage || '' }; if (state.off.tab === 'vorlagen') state.off.tab = 'offen'; render(); { const f = $('#on-kunde'); if (f) f.focus(); } break;
+        case 'ab-auf': if (state.off.auf.has(ds.key)) state.off.auf.delete(ds.key); else state.off.auf.add(ds.key); render(); break;
+        case 'p-auf': if (state.off.umgekehrt.has(ds.pid)) state.off.umgekehrt.delete(ds.pid); else state.off.umgekehrt.add(ds.pid); render(); break;
+        case 'n-hoch': { hochladen().then((h) => { if (!h || !state.off.neu) return; Object.assign(state.off.neu, { doc: h.doc, quelle: h.name, art: h.doc.art }); render(); toast(`${h.name} eingelesen`); }); break; }
+        case 'e-hoch': { hochladen().then((h) => { const o2 = offen(); if (!h || !o2) return; const ziel = o2.v, alt = ziel.doc; h.doc.art = alt.art; ziel.doc = h.doc; persist(); render();
+          toast(`Inhalt durch ${h.name} ersetzt`, { actionLabel: 'Rückgängig', action: () => { ziel.doc = alt; persist(); render(); } }); }); break; }
+        case 'tex-kopieren': zwischenablage(O.latex(o.doc), 'LaTeX-Code kopiert'); break;
+        case 'neu': state.off.neu = { kunde: '', name: '', art: 'offerte', doc: null, quelle: '' }; render(); { const f = $('#on-kunde'); if (f) f.focus(); } break;
         case 'n-zu': state.off.neu = null; render(); break;
         case 'edit': state.off.edit = { pid: p.id, vid: v.id }; render(); window.scrollTo(0, 0); break;
         case 'zurueck': state.off.edit = null; render(); break;
         case 'pdf': pdf(v.doc, dateiName(p, v, 'pdf')); break;
-        case 'tex': texDatei(v.doc, dateiName(p, v, 'tex')); break;
-        case 'e-pdf': pdf(o.doc, o.vorlage ? `Vorlage_${sauber(o.vorlage.name).replace(/ /g, '_')}.pdf` : dateiName(o.p, o.v, 'pdf')); break;
-        case 'e-tex': texDatei(o.doc, o.vorlage ? `Vorlage_${sauber(o.vorlage.name).replace(/ /g, '_')}.tex` : dateiName(o.p, o.v, 'tex')); break;
+        case 'e-pdf': pdf(o.doc, dateiName(o.p, o.v, 'pdf')); break;
         case 'v-neu': {
           const fs = fassungen(p), letzte = fs[fs.length - 1];
           // Zwei Fassungen am selben Tag wären nicht zu unterscheiden: dann die bestehende öffnen.
@@ -305,7 +301,6 @@
           const i = liste().indexOf(p); liste().splice(i, 1); persist(); render();
           toast('Projekt gelöscht', { actionLabel: 'Rückgängig', action: () => { liste().splice(i, 0, p); persist(); render(); } }); break;
         }
-        case 'alle': if (state.off.alle.has(ds.pid)) state.off.alle.delete(ds.pid); else state.off.alle.add(ds.pid); render(); break;
 
         // Editor: Aufbau ändern
         case 't-neu': o.doc.teile.push(O.leer(o.doc.art).teile[0]); persist(); render(); break;
@@ -325,35 +320,22 @@
         }
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
-        // Austausch mit Claude
-        case 'kopieren': zwischenablage(O.promptAnpassen(o.doc), 'Kopiert. Füge es im Claude-Chat ein und sag, was sich ändern soll.'); break;
-        case 'vp-kopieren': zwischenablage(O.promptVorlage(), 'Kopiert. Füge es im Claude-Chat ein und gib das PDF oder den LaTeX-Code dazu.'); break;
-        case 'dialog': state.off.dialog = { art: ds.art, text: '', name: '' }; render(); { const t = $('#od-text'); if (t) t.focus(); } break;
+        // LaTeX-Code einfügen
+        case 'dialog': state.off.dialog = { art: ds.art, text: '' }; render(); { const t = $('#od-text'); if (t) t.focus(); } break;
         case 'dialog-zu': state.off.dialog = null; render(); break;
         case 'dialog-zu-aussen': if (ev.target === el) { state.off.dialog = null; render(); } break;
         case 'dialog-ok': {
-          const g = state.off.dialog, r = O.ausAntwort(g.text);
+          const g = state.off.dialog, r = O.ausDatei({ text: g.text });
           if (r.fehler) { toast(r.fehler, { fehler: true }); break; }
-          if (g.art === 'vorlage') {
-            vorlagen().push({ id: uid('ovl'), name: (g.name || '').trim() || (r.doc.teile[0] && r.doc.teile[0].titel) || 'Vorlage', doc: r.doc, mod: 0 });
-            state.off.dialog = null; persist(); render(); toast('Vorlage gespeichert');
+          if (g.art === 'neu' && state.off.neu) {
+            Object.assign(state.off.neu, { doc: r.doc, quelle: 'Eingefügter Code', art: r.doc.art });
+            state.off.dialog = null; render();
           } else if (o) {
-            const ziel = o.vorlage || o.v, alt = ziel.doc;
+            const ziel = o.v, alt = ziel.doc;
             ziel.doc = r.doc; state.off.dialog = null; persist(); render();
-            toast('Offerte ersetzt', { actionLabel: 'Rückgängig', action: () => { ziel.doc = alt; persist(); render(); } });
+            toast('Offerte durch den neuen Code ersetzt', { actionLabel: 'Rückgängig', action: () => { ziel.doc = alt; persist(); render(); } });
           }
           break;
-        }
-        case 'als-vorlage': {
-          vorlagen().push({ id: uid('ovl'), name: pTitel(o.p), doc: kopie(o.doc), mod: 0 }); persist();
-          toast('Als Vorlage gespeichert. Den Namen änderst du im Abschnitt Vorlagen.'); break;
-        }
-        case 'vo-leer': { const nv = { id: uid('ovl'), name: 'Neue Vorlage', doc: O.leer('offerte'), mod: 0 }; vorlagen().push(nv); state.off.edit = { vorlage: nv.id }; persist(); render(); break; }
-        case 'vo-edit': state.off.edit = { vorlage: ds.id }; render(); window.scrollTo(0, 0); break;
-        case 'vo-pdf': { const vl = vorlagen().find((x) => x.id === ds.id); pdf(vl.doc, `Vorlage_${sauber(vl.name).replace(/ /g, '_')}.pdf`); break; }
-        case 'vo-del': {
-          const i = vorlagen().findIndex((x) => x.id === ds.id); const [weg] = vorlagen().splice(i, 1); persist(); render();
-          toast('Vorlage gelöscht', { actionLabel: 'Rückgängig', action: () => { vorlagen().splice(i, 0, weg); persist(); render(); } }); break;
         }
         default:
       }
@@ -368,9 +350,7 @@
         setze(o.doc, el.dataset.pfad, el.value); summen(o.doc);
       } else if (a === 'n-feld') state.off.neu[el.dataset.key] = el.value;
       else if (a === 'd-text') state.off.dialog.text = el.value;
-      else if (a === 'd-name') state.off.dialog.name = el.value;
       else if (a === 'p-feld') { const p = projekt(el.dataset.pid); if (p) p[el.dataset.key] = el.value; }
-      else if (a === 'vo-name') { const v = vorlagen().find((x) => x.id === el.dataset.id); if (v) v.name = el.value; }
     });
 
     document.addEventListener('change', (ev) => {
@@ -383,9 +363,10 @@
         // Art und Preisart ändern Beschriftungen an mehreren Stellen.
         if (el.tagName === 'SELECT') render();
       } else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
-      else if (a === 'p-feld' || a === 'vo-name') persist();
+      else if (a === 'p-feld') persist();
+      else if (a === 'n-feld' && el.tagName === 'SELECT') { /* nur merken */ }
     });
 
-    return { view };
+    return { view, beginneMit };
   };
 })();

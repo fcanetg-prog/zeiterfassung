@@ -58,6 +58,16 @@
     async invoicePush() { return { ok: false, fehler: 'Nur in der Desktop-App.' }; },
     async savePdf() { return { fehler: 'PDF gibt es nur in der Desktop-App.' }; },
     async saveText() { return { fehler: 'Dateien speichert nur die Desktop-App.' }; },
+    openOfferte() {
+      return new Promise((res) => {
+        const inp = document.createElement('input'); inp.type = 'file';
+        inp.onchange = async () => {
+          const f = inp.files[0];
+          if (/\.pdf$/i.test(f.name)) res({ fehler: 'PDF liest nur die Desktop-App.' }); else res({ name: f.name, text: await f.text() });
+        };
+        inp.click();
+      });
+    },
     openText() {
       return new Promise((res) => {
         const inp = document.createElement('input'); inp.type = 'file';
@@ -1228,9 +1238,9 @@
     if (r.error) { toast(r.error, { fehler: true }); return; }
     if (r.data && r.data.typ === 'offertvorlage') {
       if (!state.data) state.data = C.emptyData();
-      state.data.offertVorlagen.push({ id: uid('ov'), name: r.data.name || 'Vorlage', doc: window.OffertDoc.normalize(r.data.doc), mod: 0 });
-      await persist(); state.view = 'offerten'; state.off.tab = 'vorlagen'; render();
-      toast('Vorlage übernommen. Alles andere ist unverändert.');
+      OFF.beginneMit(r.data.doc, r.data.name || 'Vorlage');
+      state.view = 'offerten'; render();
+      toast('Vorlage eingelesen. Ergänze Kunde und Projekt.');
       return;
     }
     if (r.data && r.data.typ === 'buchhaltung') {

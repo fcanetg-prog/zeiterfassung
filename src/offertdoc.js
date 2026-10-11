@@ -249,7 +249,174 @@ ${FORMAT}
     return { doc: normalize(ziel) };
   }
 
+  /* ---------- Einlesen: LaTeX-Code ---------- */
+
+  const betragAus = (t) => { const m = /-?\d[\d’']*(?:[.,]\d+)?/.exec(text(t)); return m ? zahl(m[0]) : null; };
+  const KOPF_RE = /(Offerte|Kostenvoranschlag)\b[ \t]*([^:\n]{0,14}?)[ \t]*:[ \t]*/i;
+
+  /** LaTeX-Schnipsel → Klartext; Kursives wird zu *…*. */
+  function texKlar(t) {
+    let s = text(t);
+    s = s.replace(/\\(?:textit|emph)\s*\{([^{}]*)\}/g, '*$1*').replace(/\{\\(?:it|em|itshape)\s+([^{}]*)\}/g, '*$1*');
+    s = s.replace(/\\guillemot(?:left|right)\s*(?:\{\})?/g, (m) => (m.includes('left') ? '«' : '»')).replace(/\\(?:flqq|glqq)\s*(?:\{\})?/g, '«').replace(/\\(?:frqq|grqq)\s*(?:\{\})?/g, '»');
+    s = s.replace(/\\textbackslash\s*(?:\{\})?/g, '\u0001').replace(/\\textasciitilde\s*(?:\{\})?/g, '~').replace(/\\textasciicircum\s*(?:\{\})?/g, '^');
+    s = s.replace(/\\"([aouAOU])/g, (_, c) => ({ a: 'ä', o: 'ö', u: 'ü', A: 'Ä', O: 'Ö', U: 'Ü' }[c])).replace(/"([aouAOU])/g, (_, c) => ({ a: 'ä', o: 'ö', u: 'ü', A: 'Ä', O: 'Ö', U: 'Ü' }[c]));
+    s = s.replace(/\\textcolor\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}/g, '').replace(/\\color\s*\{[^{}]*\}/g, '');
+    s = s.replace(/\\(?:hspace|vspace|setlength|addtolength)\*?\s*(?:\{[^{}]*\})+/g, ' ');
+    s = s.replace(/\\multicolumn\s*\{[^{}]*\}\s*\{[^{}]*\}/g, '');
+    s = s.replace(/\\([&%$#_{}])/g, '\u0002$1');                       // maskierte Sonderzeichen merken
+    for (let i = 0; i < 6; i++) s = s.replace(/\\[a-zA-Z]+\*?\s*(?:\[[^\]]*\])?/g, ' ');   // übrige Befehle weg, ihr Inhalt bleibt
+    s = s.replace(/(?<!\u0002)[{}]/g, '').replace(/~/g, ' ').replace(/\u0002/g, '').replace(/\u0001/g, '\\');
+    return s.replace(/``|''/g, '"').replace(/\s+/g, ' ').trim();
+  }
+
+  function zeileAus(zellen, einfach) {
+    const was = zellen[0] || '';
+    if (einfach || zellen.length < 4) {
+      const b = betragAus(zellen[zellen.length - 1]);
+      return { was, aufwand: '', ansatz: b || 0, preis: 'auto' };
+    }
+    const aufwand = zellen[1] || '', ansatz = betragAus(zellen[2]), preisZ = zellen[3] || '';
+    const z = { was, aufwand, ansatz: ansatz || 0, preis: 'auto' };
+    if (/inkl/i.test(preisZ)) z.preis = 'inklusive';
+    else {
+      const p = betragAus(preisZ);
+      if (ansatz == null && p != null) { z.ansatz = p; }
+      else if (p === 0 && zeilenPreis(z) !== 0) z.preis = 'null';
+    }
+    return z;
+  }
+  const istSumme = (was) => /^(preis|total|gesamt(preis|total)?|summe)\b/i.test(text(was).trim());
+
+  /** Liest LaTeX-Code (aus der App oder eigene Vorlagen mit Tabellen) in die feste Form ein. */
+  function ausLatex(roh) {
+    let s = text(roh).replace(/\r/g, '').replace(/(^|[^\\])%.*$/gm, '$1');
+    const a = s.indexOf('\\begin{document}'), e = s.lastIndexOf('\\end{document}');
+    if (a >= 0) s = s.slice(a + 16, e > a ? e : undefined);
+    const re = /\\begin\{(tabularx|tabular\*?|longtable|tabulary)\}([\s\S]*?)\\end\{\1\}/g;
+    const teile = []; let art = null, pos = 0, m;
+    while ((m = re.exec(s))) {
+      const davor = s.slice(pos, m.index); pos = re.lastIndex;
+      const umbruch = /\\(newpage|clearpage|pagebreak)\b/.test(davor);
+      const abs = davor.split(/\n\s*\n|\\\\|\\(?:par|medskip|bigskip|smallskip|newpage|clearpage|pagebreak)\b/).map(texKlar).filter(Boolean);
+      const t = { nummer: '', titel: '', text: '', umbruch, bloecke: [] };
+      const ki = abs.findIndex((x) => KOPF_RE.test(x));
+      if (ki >= 0) {
+        const k = KOPF_RE.exec(abs[ki]);
+        if (!art) art = k[1].toLowerCase();
+        t.nummer = k[2].trim(); t.titel = abs[ki].slice(k.index + k[0].length).replace(/\*/g, '').trim();
+        t.text = abs.slice(ki + 1).join(' ');
+      } else if (abs.length) { t.titel = abs[0].replace(/\*/g, ''); t.text = abs.slice(1).join(' '); }
+      // Tabelle: Spaltenangaben am Anfang überspringen, dann Zeile für Zeile
+      let inhalt = m[2];
+      for (let i = 0; i < 3; i++) { const g = /^\s*(\[[^\]]*\]|\{(?:[^{}]|\{[^{}]*\})*\})/.exec(inhalt); if (!g) break; inhalt = inhalt.slice(g[0].length); }
+      let block = null;
+      for (const rz of inhalt.split(/\\\\(?:\[[^\]]*\])?|\\tabularnewline\b/)) {
+        const fett = /\\textbf|\\bfseries|\\bf\b/.test(rz);
+        const zellen = rz.replace(/\\(hline|toprule|midrule|bottomrule|cline\{[^}]*\}|endhead|endfoot|endlastfoot|endfirsthead)/g, '').split(/(?<!\\)&/).map(texKlar);
+        if (!zellen.some(Boolean)) continue;
+        const rest = zellen.slice(1).filter(Boolean);
+        if (/^was$/i.test(zellen[0]) || (fett && istSumme(zellen[0]))) continue;
+        if (!rest.length && fett) { block = { titel: zellen[0], zeilen: [] }; t.bloecke.push(block); continue; }
+        if (!block) { block = { titel: '', zeilen: [] }; t.bloecke.push(block); }
+        block.zeilen.push(zeileAus(zellen, zellen.length < 4));
+      }
+      if (t.bloecke.length) teile.push(t);
+    }
+    if (!teile.length) return { fehler: 'Im LaTeX-Code ist keine Tabelle mit Positionen zu finden.' };
+    return { doc: normalize({ art: art || 'offerte', teile }) };
+  }
+
+  /* ---------- Einlesen: PDF ---------- */
+
+  /**
+   * seiten: [{ items: [{ s, x, y, w, fett, kursiv }] }] mit Koordinaten von links oben (aus pdf.js).
+   * Erkennt Überschriften «Offerte/Kostenvoranschlag …:», die Einleitung und Tabellen mit der Kopfzeile «Was … Total».
+   */
+  /** Textstücke einer Zeile zusammensetzen: Leerschlag nur, wo wirklich eine Lücke ist (Ligaturen wie «ff» kommen als eigene Stücke). */
+  function verbinde(items, mitKursiv) {
+    let out = '', letzter = null, kursivOffen = false;
+    for (const it of items) {
+      const s = it.s.trim(); if (!s) continue;
+      const luecke = letzter ? it.x - (letzter.x + letzter.w) > 1.2 : false;
+      const k = !!(mitKursiv && it.kursiv);
+      if (kursivOffen && !k) { out += '*'; kursivOffen = false; }
+      if (luecke) out += ' ';
+      if (k && !kursivOffen) { out += '*'; kursivOffen = true; }
+      out += s; letzter = it;
+    }
+    return out + (kursivOffen ? '*' : '');
+  }
+
+  function ausPdf(seiten) {
+    const teile = []; let art = null, t = null, tab = null, block = null;
+    (seiten || []).forEach((seite, si) => {
+      let ersteAufSeite = true;
+      const items = (seite.items || []).filter((i) => text(i.s).trim());
+      // Zeilen bilden: gleiche Grundlinie (± 2.5)
+      const zeilen = [];
+      for (const it of items.slice().sort((a, b) => a.y - b.y || a.x - b.x)) {
+        const z = zeilen.find((q) => Math.abs(q.y - it.y) <= 2.5);
+        if (z) z.items.push(it); else zeilen.push({ y: it.y, items: [it] });
+      }
+      for (const z of zeilen) {
+        z.items.sort((a, b) => a.x - b.x);
+        const ganz = verbinde(z.items);
+        const kopf = !tab && z.items[0].fett && KOPF_RE.exec(ganz);
+        if (kopf && kopf.index === 0) {
+          if (!art) art = kopf[1].toLowerCase();
+          t = { nummer: kopf[2].trim(), titel: ganz.slice(kopf[0].length).trim(), text: '', umbruch: si > 0 && ersteAufSeite, bloecke: [], _zeilen: [] };
+          teile.push(t); tab = null; block = null; ersteAufSeite = false; continue;
+        }
+        if (!t) continue;
+        ersteAufSeite = false;
+        if (!tab && /^was$/i.test(z.items[0].s.trim())) {
+          const sp = (name) => z.items.find((i) => i.s.trim().toLowerCase() === name);
+          const total = sp('total'), preis = sp('preis'), aufwand = sp('aufwand'), ansatz = sp('ansatz');
+          tab = { einfach: !(aufwand && ansatz && preis), xAufwand: aufwand && aufwand.x, xAnsatz: ansatz && ansatz.x, rPreis: preis && preis.x + preis.w, rTotal: total ? total.x + total.w : null };
+          t.text = t._zeilen.reduce((acc, l) => (/[a-zäöü]-$/.test(acc) && /^[a-zäöü]/.test(l) ? acc.slice(0, -1) + l : acc ? acc + ' ' + l : l), '');
+          block = null; continue;
+        }
+        if (!tab) { t._zeilen.push(verbinde(z.items, true)); continue; }
+        // Tabellenzeile: Stücke den Spalten zuordnen
+        const stuecke = [[], [], [], [], []];
+        let vorher = -1;
+        for (const it of z.items) {
+          const s = it.s.trim(), r = it.x + it.w;
+          let k;
+          if (tab.einfach) k = tab.rTotal != null && Math.abs(r - tab.rTotal) < 4 && betragAus(s) != null && it !== z.items[0] ? 4 : 0;
+          else if (it.x < tab.xAufwand - 3) k = 0;
+          else if (it.x < tab.xAnsatz - 3) k = 1;
+          else if (Math.abs(it.x - tab.xAnsatz) < 3) k = 2;
+          else if (r <= tab.rPreis + 4) k = 3;
+          else k = 4;
+          // Ein Stück, das lückenlos an das vorige anschliesst, gehört in dieselbe Spalte.
+          const letzter = vorher >= 0 ? stuecke[vorher][stuecke[vorher].length - 1] : null;
+          if (letzter && it.x - (letzter.x + letzter.w) <= 1.2) k = vorher;
+          stuecke[k].push(it); vorher = k;
+        }
+        const zellen = stuecke.map((l) => verbinde(l));
+        if (istSumme(zellen[0]) && !zellen[1] && !zellen[2] && !zellen[3]) { tab = null; block = null; t._fertig = true; continue; }
+        if (zellen[0] && !zellen[1] && !zellen[2] && !zellen[3] && !zellen[4]) { block = { titel: zellen[0], zeilen: [] }; t.bloecke.push(block); continue; }
+        if (!block) { block = { titel: '', zeilen: [] }; t.bloecke.push(block); }
+        block.zeilen.push(tab.einfach ? zeileAus([zellen[0], zellen[4]], true) : zeileAus(zellen, false));
+      }
+    });
+    const gut = teile.filter((x) => x.bloecke.length);
+    if (!gut.length) return { fehler: 'Im PDF ist keine Offerte mit einer Tabelle «Was … Total» zu erkennen. Versuch es mit dem LaTeX-Code.' };
+    return { doc: normalize({ art: art || 'offerte', teile: gut }) };
+  }
+
+  /** Datei oder eingefügter Text → Dokument. Erkennt JSON, LaTeX und die Seiten eines PDF. */
+  function ausDatei(r) {
+    if (r && r.seiten) return ausPdf(r.seiten);
+    const t = text(r && r.text).trim();
+    if (!t) return { fehler: 'Die Datei ist leer.' };
+    if (/\\begin\{|\\\\/.test(t)) return ausLatex(t);
+    return ausAntwort(t);
+  }
+
   const leer = (art) => normalize({ art, teile: [{ nummer: '', titel: '', text: 'Alle Preise verstehen sich exkl. Mwst.', bloecke: [{ titel: '', zeilen: [{ was: '', aufwand: '', ansatz: 0, preis: 'auto' }] }] }] });
 
-  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, leer };
+  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer };
 });

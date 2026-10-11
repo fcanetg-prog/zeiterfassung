@@ -1,7 +1,7 @@
 {
   "name": "zeiterfassung",
   "productName": "Zeiterfassung",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "Zeiterfassung und Rechnungsübersicht für Fabio Canetg GmbH",
   "author": "Fabio Canetg GmbH",
   "private": true,
@@ -22,7 +22,12 @@
       "main.js",
       "preload.js",
       "invoice.js",
-      "src/**/*"
+      "src/**/*",
+      "!node_modules/pdfjs-dist/{build,web,types,image_decoders,cmaps,standard_fonts,wasm}/**",
+      "!node_modules/pdfjs-dist/legacy/{web,image_decoders}/**",
+      "!node_modules/pdfjs-dist/**/*.map",
+      "!node_modules/pdfjs-dist/legacy/build/pdf.sandbox.*",
+      "!node_modules/pdfjs-dist/legacy/build/*.min.mjs"
     ],
     "directories": {
       "buildResources": "build",
@@ -46,6 +51,7 @@
     "publish": null
   },
   "dependencies": {
+    "pdfjs-dist": "^4.10.38",
     "swissqrbill": "^4.4.2"
   }
 }
