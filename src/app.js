@@ -434,6 +434,7 @@
         <button class="btn icon" data-action="day" data-step="-1" title="Vorheriger Tag" aria-label="Vorheriger Tag">‹</button>
         <button class="btn" data-action="today" ${d === heute ? 'disabled' : ''}>Heute</button>
         <button class="btn icon" data-action="day" data-step="1" title="Nächster Tag" aria-label="Nächster Tag">›</button>
+        <input type="date" class="daypick" value="${d}" data-action="pick-date" title="Zu einem Datum springen" aria-label="Datum wählen">
       </div>
       <h1>${fmtDateLong(d)}</h1>
       <div class="bignum"><b>${fmtH(total)}</b><span>Stunden</span></div>
@@ -470,7 +471,6 @@
           <tfoot><tr><td colspan="2">Total</td><td class="r num"><b>${fmtH(total)}</b></td><td></td></tr></tfoot>
         </table>` : `<div class="empty">Für diesen Tag ist noch nichts erfasst.</div>`}
       </section>
-      <aside class="pane cal">${calendarHtml()}</aside>
     </div>
     ${viewAuswertung()}`;
   }
@@ -1083,12 +1083,12 @@
         </table>
         <p class="hint">Intern in Prozent aller Stunden. Die übrigen Bereiche in Prozent der Stunden, die nicht auf Intern gingen.</p>
       </section>
-      <section class="sec wide">
+      <section class="sec">
         <h2>Kumulierte Stunden im Jahresvergleich</h2>
         ${lineChart(kum, { year: y, title: 'Kumulierte Stunden im Jahresvergleich' })}
         <p class="hint">Erfasste Stunden mit Zuschlag ${s.stundenZuschlag}, verglichen mit dem Soll bei ${s.pensum}%.</p>
       </section>
-      <section class="sec wide">
+      <section class="sec">
         <h2>Stunden pro Arbeitstag, Schnitt über 7 Tage</h2>
         ${lineChart(gl, { year: y, title: 'Stunden pro Arbeitstag im 7-Tage-Schnitt' })}
         <p class="hint">Gleitender Schnitt der letzten 7 Tage, hochgerechnet auf 5 Arbeitstage, mit Zuschlag ${s.stundenZuschlag}.</p>
@@ -1371,6 +1371,7 @@
   document.addEventListener('change', (ev) => {
     const el = ev.target, a = el.dataset && el.dataset.action;
     if (!a) return;
+    if (a === 'pick-date') { if (el.value) { setDate(el.value); render(); } return; }
     if (a === 'year') { state.year = +el.value; if (+state.date.slice(0, 4) !== state.year) { state.date = state.year === +heute.slice(0, 4) ? heute : `${state.year}-01-01`; state.calMonth = state.date.slice(0, 7); } render(); }
     else if (a === 'filter-status') { state.filter.status = el.value; render(); }
     else if (a === 'form-beginn' || a === 'form-notiz') { merkeEntwurf(); persist(); }
