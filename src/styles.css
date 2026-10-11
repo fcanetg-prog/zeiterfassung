@@ -555,3 +555,6 @@ th.r { text-align: right; }
 .of-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 0 3px; }
 .of-pfld .row { gap: 8px; }
 .of-vorl .of-aus { max-width: 300px; margin-right: 8px; }
+.of-ag { margin-top: 6px; align-items: flex-start; } .of-ag textarea { width: 300px; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+.of-ag .dim { max-width: 420px; line-height: 1.35; }
+.of-neu textarea { width: 240px; font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }

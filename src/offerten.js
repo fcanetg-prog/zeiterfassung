@@ -69,7 +69,37 @@
         <select data-of="verk-neu" data-pid="${p.id}" aria-label="Einem Kunden zuweisen">
           <option value="">${gewaehlt.length ? 'weiteren Kunden hinzufügen …' : 'Kunde wählen …'}</option>
           ${frei.map((e) => `<option value="${esc(e.key)}">${esc(kLabel(e))}</option>`).join('')}
-        </select></div></td></tr>`;
+        </select></div>
+        <div class="of-verk of-ag"><label for="oa-${p.id}" class="dim">Auftraggeber:</label>
+          <textarea id="oa-${p.id}" rows="3" data-of="p-feld" data-key="auftraggeber" data-pid="${p.id}" placeholder="Firma&#10;Strasse&#10;PLZ Ort">${esc(p.auftraggeber || '')}</textarea>
+          <span class="dim">Steht in der Auftragsbestätigung. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></td></tr>`;
+    }
+    /** Projekte der Zeiterfassung, die zu den zugewiesenen Kunden (Jahr, Bereich) gehören. */
+    const zugehoerige = (p) => state.data.projects.filter((x) => (p.kundeLinks || []).includes(kKey(x)));
+    /**
+     * Zugesagte Offerte: Auftraggeber als Rechnungsadresse in die zugehörigen Projekte schreiben.
+     * Projekte mit bereits gestellter Rechnung bleiben unberührt.
+     */
+    function adresseUebernehmen(p, leise) {
+      const adr = String(p.auftraggeber || '').split(/\r?\n/).map((z) => z.trim()).filter(Boolean).join('\n');
+      if (!adr || (p.status !== 'zugesagt' && p.status !== 'abgeschlossen')) return 0;
+      const ziel = zugehoerige(p).filter((x) => !x.rechnungsdatum && (x.rechnungsadresse || '').trim() !== adr);
+      if (!ziel.length) return 0;
+      const vorher = ziel.map((x) => [x, x.rechnungsadresse]);
+      for (const x of ziel) x.rechnungsadresse = adr;
+      if (!leise) setTimeout(() => toast(`Auftraggeber als Rechnungsadresse in ${ziel.length} ${ziel.length === 1 ? 'Projekt' : 'Projekte'} übernommen`, { actionLabel: 'Rückgängig', action: () => { for (const [x, alt] of vorher) x.rechnungsadresse = alt; persist(); render(); } }), 50);
+      return ziel.length;
+    }
+    /** Auftragsbestätigung, zugesagte Offerte und AGB in einem PDF. */
+    async function auftragsbestaetigung(p) {
+      const v = p.versionen.find((x) => x.id === p.zugesagtId) || fassungen(p).pop();
+      if (!String(p.auftraggeber || '').trim()) { toast('Trag zuerst den Auftraggeber ein (im aufgeklappten Eintrag).', { fehler: true }); return; }
+      const r = api.offertAgb ? await api.offertAgb() : null;
+      if (!r || !r.text) { toast('Die Vorlage für Auftragsbestätigung und AGB fehlt: Einstellungen → Offerten → Vorlage wählen.', { fehler: true, dauer: 9000 }); return; }
+      const b = O.bestaetigung(r.text, { offerteVom: v.datum, auftraggeber: p.auftraggeber, heute });
+      const name = `${heute.replace(/-/g, '')}_Auftragsbestaetigung_${sauber(pTitel(p)).replace(/ /g, '_')}.pdf`;
+      const e = await api.savePdf(O.html(v.doc, { kunde: p.kunde, name: p.name, datum: v.datum, bestaetigung: b }), { ordner: 'Offerten', name, roh: true, offerte: true });
+      if (e && e.fehler) toast(e.fehler, { fehler: true }); else if (e && e.path) toast('Auftragsbestätigung mit Offerte und AGB gespeichert und geöffnet');
     }
     /** Zeilen im Projektfenster: die neuste Offerte jedes Offerten-Eintrags, der diesem Kunden (Jahr, Bereich) zugewiesen ist. */
     function projektZeile(d) {
@@ -101,10 +131,12 @@
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
           <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
-        zugesagt: `<button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
+        zugesagt: `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Auftragsbestätigung, zugesagter Offerte und AGB">Auftragsbestätigung</button>
+          <button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
           <button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
-        abgeschlossen: `<button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
+        abgeschlossen: `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Auftragsbestätigung, zugesagter Offerte und AGB">Auftragsbestätigung</button>
+          <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
       }[st];
       return `<tr class="of-pz ${auf ? 'auf' : ''}">
           <td colspan="3"><div class="of-kopf">
@@ -147,6 +179,7 @@
         <div><label for="on-datum">Datum</label><input id="on-datum" type="date" value="${esc(n.datum)}" data-of="n-feld" data-key="datum"></div>
         <div><label for="on-art">Dokument</label><select id="on-art" data-of="n-feld" data-key="art">
           <option value="offerte" ${n.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${n.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option></select></div>
+        <div><label for="on-ag">Auftraggeber (Firma, Strasse, PLZ Ort)</label><textarea id="on-ag" rows="3" data-of="n-feld" data-key="auftraggeber" placeholder="Firma&#10;Strasse&#10;PLZ Ort" ${zu ? 'disabled' : ''}>${esc(zu ? zu.auftraggeber || '' : n.auftraggeber || '')}</textarea></div>
         <div class="of-vorl"><label>Vorlage</label>
           <button class="btn" type="button" data-of="n-hoch" title="PDF einer bestehenden Offerte wählen. Die Tabellen darin werden übernommen.">PDF hochladen</button>
           <select class="of-aus" data-of="n-aus" aria-label="Bestehende Offerte als Vorlage übernehmen" title="Eine Offerte aus diesem Programm als Vorlage übernehmen" ${bestehende().length ? '' : 'disabled'}>
@@ -297,7 +330,7 @@
       const v = { id: uid('ov'), datum: n.datum || heute, erstellt: Date.now(), doc };
       let p = n.pid && projekt(n.pid);
       if (p) p.versionen.push(v);
-      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLinks: [], status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
+      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLinks: [], auftraggeber: (n.auftraggeber || '').trim(), status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
       state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: v.id };
       persist(); render();
     }
@@ -353,8 +386,8 @@
           toast('Fassung gelöscht', { actionLabel: 'Rückgängig', action: () => { p.versionen.splice(i, 0, v); persist(); render(); } }); break;
         }
         case 'zusage': {
-          p.status = 'zugesagt'; p.zugesagtId = v.id; persist(); render();
-          toast(`${vTitel(v)} ist zugesagt`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
+          p.status = 'zugesagt'; p.zugesagtId = v.id; const nAdr = adresseUebernehmen(p, true); persist(); render();
+          toast(`${vTitel(v)} ist zugesagt${nAdr ? `, Auftraggeber als Rechnungsadresse in ${nAdr} ${nAdr === 1 ? 'Projekt' : 'Projekte'} übernommen` : ''}`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
         }
         case 'status': {
           const vorher = { status: p.status, zugesagtId: p.zugesagtId };
@@ -389,6 +422,7 @@
         case 'p2-neu': { o.doc.teile[+ds.t].preis2 = { label: 'Preis pro Folge', betrag: 0 }; persist(); render(); const f = $(`[data-pfad="t.${ds.t}.preis2.betrag"]`); if (f) f.focus(); break; }
         case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
         case 'verk-weg': { p.kundeLinks = (p.kundeLinks || []).filter((k) => k !== ds.key); persist(); render(); break; }
+        case 'ab-pdf': auftragsbestaetigung(p); break;
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
         // LaTeX-Code einfügen
@@ -434,12 +468,12 @@
         // Art und Preisart ändern Beschriftungen an mehreren Stellen.
         if (el.tagName === 'SELECT') render();
       } else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
-      else if (a === 'p-feld') persist();
+      else if (a === 'p-feld') { const zp = projekt(el.dataset.pid); if (zp && el.dataset.key === 'auftraggeber') adresseUebernehmen(zp); persist(); }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
         if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
       }
-      else if (a === 'verk-neu' && el.value) { const zp = projekt(el.dataset.pid); if (zp) { (zp.kundeLinks || (zp.kundeLinks = [])).push(el.value); persist(); render(); toast(`Zugewiesen: ${kLabel(kAusKey(el.value))}`); } }
+      else if (a === 'verk-neu' && el.value) { const zp = projekt(el.dataset.pid); if (zp) { (zp.kundeLinks || (zp.kundeLinks = [])).push(el.value); const nA = adresseUebernehmen(zp); persist(); render(); if (!nA) toast(`Zugewiesen: ${kLabel(kAusKey(el.value))}`); } }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
         if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }

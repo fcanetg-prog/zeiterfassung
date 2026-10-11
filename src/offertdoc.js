@@ -182,9 +182,70 @@
         <p class="art">${ARTEN[d.art]}</p><div class="strich"></div>
         ${m.kunde ? `<p class="kunde">${esc(m.kunde)}</p>` : ''}${m.name ? `<p class="projekt">${esc(m.name)}</p>` : ''}
         ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;
-    return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${ARTEN[d.art]}</title><style>${CSS}</style></head><body>
-      ${titel}
-      ${d.teile.map((t) => teilHtml(d, t)).join('\n')}</body></html>`;
+    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t)).join('\n')}`;
+    // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
+    const b = m.bestaetigung;
+    return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Auftragsbestätigung' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
+      ${b ? `<div class="brief">${b.vorne}</div>` : ''}
+      ${folien}
+      ${b && b.hinten ? `<div class="brief hinten">${b.hinten}</div>` : ''}</body></html>`;
+  }
+
+  /* ---------- Auftragsbestätigung und AGB aus der LaTeX-Vorlage ---------- */
+
+  const CSS_BRIEF = `
+    @page brief { size: 210mm 297mm; margin: 20mm 25mm 18mm 25mm; }
+    .brief { page: brief; break-after: page; font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; font-size: 10pt; line-height: 1.38; color: #111; }
+    .brief.hinten { break-before: page; break-after: auto; }
+    .brief h1 { font-size: 18pt; text-align: center; margin: 0 0 5mm; }
+    .brief h3 { font-size: 12pt; margin: 4.4mm 0 1.5mm; break-after: avoid; }
+    .brief p { margin: 0 0 2.6mm; text-align: justify; hyphens: auto; }
+    .brief p.frei { text-align: left; }
+    .brief .abstand { display: block; }
+    .brief .umbruch { break-before: page; height: 0; }
+  `;
+
+  /** Kleiner LaTeX-Leser für die Vorlage: Titel, Abschnitte, Absätze, Zeilenumbrüche, fett/kursiv, Abstände, Seitenumbruch. */
+  function texZuHtml(roh) {
+    let t = text(roh).replace(/\r/g, '').replace(/(^|[^\\])%.*$/gm, '$1');
+    const a = t.indexOf('\\begin{document}'), e = t.lastIndexOf('\\end{document}');
+    if (a >= 0) t = t.slice(a + 16, e > a ? e : undefined);
+    const inline = (x) => {
+      let h = esc(x.replace(/\\hspace\*?\{[^{}]*\}/g, '').replace(/\\noindent\b/g, ''));
+      h = h.replace(/\\textbf\{([^{}]*)\}/g, '<b>$1</b>').replace(/\\(?:textit|emph)\{([^{}]*)\}/g, '<i>$1</i>');
+      h = h.replace(/\\([%&amp;$#_{}])/g, '$1').replace(/\\&amp;/g, '&amp;').replace(/\\\\\s*/g, '<br>').replace(/~/g, ' ');
+      return h.replace(/\\[a-zA-Z]+\*?/g, '').replace(/[{}]/g, '').replace(/(<br>\s*)+$/, '').trim();
+    };
+    const out = [];
+    // Zentrierter Titel
+    t = t.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, (_, x) => `\n\n@@H1@@${x.replace(/\\(LARGE|Large|large|huge|Huge)\b/g, '').replace(/\\textbf\{([^{}]*)\}/g, '$1').replace(/[{}]/g, '').trim()}\n\n`);
+    t = t.replace(/\\section\*?\{([^{}]*)\}/g, '\n\n@@H3@@$1\n\n').replace(/\\vspace\*?\{([\d.]+)\s*em\}/g, '\n\n@@VS@@$1\n\n').replace(/\\(newpage|clearpage|pagebreak)\b/g, '\n\n@@NP@@\n\n');
+    for (const abs of t.split(/\n\s*\n/)) {
+      const x = abs.trim(); if (!x) continue;
+      if (x.startsWith('@@H1@@')) out.push(`<h1>${inline(x.slice(6))}</h1>`);
+      else if (x.startsWith('@@H3@@')) out.push(`<h3>${inline(x.slice(6))}</h3>`);
+      else if (x.startsWith('@@VS@@')) out.push(`<span class="abstand" style="height:${(parseFloat(x.slice(6)) * 0.5).toFixed(2)}em"></span>`);
+      else if (x.startsWith('@@NP@@')) out.push('<div class="umbruch"></div>');
+      else { const h = inline(x.replace(/\n/g, ' ')); if (h) out.push(`<p class="${h.includes('<br>') ? 'frei' : ''}">${h}</p>`); }
+    }
+    while (out.length && out[out.length - 1].startsWith('<span class="abstand"')) out.pop();   // Leerraum am Ende braucht es nicht
+    return out.join('\n');
+  }
+
+  /**
+   * Füllt die Vorlage aus: «Offerte vom: XX», die XX-Zeilen des Auftraggebers, «Bern, XX» und «XXXX» bei der Unterschrift.
+   * Rückgabe: { vorne, hinten } als HTML; «hinten» ist alles nach dem ersten Seitenumbruch (die AGB).
+   */
+  function bestaetigung(vorlage, a) {
+    const zeilen = text(a.auftraggeber).split(/\r?\n/).map((z) => z.trim()).filter(Boolean);
+    const sicher = (z) => tex(z);
+    let t = text(vorlage);
+    t = t.replace(/(Offerte vom:?\s*)X{2,}/, (_, v) => v + sicher(datumLang(a.offerteVom)));
+    t = t.replace(/(Auftraggeber\}?\s*\\\\\s*\n)((?:\s*(?:\\noindent\s*)?X{2,}\s*(?:\\\\)?\s*\n?)+)/, (_, kopf) => `${kopf}${zeilen.map((z) => `\\noindent ${sicher(z)}`).join('\\\\\n')}\n`);
+    t = t.replace(/(Bern,\s*)X{2,}/, (_, v) => v + sicher(datumLang(a.heute)));
+    t = t.replace(/X{4,}/g, sicher(zeilen[0] || ''));
+    const i = t.search(/\\(newpage|clearpage)\b/);
+    return i < 0 ? { vorne: texZuHtml(t), hinten: '' } : { vorne: texZuHtml(t.slice(0, i)), hinten: texZuHtml('\\begin{document}' + t.slice(i).replace(/^\\(newpage|clearpage)/, '')) };
   }
 
   /* ---------- LaTeX ---------- */
@@ -505,5 +566,5 @@ ${FORMAT}
 
   const leer = (art) => normalize({ art, teile: [{ nummer: '', titel: '', text: '', bloecke: [{ titel: '', zeilen: [{ was: '', aufwand: '', ansatz: 0, preis: 'auto' }] }] }] });
 
-  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer };
+  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer, texZuHtml, bestaetigung, datumLang };
 });

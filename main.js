@@ -236,6 +236,7 @@ async function renderPdf(html, fuss, roh) {
 /* ---------- Titelbild und Logo für Offerten ---------- */
 
 const VORLAGEN_DIR = 'Vorlagen';
+const AGB_DATEI = 'auftragsbestaetigung-agb.tex';
 function bildAlsCss(basis) {
   for (const [endung, typ] of [['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'], ['png', 'image/png']]) {
     const f = path.join(dataDir(), VORLAGEN_DIR, `${basis}.${endung}`);
@@ -448,7 +449,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('dlg:confirm', (ev, text) => {
       ev.returnValue = dialog.showMessageBoxSync(win, { type: 'question', buttons: ['OK', 'Abbrechen'], defaultId: 0, cancelId: 1, noLink: true, title: 'Zeiterfassung', message: String(text) }) === 0;
     });
-    ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath(), offertBilder: { titel: !!bildAlsCss('offerte-titel') } }));
+    ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath(), offertBilder: { titel: !!bildAlsCss('offerte-titel'), agb: fs.existsSync(path.join(dataDir(), VORLAGEN_DIR, AGB_DATEI)) } }));
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
     });
@@ -466,6 +467,11 @@ if (!app.requestSingleInstanceLock()) {
       }
     });
     ipcMain.handle('offerte:bilder', (_e, bilder) => { try { return speichereOffertBilder(bilder); } catch (err) { return { ok: false, error: err.message }; } });
+    ipcMain.handle('offerte:agb', () => { try { return { text: fs.readFileSync(path.join(dataDir(), VORLAGEN_DIR, AGB_DATEI), 'utf8') }; } catch { return { text: '' }; } });
+    ipcMain.handle('offerte:agbSpeichern', (_e, text) => {
+      try { const dir = path.join(dataDir(), VORLAGEN_DIR); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, AGB_DATEI), String(text), 'utf8'); return { ok: true }; }
+      catch (err) { return { ok: false, error: err.message }; }
+    });
     ipcMain.handle('offerte:bildWaehlen', async (_e, art) => {
       const basis = art === 'logo' ? 'offerte-logo' : 'offerte-titel';
       const r = await dialog.showOpenDialog(win, { title: art === 'logo' ? 'Logo für das Kopfband wählen' : 'Titelbild wählen (16:9)', filters: [{ name: 'Bild', extensions: ['png', 'jpg', 'jpeg'] }], properties: ['openFile'] });

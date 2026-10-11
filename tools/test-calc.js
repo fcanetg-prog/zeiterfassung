@@ -183,5 +183,14 @@ console.log('Alle Prüfungen bestanden.');
   d2.teile[0].preisLabel = 'Preis für 4 Folgen'; d2.teile[0].preis2 = { label: 'Preis pro Folge', betrag: 937.5 };
   const h2 = O.html(d2); assert.ok(h2.includes('Preis für 4 Folgen')); assert.ok(h2.includes('937.50 Fr.'));
   assert.deepStrictEqual(O.ausLatex(O.latex(d2)).doc, d2);
+  // Auftragsbestätigung aus der LaTeX-Vorlage (erfundener Text)
+  const vorl = ['\\begin{document}', '\\begin{center}', '{\\LARGE \\textbf{Auftragsbestätigung}}', '\\end{center}', '\\section*{Vertragsgrundlage}', 'Gemäss Offerte vom: XX\\hspace{7cm}', '',
+    '\\noindent\\textbf{Auftraggeber}\\\\', '\\noindent XX\\\\', '\\noindent XX\\\\', '\\noindent XX', '', '\\section*{Unterschriften}', 'Bern, XX', '', '\\noindent \\textbf{Unterschrift Auftraggeber:}\\\\', '\\noindent XXXX', '',
+    '\\newpage', '\\begin{center}', '{\\LARGE \\textbf{AGB}}', '\\end{center}', '\\section*{1. Test}', 'Rund 20\\% und \\textit{Buyout}. % Kommentar', '\\end{document}'].join('\n');
+  const ab = O.bestaetigung(vorl, { offerteVom: '2026-10-08', auftraggeber: 'Muster & Co. AG\nWeg 1\n3000 Bern\nSchweiz', heute: '2026-10-11' });
+  assert.ok(ab.vorne.includes('<h1>Auftragsbestätigung</h1>')); assert.ok(ab.vorne.includes('Gemäss Offerte vom: 8. Oktober 2026')); assert.ok(ab.vorne.includes('Bern, 11. Oktober 2026'));
+  assert.ok(ab.vorne.includes('Muster &amp; Co. AG<br>Weg 1<br>3000 Bern<br>Schweiz')); assert.ok(!/XX/.test(ab.vorne)); assert.ok(!ab.vorne.includes('AGB'));
+  assert.ok(ab.hinten.includes('<h1>AGB</h1>')); assert.ok(ab.hinten.includes('Rund 20% und <i>Buyout</i>.')); assert.ok(!ab.hinten.includes('Kommentar'));
+  const hb = O.html(d, { bestaetigung: ab }); assert.ok(hb.indexOf('class="brief"') < hb.indexOf('class="folie')); assert.ok(hb.indexOf('class="brief hinten"') > hb.lastIndexOf('class="folie'));
   console.log('Offerten bestanden.');
 }

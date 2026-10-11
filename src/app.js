@@ -256,7 +256,7 @@
       return [...new Set(treffer.map(key))];
     };
     out.offerten = (d.offerten || []).filter((o) => o && o.id).map((o) => ({
-      id: o.id, name: o.name || '', kunde: o.kunde || '', kundeLinks: Array.isArray(o.kundeLinks) ? o.kundeLinks.map(String) : alteKundenLinks(o), status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
+      id: o.id, name: o.name || '', kunde: o.kunde || '', auftraggeber: o.auftraggeber || '', kundeLinks: Array.isArray(o.kundeLinks) ? o.kundeLinks.map(String) : alteKundenLinks(o), status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
       zugesagtId: o.zugesagtId || null, erstellt: o.erstellt || 0, mod: o.mod || 0,
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc) })),
     }));
@@ -1167,8 +1167,9 @@
         ${state.sync ? `<p class="hint ${state.sync.fehler ? 'warn' : ''}">${esc(state.sync.fehler || state.sync.text)}</p>` : ''}
       </section>
       <section class="sec"><h2>Offerten</h2>
-        <p>Titelbild der ersten Folie. Es liegt im Ordner «Vorlagen» neben deinen Daten und gilt damit für beide Rechner.</p>
+        <p>Titelbild der ersten Folie sowie die LaTeX-Vorlage für Auftragsbestätigung und AGB. Beides liegt im Ordner «Vorlagen» neben deinen Daten und gilt damit für beide Rechner.</p>
         <div class="row">
+          <button class="btn" data-action="offert-agb">Vorlage für Auftragsbestätigung und AGB wählen</button><span class="${(state.info.offertBilder || {}).agb ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).agb ? 'vorhanden' : 'fehlt'}</span>
           <button class="btn" data-action="offert-bild" data-art="titel">Titelbild wählen</button><span class="${(state.info.offertBilder || {}).titel ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).titel ? 'vorhanden' : 'fehlt: die Titelfolie ist einfarbig blau'}</span>
         </div>
       </section>
@@ -1252,6 +1253,12 @@
     const r = await api.importFile();
     if (!r || r.canceled) return;
     if (r.error) { toast(r.error, { fehler: true }); return; }
+    if (r.data && r.data.typ === 'offertagb') {
+      const e = api.offertAgbSpeichern ? await api.offertAgbSpeichern(String(r.data.tex || '')) : { ok: false, error: 'Nur in der Desktop-App.' };
+      if (e.ok) state.info = await api.info();
+      render(); toast(e.ok ? 'Die Vorlage für Auftragsbestätigung und AGB ist gespeichert.' : 'Die Vorlage konnte nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
+      return;
+    }
     if (r.data && r.data.typ === 'offertbilder') {
       const e = api.offertBilder ? await api.offertBilder(r.data) : { ok: false, error: 'Nur in der Desktop-App.' };
       if (e.ok) state.info = await api.info();
@@ -1371,6 +1378,16 @@
       case 'open-folder': api.openFolder(); break;
       case 'offerte-oeffnen': OFF.oeffneAktuelle(el.dataset.id); break;
       case 'offerte-zeigen': state.drawer = null; state.view = 'offerten'; OFF.zeige(el.dataset.id); render(); break;
+      case 'offert-agb': {
+        if (!api.offertAgbSpeichern) { toast('Nur in der Desktop-App.', { fehler: true }); break; }
+        const r = await api.openText('LaTeX-Datei mit Auftragsbestätigung und AGB wählen', ['tex', 'txt']);
+        if (!r || r.canceled) break;
+        if (r.fehler || !/\\section|Auftragsbest/.test(r.text || '')) { toast(r.fehler || 'Die Datei sieht nicht nach der LaTeX-Vorlage aus.', { fehler: true }); break; }
+        const e = await api.offertAgbSpeichern(r.text);
+        if (!e.ok) { toast('Die Vorlage konnte nicht gespeichert werden: ' + e.error, { fehler: true }); break; }
+        state.info = await api.info(); render(); toast('Vorlage übernommen');
+        break;
+      }
       case 'offert-bild': {
         if (!api.offertBildWaehlen) { toast('Nur in der Desktop-App.', { fehler: true }); break; }
         const r = await api.offertBildWaehlen(el.dataset.art);
