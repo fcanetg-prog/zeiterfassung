@@ -250,7 +250,7 @@
     }));
     const OD = window.OffertDoc;
     out.offerten = (d.offerten || []).filter((o) => o && o.id).map((o) => ({
-      id: o.id, name: o.name || '', kunde: o.kunde || '', status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
+      id: o.id, name: o.name || '', kunde: o.kunde || '', kundeLink: o.kundeLink || ((d.projects.find((q) => q.offerteId === o.id) || {}).kunde) || '', status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
       zugesagtId: o.zugesagtId || null, erstellt: o.erstellt || 0, mod: o.mod || 0,
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc) })),
     }));
@@ -272,7 +272,7 @@
       rechnungGeplant: p.rechnungGeplant || null, rechnungsdatum: p.rechnungsdatum || null, zahlungsdatum: p.zahlungsdatum || null,
       rechnungsadresse: p.rechnungsadresse || '', referenz: p.referenz || '', rechnungsEmail: p.rechnungsEmail || '',
       rechnungstext: p.rechnungstext || '', offerteVom: p.offerteVom || null, emailVom: p.emailVom || null,
-      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, zahlungBank: p.zahlungBank || null, offerteId: p.offerteId || null, mod: p.mod || 0,
+      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, zahlungBank: p.zahlungBank || null, mod: p.mod || 0,
     }));
     const ids = new Set(out.projects.map((p) => p.id));
     out.entries = d.entries.filter((e) => e && e.datum && ids.has(e.projectId) && C.isNum(e.stunden))
@@ -792,7 +792,7 @@
             ${fld('d-kunde', 'Kunde', 'kunde', 'list="dl-kunde"')}${fld('d-name', 'Projekt', 'name')}
             ${fld('d-bereich', 'Bereich', 'bereich', 'list="dl-bereich"')}${fld('d-kategorie', 'Unterbereich', 'kategorie', 'list="dl-kategorie"')}
           </div>
-          ${OFF.projektZeile(d.offerteId)}
+          ${OFF.projektZeile(d.kunde)}
           ${datalist('dl-kunde', 'kunde')}${datalist('dl-bereich', 'bereich')}${datalist('dl-kategorie', 'kategorie')}
           <div class="cols2">
             <div class="fld"><label>Jahr</label>${seg('jahr', jahrOptionen(d.jahr).map((y) => [y, String(y)]))}</div>

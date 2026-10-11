@@ -49,30 +49,33 @@
         </td></tr>`;
     }
 
-    /* Verknüpfung mit den Projekten der Zeiterfassung: Im Projekt lässt sich so die neuste Offerte öffnen. */
-    const zLabel = (x) => `${[x.kunde, x.name].filter(Boolean).join(' – ')} (${x.jahr})`;
+    /* Zuweisung zu einem Kunden der Zeiterfassung: In dessen Projekten lässt sich so die neuste Offerte öffnen. */
+    function kunden() {
+      return [...new Set(state.data.projects.filter((x) => x.abrechnung !== 'intern' && x.kunde).map((x) => x.kunde))].sort((a, b) => a.localeCompare(b, 'de'));
+    }
     function verknuepfZeile(p) {
-      const verkn = state.data.projects.filter((x) => x.offerteId === p.id);
-      const frei = state.data.projects.filter((x) => x.offerteId !== p.id && !x.archiviert && x.abrechnung !== 'intern')
-        .sort((a, b) => b.jahr - a.jahr || zLabel(a).localeCompare(zLabel(b), 'de'));
+      const alle = kunden();
+      const fehlt = p.kundeLink && !alle.includes(p.kundeLink);
       return `<tr class="of-vz"><td colspan="3"><div class="of-verk">
-        <span class="dim">Gehört zu Projekt:</span>
-        ${verkn.map((x) => `<span class="of-chip">${esc(zLabel(x))}<button data-of="verk-weg" data-zid="${x.id}" title="Verknüpfung lösen" aria-label="Verknüpfung lösen">×</button></span>`).join('')}
-        <select data-of="verk-neu" data-pid="${p.id}" aria-label="Mit einem Projekt verknüpfen">
-          <option value="">${verkn.length ? 'weiteres Projekt hinzufügen …' : 'Projekt wählen …'}</option>
-          ${frei.map((x) => `<option value="${x.id}">${esc(zLabel(x))}${x.offerteId ? ' · hat schon eine Offerte' : ''}</option>`).join('')}
+        <label for="ok-${p.id}" class="dim">Gehört zu Kunde:</label>
+        <select id="ok-${p.id}" data-of="verk-kunde" data-pid="${p.id}">
+          <option value="">nicht zugewiesen</option>
+          ${fehlt ? `<option value="${esc(p.kundeLink)}" selected>${esc(p.kundeLink)} (kein Projekt mehr)</option>` : ''}
+          ${alle.map((k) => `<option value="${esc(k)}" ${p.kundeLink === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
         </select></div></td></tr>`;
     }
-    /** Zeile im Projektfenster: neuste Offerte öffnen. */
-    function projektZeile(offerteId) {
-      const p = offerteId && projekt(offerteId);
-      if (!p) return '';
-      const fs = fassungen(p), v = fs[fs.length - 1];
-      if (!v) return '';
-      return `<div class="fld of-pfld"><label>Offerte</label><div class="row">
-        <span>${esc(vTitel(v))}${fs.length > 1 ? ` <span class="dim">(neuste von ${fs.length})</span>` : ''}</span>
-        <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button>
-        <button class="btn small" type="button" data-action="offerte-zeigen" data-id="${p.id}">Unter Offerten zeigen</button></div></div>`;
+    /** Zeilen im Projektfenster: die neuste Offerte jedes Offerten-Projekts, das dem Kunden zugewiesen ist. */
+    function projektZeile(kunde) {
+      const ps = kunde ? liste().filter((p) => p.kundeLink === kunde && p.versionen.length) : [];
+      if (!ps.length) return '';
+      const neuste = (p) => fassungen(p).pop();
+      ps.sort((a, b) => (neuste(a).datum < neuste(b).datum ? 1 : -1));
+      const status = { offen: 'offen', zugesagt: 'zugesagt', abgesagt: 'abgesagt', abgeschlossen: 'abgeschlossen' };
+      return `<div class="fld of-pfld"><label>${ps.length === 1 ? 'Offerte' : 'Offerten'} für ${esc(kunde)}</label>
+        ${ps.map((p) => { const v = neuste(p), n = p.versionen.length; return `<div class="row">
+          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${status[p.status]}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
+          <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button>
+          <button class="btn small" type="button" data-action="offerte-zeigen" data-id="${p.id}">Unter Offerten zeigen</button></div>`; }).join('')}</div>`;
     }
     function oeffneAktuelle(id) {
       const p = projekt(id); if (!p) { toast('Die verknüpfte Offerte gibt es nicht mehr.', { fehler: true }); return; }
@@ -136,7 +139,7 @@
         <div><label for="on-pid">Gehört zu</label><select id="on-pid" data-of="n-feld" data-key="pid">
           <option value="">Neuer Kunde / neues Projekt</option>
           ${offene.map((p) => `<option value="${p.id}" ${n.pid === p.id ? 'selected' : ''}>${esc(pTitel(p))} (${p.versionen.length} ${p.versionen.length === 1 ? 'Offerte' : 'Offerten'})</option>`).join('')}</select></div>
-        <div><label for="on-kunde">Kunde</label><input id="on-kunde" type="text" value="${esc(zu ? zu.kunde : n.kunde)}" data-of="n-feld" data-key="kunde" ${zu ? 'disabled' : ''}></div>
+        <div><label for="on-kunde">Kunde</label><input id="on-kunde" type="text" value="${esc(zu ? zu.kunde : n.kunde)}" data-of="n-feld" data-key="kunde" list="on-kunden" ${zu ? 'disabled' : ''}><datalist id="on-kunden">${kunden().map((k) => `<option value="${esc(k)}">`).join('')}</datalist></div>
         <div><label for="on-name">Projekt</label><input id="on-name" type="text" value="${esc(zu ? zu.name : n.name)}" data-of="n-feld" data-key="name" ${zu ? 'disabled' : ''}></div>
         <div><label for="on-datum">Datum</label><input id="on-datum" type="date" value="${esc(n.datum)}" data-of="n-feld" data-key="datum"></div>
         <div><label for="on-art">Dokument</label><select id="on-art" data-of="n-feld" data-key="art">
@@ -216,9 +219,7 @@
           ${o.vorlage ? `<label>Name <input type="text" class="of-vname2" value="${esc(o.vorlage.name)}" data-of="vo-name" data-id="${o.vorlage.id}"></label>` : `<label>Datum <input type="date" value="${esc(o.v.datum)}" data-of="v-datum"></label>`}
           <label>Dokument <select data-of="f" data-pfad="art"><option value="offerte" ${d.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${d.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option></select></label>
           <span class="grow"></span>
-          <button class="btn" data-of="tex-kopieren" title="Erzeugt den LaTeX-Code dieser Offerte und kopiert ihn. Du kannst ihn in Claude einfügen und dort ändern lassen.">LaTeX-Code kopieren</button>
-          <button class="btn" data-of="dialog" data-art="ersetzen" title="Geänderten LaTeX-Code einfügen. Der Inhalt dieser Offerte wird damit ersetzt.">Durch neuen LaTeX-Code ersetzen</button>
-          <button class="btn" data-of="e-hoch" title="Inhalt durch ein PDF oder eine LaTeX-Datei ersetzen">Hochladen</button>
+          <button class="btn" data-of="e-hoch" title="Den Inhalt dieser Offerte durch die Tabellen aus einem PDF ersetzen">PDF hochladen</button>
           <button class="btn primary" data-of="e-pdf">PDF</button>
         </div>
         ${fest ? `<div class="of-fest">Diese Fassung ist ${o.p.status === 'abgesagt' ? 'abgesagt' : 'zugesagt'}. Änderungen sind weiterhin möglich, für eine neue Runde stellst du das Projekt besser zurück auf offen und legst eine neue Fassung an.</div>` : ''}
@@ -293,7 +294,7 @@
       const v = { id: uid('ov'), datum: n.datum || heute, erstellt: Date.now(), doc };
       let p = n.pid && projekt(n.pid);
       if (p) p.versionen.push(v);
-      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
+      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), kundeLink: kunden().find((k) => k.toLowerCase() === n.kunde.trim().toLowerCase()) || '', status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
       state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: v.id };
       persist(); render();
     }
@@ -384,7 +385,6 @@
         }
         case 'p2-neu': { o.doc.teile[+ds.t].preis2 = { label: 'Preis pro Folge', betrag: 0 }; persist(); render(); const f = $(`[data-pfad="t.${ds.t}.preis2.betrag"]`); if (f) f.focus(); break; }
         case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
-        case 'verk-weg': { const x = state.data.projects.find((q) => q.id === ds.zid); if (x) { x.offerteId = null; persist(); render(); } break; }
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
         // LaTeX-Code einfügen
@@ -431,6 +431,11 @@
         if (el.tagName === 'SELECT') render();
       } else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
       else if (a === 'p-feld') persist();
+      else if (a === 'n-aus' && el.value && state.off.neu) {
+        const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
+        if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
+      }
+      else if (a === 'verk-kunde') { const zp = projekt(el.dataset.pid); if (zp) { zp.kundeLink = el.value; persist(); toast(el.value ? `Dem Kunden ${el.value} zugewiesen` : 'Zuweisung entfernt'); } }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
         if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
