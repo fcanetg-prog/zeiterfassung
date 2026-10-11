@@ -243,7 +243,7 @@
     // 3. Eine Bankbewegung, in der Buchhaltung auf zwei oder drei Buchungen aufgeteilt
     for (const o of offen) {
       if (o.weg) continue;
-      const kand = frei.filter((f) => !f.weg && Math.sign(f.betrag) === Math.sign(o.z.betrag) && Math.abs(tage(f.b.datum, o.z.datum)) <= 6);
+      const kand = frei.filter((f) => !f.weg && Math.sign(f.betrag) === Math.sign(o.z.betrag) && Math.abs(tage(f.b.datum, o.z.datum)) <= 1);   // Teile einer aufgeteilten Zahlung tragen das Datum der Bank
       let gefunden = null;
       for (let i = 0; i < kand.length && !gefunden; i++) for (let j = i + 1; j < kand.length && !gefunden; j++) {
         if (round2(kand[i].betrag + kand[j].betrag) === o.z.betrag) gefunden = [kand[i], kand[j]];

@@ -82,9 +82,11 @@
         <span class="grow"></span>
         ${Math.abs(t.differenz) > 0.004 ? `<span class="warn">Differenz Soll/Haben: ${chf(t.differenz)}</span>` : ''}
         <button class="btn" data-bh="bank">Bankbewegungen einlesen</button>
+        ${(state.data.bankZeilen || {})[jahr()] ? `<button class="btn ${state.bh.abgl ? 'on' : ''}" data-bh="abgl" title="Zeigt für die letzten Bankbewegungen, welcher Buchung sie zugeordnet sind">Abgleich ${state.bh.abgl ? 'ausblenden' : 'zeigen'}</button>` : ''}
         <button class="btn" data-bh="pdf">Dossier als PDF</button>
       </div>
       ${zahlPanel()}
+      ${abgleichPanel()}
       ${inhalt}`;
     }
 
@@ -241,6 +243,35 @@
       const bsp = beispiele.filter((e) => rang(e) > 0).sort((a, b) => rang(b) - rang(a) || (a.datum < b.datum ? 1 : -1))[0];
       const konto = bsp ? bsp.gegen : v.haben;
       return Object.assign(v, { haben: konto, text: rechnungsText(ps, konto), sicher: !!bsp && eindeutig && bereiche.size === 1 });
+    }
+
+    /** Die letzten Bankbewegungen mit ihrer Zuordnung: So sieht man, warum etwas nicht vorgeschlagen wird, und kann es korrigieren. */
+    function abgleichPanel() {
+      const bz = (state.data.bankZeilen || {})[jahr()];
+      if (!state.bh.abgl || !bz) return '';
+      const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
+      const ign = new Set(state.data.settings.bankIgnoriert || []);
+      const a = L.bankAbgleich(bz.zeilen, alle, BANK, [...ign]);
+      const zu = new Map(a.paare.map((p) => [p.zeile.schluessel, p.buchungen]));
+      const n = state.bh.abglAlle ? bz.zeilen.length : 20;
+      const zeilen = bz.zeilen.slice(-n).reverse();
+      const zeile = (z) => {
+        const bs = zu.get(z.schluessel);
+        let status, knopf = '';
+        if (bs && bs.some((b) => b.vorschlag)) status = '<span class="over-text">Vorschlag, noch nicht bestätigt</span>';
+        else if (bs) {
+          status = bs.map((b) => `Beleg ${esc(b.beleg || '–')} vom ${fmtDate(b.datum)}: ${esc(b.text)}`).join('<br>');
+          // Nur anbieten, wenn die Zuordnung über Betrag und Datum geraten ist (nicht bei Buchungen, die aus genau dieser Bewegung entstanden sind).
+          if (!bs.some((b) => b.bankSchluessel === z.schluessel)) knopf = `<button class="btn small" data-bh="abg-neu" data-key="${esc(z.schluessel)}" title="Die Zuordnung stimmt nicht: diese Bankbewegung als neuen Vorschlag anlegen">Falsch zugeordnet</button>`;
+        } else if (ign.has(z.schluessel)) { status = '<span class="dim">verworfen</span>'; knopf = `<button class="btn small" data-bh="abg-neu" data-key="${esc(z.schluessel)}">Wieder vorschlagen</button>`; }
+        else { status = '<span class="neg">nicht verbucht</span>'; knopf = `<button class="btn small primary" data-bh="abg-neu" data-key="${esc(z.schluessel)}">Vorschlagen</button>`; }
+        return `<tr><td class="num">${fmtDate(z.datum)}</td><td class="num r">${chf(z.betrag)}</td><td class="abg-t" title="${esc(z.text)}">${esc(z.text)}</td><td>${status}</td><td class="r">${knopf}</td></tr>`;
+      };
+      return `<div class="bh-abgl"><button class="x" data-bh="abgl" title="Schliessen">×</button>
+        <h3>Abgleich mit der Bank</h3>
+        <p>Jede Bankbewegung und die Buchung, der sie zugeordnet ist. Die neuste steht zuoberst.</p>
+        <div class="bh-abgl-wrap"><table><thead><tr><th>Datum</th><th class="r">Betrag</th><th>Text der Bank</th><th>Zugeordnet</th><th></th></tr></thead><tbody>${zeilen.map(zeile).join('')}</tbody></table></div>
+        ${bz.zeilen.length > 20 ? `<button class="of-mehr" data-bh="abgl-alle">${state.bh.abglAlle ? 'Nur die letzten 20 zeigen' : `Alle ${bz.zeilen.length} zeigen`}</button>` : ''}</div>`;
     }
 
     function zahlPanel() {
@@ -519,6 +550,20 @@
       const a = el.dataset.bh;
       if (a === 'tab') { state.bh.tab = el.dataset.tab; state.bh.edit = null; render(); }
       else if (a === 'bank') bankEinlesen();
+      else if (a === 'abgl') { state.bh.abgl = !state.bh.abgl; render(); }
+      else if (a === 'abgl-alle') { state.bh.abglAlle = !state.bh.abglAlle; render(); }
+      else if (a === 'abg-neu') {
+        // Bankbewegung ausdrücklich als Vorschlag anlegen; über ihren Schlüssel bleibt sie künftig dieser Buchung zugeordnet.
+        const bz = state.data.bankZeilen[jahr()], z = bz.zeilen.find((x) => x.schluessel === el.dataset.key);
+        if (!z) return;
+        const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
+        const ign = state.data.settings.bankIgnoriert || [];
+        const k = ign.indexOf(z.schluessel); if (k >= 0) ign.splice(k, 1);
+        const lern = L.bankAbgleich(bz.zeilen, alle, BANK, []).paare.filter((x) => x.zeile.schluessel !== z.schluessel && x.buchungen.every((b) => !b.vorschlag));
+        const pos = state.data.buchungen.reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
+        state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos, vorschlag: true }, L.bankVorschlag(z, lern, BANK)));
+        state.bh.tab = 'buchungen'; persist(); render(); toast('Als Vorschlag angelegt');
+      }
       else if (a === 'z-zu') { state.bh.zahl = null; render(); }
       else if (a === 'z-zurueck') {
         const [e] = state.bh.zahl.gesetzt.splice(+el.dataset.i, 1);

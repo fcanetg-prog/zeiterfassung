@@ -71,9 +71,9 @@
     /** Beilagen zu einer Offerte (z. B. E-Mail-Austausch als PDF): anzeigen, öffnen, hinzufügen, entfernen. */
     function anhangZeile(p) {
       const an = p.anhaenge || [];
-      return `<div class="of-verk of-anh"><span class="dim">Beilagen:</span>
+      return `<div class="of-raster"><span class="of-lab">Beilagen</span><div class="of-stapel">
         ${an.map((a, i) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Beilage entfernen" aria-label="Beilage entfernen">×</button></span>`).join('')}
-        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden">+ PDF hinzufügen</button></div>`;
+        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden">+ PDF hinzufügen</button></div></div>`;
     }
     async function anhangHinzu(p) {
       const r = api.offertAnhangWaehlen ? await api.offertAnhangWaehlen() : { fehler: 'Nur in der Desktop-App.' };
@@ -87,17 +87,18 @@
     function verknuepfZeile(p) {
       const alle = kundenEintraege(), gewaehlt = p.kundeLinks || [];
       const frei = alle.filter((e) => !gewaehlt.includes(e.key));
-      return `<tr class="of-vz"><td colspan="3"><div class="of-verk">
-        <span class="dim">Gehört zu Kunde:</span>
-        ${gewaehlt.map((key) => { const e = alle.find((x) => x.key === key) || kAusKey(key); return `<span class="of-chip">${esc(kLabel(e))}<button data-of="verk-weg" data-pid="${p.id}" data-key="${esc(key)}" title="Zuweisung entfernen" aria-label="Zuweisung entfernen">×</button></span>`; }).join('')}
-        <select data-of="verk-neu" data-pid="${p.id}" aria-label="Einem Kunden zuweisen">
-          <option value="">${gewaehlt.length ? 'weiteren Kunden hinzufügen …' : 'Kunde wählen …'}</option>
-          ${frei.map((e) => `<option value="${esc(e.key)}">${esc(kLabel(e))}</option>`).join('')}
-        </select></div>
+      // Bezeichnung links, Inhalt rechts in einer Spalte; Kunden und Beilagen stehen untereinander.
+      return `<tr class="of-vz"><td colspan="3">
+        <div class="of-raster"><span class="of-lab">Gehört zu Kunde</span><div class="of-stapel">
+          ${gewaehlt.map((key) => { const e = alle.find((x) => x.key === key) || kAusKey(key); return `<span class="of-chip">${esc(kLabel(e))}<button data-of="verk-weg" data-pid="${p.id}" data-key="${esc(key)}" title="Zuweisung entfernen" aria-label="Zuweisung entfernen">×</button></span>`; }).join('')}
+          <select data-of="verk-neu" data-pid="${p.id}" aria-label="Einem Kunden zuweisen">
+            <option value="">${gewaehlt.length ? 'weiteren Kunden hinzufügen …' : 'Kunde wählen …'}</option>
+            ${frei.map((e) => `<option value="${esc(e.key)}">${esc(kLabel(e))}</option>`).join('')}
+          </select></div></div>
         ${anhangZeile(p)}
-        <div class="of-verk of-ag"><label for="oa-${p.id}" class="dim">Auftraggeber:</label>
+        <div class="of-raster"><label for="oa-${p.id}" class="of-lab">Auftraggeber</label><div class="of-stapel">
           <textarea id="oa-${p.id}" rows="3" data-of="p-feld" data-key="auftraggeber" data-pid="${p.id}" placeholder="Firma&#10;Strasse&#10;PLZ Ort">${esc(p.auftraggeber || '')}</textarea>
-          <span class="dim">Steht im Vertrag. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></td></tr>`;
+          <span class="dim of-hinw">Steht im Vertrag. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></div></td></tr>`;
     }
     /** Projekte der Zeiterfassung, die zu den zugewiesenen Kunden (Jahr, Bereich) gehören. */
     const zugehoerige = (p) => state.data.projects.filter((x) => (p.kundeLinks || []).includes(kKey(x)));
