@@ -162,9 +162,11 @@
     table.einfach tbody td:first-child { padding-left: 0; }
     tr.entf td { color: #9aa6b0; }
     td.ink { color: ${ORANGE}; }
-    tfoot tr.p2 td { border-top: .25mm solid #5d7389; }
-    tfoot td { font-weight: 700; font-size: 1.12em; color: #fff; background: ${NAVY}; padding: .6em .55em; }
-    tfoot td:last-child { padding-right: .55em; }
+    tbody tr:last-child td { border-bottom: 0; }
+    /* Preiszeilen: gleiche Höhe und Schriftgrösse wie die Kopfzeile */
+    tfoot td { font-weight: 700; font-size: .8em; letter-spacing: .07em; color: #fff; background: ${NAVY}; padding: .7em .75em; }
+    tfoot td:last-child { padding-right: .75em; }
+    tfoot tr.p2 td { background: linear-gradient(#5d7389, #5d7389) top / 100% .25mm no-repeat ${NAVY}; }
     tbody tr:not(.bt) td:last-child { padding-right: .6em; }
     footer { position: absolute; right: ${SEITE.rand}mm; bottom: 4.6mm; font-size: 9pt; color: #55656f; }
   `;
