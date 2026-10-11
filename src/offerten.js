@@ -44,7 +44,6 @@
         <td class="of-kurz num">${v.lesbar ? esc(O.kurz(v.doc)) : '<span class="dim">Inhalt nicht eingelesen, nur das Original ist abgelegt</span>'}</td>
         <td class="r of-akt">
           <button class="btn small primary" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">Original öffnen</button>
-          ${v.lesbar ? `<button class="btn small" data-of="pdf" data-pid="${p.id}" data-vid="${v.id}" title="Dieselbe Offerte im neuen Layout erzeugen">Neues Layout</button>` : ''}
         </td></tr>`;
       return `<tr class="of-fz">
         <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
@@ -153,7 +152,7 @@
     function projektZeilen(p) {
       const fs = fassungen(p), letzte = fs[fs.length - 1], st = p.status, auf = pOffen(p);
       // Alte Offerte, deren Tabelle nicht eingelesen werden konnte: Daraus lässt sich kein Vertrag erzeugen.
-      const ohneInhalt = fs.some((v) => v.id === p.zugesagtId && v.original && !v.lesbar);
+      const ohneInhalt = p.alt || fs.some((v) => v.id === p.zugesagtId && v.original);   // alte Offerten sind längst abgemacht: kein Vertrag
       const knoepfe = {
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
           <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
@@ -162,7 +161,7 @@
           <button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
           <button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
-        abgeschlossen: `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>
+        abgeschlossen: `${ohneInhalt ? '' : `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>`}
           <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
       }[st];
       return `<tr class="of-pz ${auf ? 'auf' : ''}">
