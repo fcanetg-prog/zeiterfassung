@@ -156,6 +156,7 @@
       const knoepfe = {
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
           <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
+          ${letzte ? `<button class="btn small" data-of="zusage" data-pid="${p.id}" data-vid="${letzte.id}" title="Die neuste Offerte wurde zugesagt: Der Eintrag wandert zu den zugesagten Offerten">✓ Zugesagt</button>` : ''}
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
         zugesagt: `${ohneInhalt ? '' : `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>`}
           <button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
