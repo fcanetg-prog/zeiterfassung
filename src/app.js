@@ -1237,6 +1237,11 @@
     const r = await api.importFile();
     if (!r || r.canceled) return;
     if (r.error) { toast(r.error, { fehler: true }); return; }
+    if (r.data && r.data.typ === 'offertbilder') {
+      const e = api.offertBilder ? await api.offertBilder(r.data) : { ok: false, error: 'Nur in der Desktop-App.' };
+      toast(e.ok ? `Titelbild und Logo für die Offerten sind gespeichert (${e.anzahl} Bilder).` : 'Die Bilder konnten nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
+      return;
+    }
     if (r.data && r.data.typ === 'offertvorlage') {
       if (!state.data) state.data = C.emptyData();
       OFF.beginneMit(r.data.doc, r.data.name || 'Vorlage');

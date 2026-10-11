@@ -233,6 +233,36 @@ async function renderPdf(html, fuss, roh) {
   }
 }
 
+/* ---------- Titelbild und Logo für Offerten ---------- */
+
+const VORLAGEN_DIR = 'Vorlagen';
+function bildAlsCss(basis) {
+  for (const [endung, typ] of [['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'], ['png', 'image/png']]) {
+    const f = path.join(dataDir(), VORLAGEN_DIR, `${basis}.${endung}`);
+    try { return `url("data:${typ};base64,${fs.readFileSync(f).toString('base64')}")`; } catch { /* nächste Endung */ }
+  }
+  return null;
+}
+/** Setzt Titelbild und Logo aus dem Ordner «Vorlagen» in die Offerte ein; fehlen sie, steht der Firmenname als Text. */
+function offertBilder(html) {
+  const titel = bildAlsCss('offerte-titel'), logo = bildAlsCss('offerte-logo');
+  return html.split('__OFFERTE_TITELBILD__').join(titel || '').split('__OFFERTE_LOGO__').join(logo || 'none')
+    .split('__OFFERTE_FIRMA_TITEL__').join(titel ? 'none' : 'block').split('__OFFERTE_FIRMA_KOPF__').join(logo ? 'none' : 'block');
+}
+function speichereOffertBilder(bilder) {
+  const dir = path.join(dataDir(), VORLAGEN_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  let n = 0;
+  for (const [key, basis] of [['titel', 'offerte-titel'], ['logo', 'offerte-logo']]) {
+    const m = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String((bilder && bilder[key]) || ''));
+    if (!m) continue;
+    for (const e of ['jpg', 'jpeg', 'png']) { try { fs.unlinkSync(path.join(dir, `${basis}.${e}`)); } catch { /* gab es nicht */ } }
+    fs.writeFileSync(path.join(dir, `${basis}.${m[1] === 'jpeg' ? 'jpg' : 'png'}`), Buffer.from(m[2], 'base64'));
+    n++;
+  }
+  return { ok: true, anzahl: n, ordner: dir };
+}
+
 /* ---------- PDF einer bestehenden Offerte lesen ---------- */
 
 /** Text aller Seiten mit Position und Schriftschnitt; die Auswertung macht src/offertdoc.js. */
@@ -432,6 +462,7 @@ if (!app.requestSingleInstanceLock()) {
         return { fehler: `Die Datei konnte nicht gelesen werden: ${err.message}` };
       }
     });
+    ipcMain.handle('offerte:bilder', (_e, bilder) => { try { return speichereOffertBilder(bilder); } catch (err) { return { ok: false, error: err.message }; } });
     ipcMain.handle('offerte:open', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'Vorlage wählen (PDF oder LaTeX)', filters: [{ name: 'Offerte', extensions: ['pdf', 'tex', 'txt', 'json'] }], properties: ['openFile'] });
       if (r.canceled || !r.filePaths[0]) return { canceled: true };
@@ -467,6 +498,7 @@ if (!app.requestSingleInstanceLock()) {
         const ordner = path.basename(String((opts && opts.ordner) || 'Berichte'));
         const name = path.basename(String((opts && opts.name) || 'Bericht.pdf')).replace(/[\\/:*?"<>|]/g, '_');
         // «roh»: Seitenformat und Ränder kommen aus dem Dokument selbst (z. B. Offerten im Querformat).
+        if (opts && opts.offerte) html = offertBilder(String(html));
         const pdf = await renderPdf(html, opts && opts.roh ? undefined : (opts && opts.fuss) || '', opts && opts.roh);
         const dir = path.join(dataDir(), ordner);
         fs.mkdirSync(dir, { recursive: true });

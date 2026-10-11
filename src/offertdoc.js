@@ -72,63 +72,115 @@
   /** *kursiv* im Fliesstext */
   const mitKursiv = (s) => esc(s).replace(/\*([^*\n]+)\*/g, '<i>$1</i>');
 
+  // Folienformat 16:9. Alles steht auf einer Zeile: Die Schriftgrösse richtet sich nach dem längsten Eintrag und der Zeilenzahl.
+  const SEITE = { b: 338.67, h: 190.5, rand: 13, kopf: 27, fuss: 12 };
+  const PT = 0.3528;          // mm pro Punkt
+  const ZEICHEN = 0.54;       // mittlere Zeichenbreite in em (vorsichtig geschätzt)
+
+  function schriftFuer(t, einfach) {
+    const breite = SEITE.b - 2 * SEITE.rand;
+    const fest = einfach ? 34 : 112;                      // Spalten rechts von «Was», in mm
+    let laengste = 12, zeilen = 2;                        // Kopf- und Preiszeile
+    for (const b of t.bloecke) {
+      if (b.titel.trim()) { zeilen++; laengste = Math.max(laengste, b.titel.length * 1.08); }
+      for (const z of b.zeilen) { zeilen++; laengste = Math.max(laengste, z.was.length); }
+    }
+    const nachBreite = (breite - fest - 6) / (laengste * ZEICHEN * PT);
+    const nachHoehe = (SEITE.h - SEITE.kopf - SEITE.fuss - 16) / (zeilen * 1.95 * PT);
+    return Math.max(5, Math.min(11.5, nachBreite, nachHoehe));
+  }
+
   function teilHtml(d, t) {
     const einfach = istEinfach(t);
     const spalten = einfach ? 2 : 5;
+    const pt = schriftFuer(t, einfach);
     let zeilen = '';
     t.bloecke.forEach((b) => {
       if (!b.zeilen.length && !b.titel.trim()) return;
-      if (b.titel.trim()) zeilen += `<tr class="bt"><td colspan="${spalten}">${esc(b.titel)}</td></tr>`;
-      b.zeilen.forEach((z, i) => {
-        const letzte = i === b.zeilen.length - 1;
+      if (b.titel.trim()) zeilen += `<tr class="bt"><td colspan="${spalten - 1}">${esc(b.titel)}</td><td class="r">${einfach ? '' : fr(blockTotal(b))}</td></tr>`;
+      b.zeilen.forEach((z) => {
         zeilen += einfach
-          ? `<tr class="${letzte ? 'bl' : ''}"><td>${esc(z.was)}</td><td class="r">${preisText(z)}</td></tr>`
-          : `<tr class="${letzte ? 'bl' : ''}"><td>${esc(z.was)}</td><td>${esc(z.aufwand)}</td><td>${esc(ansatzText(z))}</td>
-              <td class="r ${z.preis === 'inklusive' ? 'ink' : ''}">${preisText(z)}</td><td class="r">${letzte ? fr(blockTotal(b)) : ''}</td></tr>`;
+          ? `<tr><td>${esc(z.was)}</td><td class="r">${preisText(z)}</td></tr>`
+          : `<tr class="${z.preis === 'null' ? 'entf' : ''}"><td>${esc(z.was)}</td><td>${esc(z.aufwand)}</td><td class="r">${esc(ansatzText(z))}</td>
+              <td class="r ${z.preis === 'inklusive' ? 'ink' : ''}">${preisText(z)}</td><td></td></tr>`;
       });
-      if (!b.zeilen.length) zeilen += `<tr class="bl"><td colspan="${spalten}"></td></tr>`;
     });
-    return `<section class="teil ${t.umbruch ? 'umbruch' : ''}">
-      <h2>${esc(kopf(d, t))} <small>${esc(t.titel)}</small></h2>
-      ${t.text.trim() ? `<p>${mitKursiv(t.text)}</p>` : ''}
+    const titel = `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}`;
+    // Titel im Kopfband ebenfalls einzeilig halten
+    const platz = SEITE.b - 2 * SEITE.rand - 92;
+    const tpt = Math.max(7, Math.min(15, platz / ((titel.length + t.titel.length + 3) * 0.56 * PT)));
+    return `<section class="folie">
+      <header><div class="logo"><span>Fabio Canetg GmbH</span></div>
+        <h2 style="font-size:${tpt.toFixed(2)}pt"><b>${esc(titel)}</b>${t.titel.trim() ? `<span>${esc(t.titel)}</span>` : ''}</h2></header>
+      <main style="font-size:${pt.toFixed(2)}pt">
       <table class="${einfach ? 'einfach' : ''}">
-        <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th>Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
+        <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th class="r">Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
         <tbody>${zeilen}</tbody>
         <tfoot><tr><td colspan="${spalten - 1}">Preis</td><td class="r">${fr(teilTotal(t))}</td></tr></tfoot>
-      </table></section>`;
+      </table></main>
+      <footer>Alle Preise exklusive Mehrwertsteuer</footer></section>`;
   }
 
+  const NAVY = '#18334e', TEAL = '#27b9bf';
   const CSS = `
-    @page { size: A4 landscape; margin: 22mm 15mm 18mm 15mm; }
+    @page { size: ${SEITE.b}mm ${SEITE.h}mm; margin: 0; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
-    body { font-family: "Palatino Linotype", "Book Antiqua", Palatino, "TeX Gyre Pagella", "URW Palladio L", "P052", serif; font-size: 9.2pt; line-height: 1.32; color: #000; }
-    .teil { break-inside: avoid; margin: 0 0 9mm; }
-    .teil.umbruch { break-before: page; }
-    h2 { font-size: 12.5pt; margin: 0 0 3.6mm; font-weight: 700; }
-    h2 small { font-size: 8pt; font-weight: 700; }
-    p { margin: 0 0 3.6mm; text-align: justify; }
-    table { width: 100%; border-collapse: collapse; border: 0.5pt solid #000; }
-    th, td { padding: 0.25mm 1.6mm; text-align: left; vertical-align: top; }
-    th { font-weight: 700; border-bottom: 2.2pt double #000; }
-    td.r, th.r { text-align: right; white-space: nowrap; }
-    th:nth-child(1), td:nth-child(1) { border-right: 0.5pt solid #000; }
-    table:not(.einfach) th:nth-child(1) { width: 65%; }
-    table:not(.einfach) th:nth-child(2) { width: 8%; }
-    table:not(.einfach) th:nth-child(3) { width: 9%; }
-    table:not(.einfach) th:nth-child(4) { width: 9%; }
-    table:not(.einfach) th:nth-child(4), table:not(.einfach) td:nth-child(4) { border-right: 0.5pt solid #000; }
-    tr.bt td { font-weight: 700; border-right: 0; }
-    tr.bt td:first-child { border-right: 0.5pt solid transparent; }
-    tr.bl td { border-bottom: 0.5pt solid #000; }
-    td.ink { color: #e8742c; }
-    tfoot td { font-weight: 700; border-top: 2.2pt double #000; }
-    tbody tr:last-child td { border-bottom: 0; }
+    body { font-family: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", sans-serif; color: #16242f; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .folie { position: relative; width: ${SEITE.b}mm; height: ${SEITE.h}mm; overflow: hidden; break-after: page; background: #fff; }
+    .folie:last-child { break-after: auto; }
+    /* Titelfolie */
+    .titel { background: ${NAVY} __OFFERTE_TITELBILD__ center / cover no-repeat; color: #fff; }
+    .titel .block { position: absolute; left: 6.4mm; top: 70mm; width: 80mm; }
+    .titel .firma { display: __OFFERTE_FIRMA_TITEL__; font-family: Georgia, "Times New Roman", serif; font-size: 22pt; font-weight: 700; position: absolute; left: 6.4mm; top: 48mm; }
+    .titel .art { font-size: 17pt; font-weight: 700; letter-spacing: .02em; margin: 0 0 3mm; }
+    .titel .strich { width: 16mm; height: .9mm; background: ${TEAL}; margin: 0 0 4mm; }
+    .titel .kunde { font-size: 11.5pt; font-weight: 700; margin: 0 0 1.2mm; }
+    .titel .projekt { font-size: 10.5pt; margin: 0 0 5mm; line-height: 1.3; }
+    .titel .datum { font-size: 8.5pt; color: #b9c7d4; }
+    /* Inhaltsfolien */
+    header { position: absolute; left: 0; top: 0; width: 100%; height: ${SEITE.kopf}mm; background: ${NAVY}; color: #fff; display: flex; align-items: center; padding: 0 ${SEITE.rand}mm 0 ${SEITE.rand - 3}mm; border-bottom: 1.1mm solid ${TEAL}; }
+    .logo { flex: none; width: 82mm; height: 14mm; background: __OFFERTE_LOGO__ left center / contain no-repeat; }
+    .logo span { display: __OFFERTE_FIRMA_KOPF__; font-family: Georgia, "Times New Roman", serif; font-size: 15pt; font-weight: 700; line-height: 14mm; white-space: nowrap; }
+    h2 { margin: 0 0 0 auto; font-weight: 400; white-space: nowrap; text-align: right; }
+    h2 b { font-weight: 700; }
+    h2 span { color: #cfe9ea; margin-left: 3mm; }
+    main { position: absolute; left: ${SEITE.rand}mm; right: ${SEITE.rand}mm; top: ${SEITE.kopf + 9}mm; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: .42em .9em .42em 0; text-align: left; white-space: nowrap; line-height: 1.1; }
+    th:last-child, td:last-child { padding-right: 0; }
+    th { font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #6a7a88; border-bottom: .35mm solid ${NAVY}; padding-bottom: .6em; }
+    td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+    td:first-child, th:first-child { width: 100%; }
+    table:not(.einfach) th:nth-child(n+2), table:not(.einfach) td:nth-child(n+2) { padding-left: 1.4em; }
+    tbody td { border-bottom: .15mm solid #dfe5ea; }
+    tbody tr:not(.bt) td:first-child { padding-left: 1.1em; }
+    tr.bt td { font-weight: 700; color: ${NAVY}; background: #eef3f6; padding-left: .6em; padding-top: .55em; padding-bottom: .55em; border-bottom: 0; }
+    tr.bt td:last-child { padding-right: .6em; }
+    table.einfach tbody td:first-child { padding-left: 0; }
+    tr.entf td { color: #9aa6b0; }
+    td.ink { color: #1b9aa0; font-style: italic; }
+    tfoot td { font-weight: 700; font-size: 1.12em; color: #fff; background: ${NAVY}; padding: .6em .55em; }
+    tfoot td:last-child { padding-right: .55em; }
+    tbody tr:not(.bt) td:last-child { padding-right: .6em; }
+    footer { position: absolute; right: ${SEITE.rand}mm; bottom: 5mm; font-size: 7pt; color: #6a7a88; }
   `;
 
-  function html(doc) {
-    const d = normalize(doc);
+  const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  function datumLang(iso) { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(text(iso)); return m ? `${+m[3]}. ${MONATE[+m[2] - 1]} ${m[1]}` : ''; }
+
+  /**
+   * meta: { kunde, name, datum } für die Titelfolie. Die Platzhalter __OFFERTE_…__ ersetzt die App beim Erzeugen des PDF
+   * durch das Titelbild und das Logo aus dem Ordner «Vorlagen» (oder durch nichts, wenn sie fehlen).
+   */
+  function html(doc, meta) {
+    const d = normalize(doc), m = meta || {};
+    const titel = `<section class="folie titel"><div class="firma">Fabio Canetg GmbH</div><div class="block">
+        <p class="art">${ARTEN[d.art]}</p><div class="strich"></div>
+        ${m.kunde ? `<p class="kunde">${esc(m.kunde)}</p>` : ''}${m.name ? `<p class="projekt">${esc(m.name)}</p>` : ''}
+        ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;
     return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${ARTEN[d.art]}</title><style>${CSS}</style></head><body>
+      ${titel}
       ${d.teile.map((t) => teilHtml(d, t)).join('\n')}</body></html>`;
   }
 

@@ -117,7 +117,6 @@
           <button class="btn small" data-of="t-dup" data-t="${i}" title="Diesen Teil verdoppeln, z. B. für eine Variante">Verdoppeln</button>
           <button class="btn small ghost" data-of="t-del" data-t="${i}" title="Diesen Teil löschen">×</button>
         </div>
-        <textarea data-of="f" data-pfad="t.${i}.text" rows="2" placeholder="Einleitung. *Sternchen* setzen Wörter kursiv." aria-label="Einleitung">${esc(t.text)}</textarea>
         <table class="of-tab">
           <colgroup><col><col style="width:92px"><col style="width:84px"><col style="width:104px"><col style="width:104px"><col style="width:96px"><col style="width:30px"></colgroup>
           <thead><tr><th>Was</th><th>Aufwand</th><th class="r">Ansatz Fr.</th><th>Verrechnung</th><th class="r">Preis</th><th class="r">Total</th><th></th></tr></thead>
@@ -206,8 +205,8 @@
     function dateiName(p, v, endung) {
       return `${v.datum.replace(/-/g, '')}_${O.ARTEN[v.doc.art]}${p ? '_' + sauber(pTitel(p)).replace(/ /g, '_') : ''}.${endung}`;
     }
-    async function pdf(doc, name) {
-      const r = await api.savePdf(O.html(doc), { ordner: 'Offerten', name, roh: true });
+    async function pdf(doc, name, p, v) {
+      const r = await api.savePdf(O.html(doc, { kunde: p && p.kunde, name: p && p.name, datum: v && v.datum }), { ordner: 'Offerten', name, roh: true, offerte: true });
       if (r && r.fehler) toast(r.fehler, { fehler: true }); else if (r && r.path) toast('PDF gespeichert und geöffnet');
     }
     async function texDatei(doc, name) {
@@ -270,8 +269,8 @@
         case 'n-zu': state.off.neu = null; render(); break;
         case 'edit': state.off.edit = { pid: p.id, vid: v.id }; render(); window.scrollTo(0, 0); break;
         case 'zurueck': state.off.edit = null; render(); break;
-        case 'pdf': pdf(v.doc, dateiName(p, v, 'pdf')); break;
-        case 'e-pdf': pdf(o.doc, dateiName(o.p, o.v, 'pdf')); break;
+        case 'pdf': pdf(v.doc, dateiName(p, v, 'pdf'), p, v); break;
+        case 'e-pdf': pdf(o.doc, dateiName(o.p, o.v, 'pdf'), o.p, o.v); break;
         case 'v-neu': {
           const fs = fassungen(p), letzte = fs[fs.length - 1];
           // Zwei Fassungen am selben Tag wären nicht zu unterscheiden: dann die bestehende öffnen.
