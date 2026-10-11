@@ -567,3 +567,8 @@ th.r { text-align: right; }
 .main.view-offerten > * { flex-shrink: 0; }
 .main.view-offerten { padding-bottom: 90px; }
 .of-keine { margin: 0 0 6px; font-size: 13px; } .of-pfld .row { margin-bottom: 4px; }
+.of-altpill { color: #8a5a00; border-color: #e0b866; background: #fdf1d6; font-size: 11px; margin-right: 2px; flex: none; }
+.of-anh { margin-top: 6px; } .of-datei { background: #eef1f6; border-color: #cdd5e2; }
+.of-dlink { border: 0; background: none; cursor: pointer; color: var(--teal-deep); font-size: 12px; padding: 0; text-decoration: underline; }
+.of-eanh { padding: 8px 14px; margin-bottom: 12px; } .of-eanh .of-anh { margin-top: 0; }
+.of-kopf .of-kunde { width: 170px; } .of-kopf .of-name { width: 250px; }

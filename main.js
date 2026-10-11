@@ -529,6 +529,32 @@ if (!app.requestSingleInstanceLock()) {
         return { dateien };
       } catch (err) { return { fehler: `Die Dateien konnten nicht übernommen werden: ${err.message}` }; }
     });
+    // Beilagen zu Offerten (E-Mail-Austausch usw.): unverändert unter «Offerten/Beilagen» ablegen.
+    ipcMain.handle('offerte:anhangWaehlen', async () => {
+      const r = await dialog.showOpenDialog(win, { title: 'Beilagen wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
+      if (r.canceled || !r.filePaths.length) return { canceled: true };
+      try {
+        const dir = path.join(dataDir(), 'Offerten', 'Beilagen');
+        fs.mkdirSync(dir, { recursive: true });
+        const dateien = [];
+        for (const quelle of r.filePaths) {
+          const roh = fs.readFileSync(quelle);
+          const name = path.basename(quelle).replace(/[\\/:*?"<>|]/g, '_');
+          let datei = name, n = 1;
+          while (fs.existsSync(path.join(dir, datei)) && !fs.readFileSync(path.join(dir, datei)).equals(roh)) datei = name.replace(/(\.pdf)?$/i, ` (${++n})$1`);
+          if (!fs.existsSync(path.join(dir, datei))) fs.writeFileSync(path.join(dir, datei), roh);
+          dateien.push({ name, datei });
+        }
+        return { dateien };
+      } catch (err) { return { fehler: `Die Dateien konnten nicht übernommen werden: ${err.message}` }; }
+    });
+    ipcMain.handle('offerte:anhangOeffnen', async (_e, datei) => {
+      const f = path.join(dataDir(), 'Offerten', 'Beilagen', path.basename(String(datei)));
+      if (!fs.existsSync(f)) return { ok: false, error: 'Die Datei fehlt im Ordner «Offerten/Beilagen».' };
+      if (process.env.ZEITERFASSUNG_KEIN_OEFFNEN) return { ok: true };
+      const fehler = await shell.openPath(f);
+      return fehler ? { ok: false, error: fehler } : { ok: true };
+    });
     ipcMain.handle('offerte:originalLesen', async (_e, datei) => {
       try { return { seiten: await pdfSeiten(new Uint8Array(fs.readFileSync(path.join(dataDir(), 'Offerten', 'Alt', path.basename(String(datei)))))) }; }
       catch (err) { return { fehler: err.message }; }

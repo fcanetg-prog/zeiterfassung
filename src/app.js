@@ -256,8 +256,10 @@
       return [...new Set(treffer.map(key))];
     };
     out.offerten = (d.offerten || []).filter((o) => o && o.id).map((o) => ({
-      id: o.id, name: o.name || '', kunde: o.kunde || '', auftraggeber: o.auftraggeber || '', kundeLinks: Array.isArray(o.kundeLinks) ? o.kundeLinks.map(String) : alteKundenLinks(o), status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen', 'alt'].includes(o.status) ? o.status : 'offen',
-      zugesagtId: o.zugesagtId || null, erstellt: o.erstellt || 0, mod: o.mod || 0,
+      id: o.id, name: o.name || '', kunde: o.kunde || '', auftraggeber: o.auftraggeber || '', kundeLinks: Array.isArray(o.kundeLinks) ? o.kundeLinks.map(String) : alteKundenLinks(o), // Der frühere Abschnitt «Alte Offerten» ist aufgehoben: Solche Einträge stehen unter «Zugesagt» und sind als alt markiert.
+      status: o.status === 'alt' ? 'zugesagt' : ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
+      alt: !!o.alt || o.status === 'alt', anhaenge: (o.anhaenge || []).filter((a) => a && a.datei).map((a) => ({ name: String(a.name || a.datei), datei: String(a.datei) })),
+      zugesagtId: o.zugesagtId || (o.status === 'alt' && o.versionen && o.versionen[0] ? o.versionen[0].id : null), erstellt: o.erstellt || 0, mod: o.mod || 0,
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc), ...(v.original ? { original: String(v.original), lesbar: !!v.lesbar, gelesen: v.gelesen || 1 } : {}) })),
     }));
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));

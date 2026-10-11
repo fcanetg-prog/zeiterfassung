@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
   savePdf: (html, opts) => ipcRenderer.invoke('pdf:save', html, opts),
   confirm: (text) => ipcRenderer.sendSync('dlg:confirm', String(text)),
   offertAlteWaehlen: () => ipcRenderer.invoke('offerte:alteWaehlen'),
+  offertAnhangWaehlen: () => ipcRenderer.invoke('offerte:anhangWaehlen'),
+  offertAnhangOeffnen: (datei) => ipcRenderer.invoke('offerte:anhangOeffnen', datei),
   offertOriginalLesen: (datei) => ipcRenderer.invoke('offerte:originalLesen', datei),
   offertOriginal: (datei) => ipcRenderer.invoke('offerte:original', datei),
   offertAgb: () => ipcRenderer.invoke('offerte:agb'),

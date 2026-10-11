@@ -33,7 +33,7 @@
 
     /* ---------- Listen ---------- */
 
-    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen'], ['alt', 'Alte Offerten']];
+    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen']];
     // Projekte unter «Offen» sind von Anfang an aufgeklappt, die übrigen zu; «umgekehrt» merkt sich die Ausnahmen.
     const pOffen = (p) => (p.status === 'offen') !== state.off.umgekehrt.has(p.id);
 
@@ -68,6 +68,22 @@
     const kLabel = (e) => [e.kunde, e.bereich, e.jahr].filter(Boolean).join(' · ');
     const kAusKey = (key) => { const [jahr, bereich, ...rest] = key.split('\t'); return { key, jahr: +jahr, bereich, kunde: rest.join(' ') }; };
     const kunden = () => [...new Set(state.data.projects.filter((x) => x.abrechnung !== 'intern' && x.kunde).map((x) => x.kunde))].sort((a, b) => a.localeCompare(b, 'de'));
+    /** Beilagen zu einer Offerte (z. B. E-Mail-Austausch als PDF): anzeigen, öffnen, hinzufügen, entfernen. */
+    function anhangZeile(p) {
+      const an = p.anhaenge || [];
+      return `<div class="of-verk of-anh"><span class="dim">Beilagen:</span>
+        ${an.map((a, i) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Beilage entfernen" aria-label="Beilage entfernen">×</button></span>`).join('')}
+        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden">+ PDF hinzufügen</button></div>`;
+    }
+    async function anhangHinzu(p) {
+      const r = api.offertAnhangWaehlen ? await api.offertAnhangWaehlen() : { fehler: 'Nur in der Desktop-App.' };
+      if (!r || r.canceled) return;
+      if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
+      const an = p.anhaenge || (p.anhaenge = []);
+      let n = 0;
+      for (const d of r.dateien || []) if (!an.some((a) => a.datei === d.datei)) { an.push({ name: d.name, datei: d.datei }); n++; }
+      persist(); render(); toast(n ? `${n} ${n === 1 ? 'Beilage' : 'Beilagen'} abgelegt` : 'Diese Dateien waren schon abgelegt');
+    }
     function verknuepfZeile(p) {
       const alle = kundenEintraege(), gewaehlt = p.kundeLinks || [];
       const frei = alle.filter((e) => !gewaehlt.includes(e.key));
@@ -78,6 +94,7 @@
           <option value="">${gewaehlt.length ? 'weiteren Kunden hinzufügen …' : 'Kunde wählen …'}</option>
           ${frei.map((e) => `<option value="${esc(e.key)}">${esc(kLabel(e))}</option>`).join('')}
         </select></div>
+        ${anhangZeile(p)}
         <div class="of-verk of-ag"><label for="oa-${p.id}" class="dim">Auftraggeber:</label>
           <textarea id="oa-${p.id}" rows="3" data-of="p-feld" data-key="auftraggeber" data-pid="${p.id}" placeholder="Firma&#10;Strasse&#10;PLZ Ort">${esc(p.auftraggeber || '')}</textarea>
           <span class="dim">Steht im Vertrag. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></td></tr>`;
@@ -118,7 +135,7 @@
       ps.sort((a, b) => (neuste(a).datum < neuste(b).datum ? 1 : -1));
       return `<div class="fld of-pfld">
         ${ps.map((p) => { const v = neuste(p), n = p.versionen.length; return `<div class="row">
-          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.status === 'alt' ? 'alte Offerte' : p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
+          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.alt ? 'alte Offerte, ' : ''}${p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
           <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button></div>`; }).join('')}</div>`;
     }
     function oeffneAktuelle(id) {
@@ -134,21 +151,23 @@
 
     function projektZeilen(p) {
       const fs = fassungen(p), letzte = fs[fs.length - 1], st = p.status, auf = pOffen(p);
+      // Alte Offerte, deren Tabelle nicht eingelesen werden konnte: Daraus lässt sich kein Vertrag erzeugen.
+      const ohneInhalt = fs.some((v) => v.id === p.zugesagtId && v.original && !v.lesbar);
       const knoepfe = {
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
           <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
-        zugesagt: `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>
+        zugesagt: `${ohneInhalt ? '' : `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>`}
           <button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
           <button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgeschlossen: `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>
           <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
-        alt: '',
       }[st];
       return `<tr class="of-pz ${auf ? 'auf' : ''}">
           <td colspan="3"><div class="of-kopf">
             <button class="of-pfeil" data-of="p-auf" data-pid="${p.id}" aria-expanded="${auf}" title="${auf ? 'Fassungen ausblenden' : 'Fassungen zeigen'}">${auf ? '▾' : '▸'}</button>
+            ${p.alt ? '<span class="pill of-altpill" title="Als PDF hochgeladen; diese Offerte gab es schon vor diesem Programm">alte Offerte</span>' : ''}
             <input class="inline of-kunde" type="text" value="${esc(p.kunde)}" placeholder="Kunde" data-of="p-feld" data-key="kunde" data-pid="${p.id}" aria-label="Kunde">
             <input class="inline of-name" type="text" value="${esc(p.name)}" placeholder="Projekt" data-of="p-feld" data-key="name" data-pid="${p.id}" aria-label="Projekt">
             <button class="of-anz" data-of="p-auf" data-pid="${p.id}">${fs.length} ${fs.length === 1 ? 'Fassung' : 'Fassungen'}${auf || !letzte ? '' : `, letzte vom ${fmtDate(letzte.datum)}`}</button>
@@ -166,7 +185,7 @@
       const ps = liste().filter((p) => p.status === key).sort((a, b) => (letztes(a) < letztes(b) ? 1 : letztes(a) > letztes(b) ? -1 : (b.erstellt || 0) - (a.erstellt || 0)));
       const auf = state.off.auf.has(key);
       const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
-      const extra = key === 'alt' && auf ? `<tr><td colspan="3" class="of-althoch"><button class="btn small" data-of="alt-hoch">Alte Offerten hochladen</button>
+      const extra = false ? `<tr><td colspan="3" class="of-althoch"><button class="btn small" data-of="alt-hoch">Alte Offerten hochladen</button>
           <span class="dim">Mehrere PDF auf einmal wählbar. Die Originale werden unverändert abgelegt und stehen bei «Neue Offerte» als Vorlage bereit.</span></td></tr>` : '';
       return `<tbody class="of-ab">
         <tr class="of-abk" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="of-pfeil2">${auf ? '▾' : '▸'}</span> <b>${titel}</b> <span class="of-zahl">${ps.length}</span></td></tr>
@@ -213,11 +232,12 @@
         const datum = m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31 ? `${m[1]}-${m[2]}-${m[3]}` : (d.datum || heute);
         const titel = (m ? m[4] : basis).replace(/[_]+/g, ' ').trim() || basis;
         const doc = e.doc || O.leer(/kostenvoranschlag/i.test(basis) ? 'kostenvoranschlag' : 'offerte');
-        liste().push({ id: uid('of'), name: titel, kunde: '', kundeLinks: [], auftraggeber: '', status: 'alt', zugesagtId: null, erstellt: Date.now() + gelesen + nur, mod: 0,
-          versionen: [{ id: uid('ov'), datum, erstellt: Date.now(), doc, original: d.datei, lesbar: !!e.doc, gelesen: LESER }] });
+        const vid = uid('ov');
+        liste().push({ id: uid('of'), name: titel, kunde: '', kundeLinks: [], auftraggeber: '', status: 'zugesagt', alt: true, zugesagtId: vid, erstellt: Date.now() + gelesen + nur, mod: 0,
+          versionen: [{ id: vid, datum, erstellt: Date.now(), doc, original: d.datei, lesbar: !!e.doc, gelesen: LESER }] });
         if (e.doc) gelesen++; else nur++;
       }
-      state.off.auf.add('alt'); persist(); render();
+      state.off.auf.add('zugesagt'); persist(); render();
       toast(`${gelesen + nur} ${gelesen + nur === 1 ? 'Offerte' : 'Offerten'} abgelegt${nur ? `, davon ${nur} nur als Original (Tabelle nicht erkannt)` : ''}${schonDa ? `; ${schonDa} waren schon vorhanden` : ''}. Trag jetzt Kunde und Projekt ein und weise sie zu.`, { dauer: 9000 });
     }
 
@@ -252,6 +272,7 @@
 
     function viewListe() {
       return `<header class="head"><h1>Offerten</h1>
+          <button class="btn" data-of="alt-hoch" title="Offerten als PDF übernehmen, die es schon vor diesem Programm gab. Mehrere auf einmal wählbar; sie landen unter «Zugesagt» und sind als alte Offerten markiert.">Alte Offerten hochladen</button>
           <button class="btn primary" data-of="neu">Neue Offerte</button></header>
         ${neuForm()}
         <div class="pane of-box"><table class="of-liste">${ABSCHNITTE.map(abschnitt).join('')}</table></div>
@@ -320,6 +341,7 @@
           <button class="btn" data-of="e-hoch" title="Den Inhalt dieser Offerte durch die Tabellen aus einem PDF ersetzen">PDF hochladen</button>
           <button class="btn primary" data-of="e-pdf">PDF</button>
         </div>
+        ${o.p ? `<div class="pane of-eanh">${anhangZeile(o.p)}</div>` : ''}
         ${fest ? `<div class="of-fest">Diese Fassung ist ${o.p.status === 'abgesagt' ? 'abgesagt' : 'zugesagt'}. Änderungen sind weiterhin möglich, für eine neue Runde stellst du das Projekt besser zurück auf offen und legst eine neue Fassung an.</div>` : ''}
         ${d.teile.map((t, i) => teilEditor(d, t, i)).join('')}
         <div class="row of-unten"><button class="btn" data-of="t-neu">+ Teil</button></div>
@@ -493,6 +515,10 @@
         case 'verk-weg': { p.kundeLinks = (p.kundeLinks || []).filter((k) => k !== ds.key); persist(); render(); break; }
         case 'ab-pdf': auftragsbestaetigung(p); break;
         case 'alt-hoch': alteHochladen(); break;
+        case 'anh-neu': anhangHinzu(p); break;
+        case 'anh-auf': { const a = (p.anhaenge || [])[+ds.i]; if (a) api.offertAnhangOeffnen(a.datei).then((r) => { if (!r.ok) toast('Die Beilage lässt sich nicht öffnen: ' + r.error, { fehler: true }); }); break; }
+        case 'anh-weg': { const [weg] = p.anhaenge.splice(+ds.i, 1); persist(); render();
+          toast('Beilage entfernt. Die Datei bleibt im Ordner «Offerten/Beilagen».', { actionLabel: 'Rückgängig', action: () => { p.anhaenge.splice(+ds.i, 0, weg); persist(); render(); } }); break; }
         case 'original': originalOeffnen(v); break;
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
