@@ -692,7 +692,7 @@
     ${list.length ? `<div class="table-wrap"><table class="grid">
       <thead><tr>
         <th>Kunde</th><th>Projekt</th><th>Effort</th>
-        <th class="r" title="Offerierter Betrag ohne Mehrwertsteuer">Ansatz</th><th class="r" title="Kosten für Dritte">Kosten</th><th class="r" title="Ansatz minus Kosten">Mein Teil</th>
+        <th class="r" title="Offerierter Betrag ohne Mehrwertsteuer">Ansatz</th><th class="r">Kosten</th><th class="r" title="Ansatz minus Kosten">Mein Teil</th>
         <th class="r" title="Stunden gemäss Offerte">Std. Off.</th><th class="r" title="Zielstunden">Std. Ziel</th><th class="r" title="Effektiv erfasste Stunden">Std. eff.</th>
         <th class="r" title="Mein Teil ÷ Zielstunden × ${S().lohnFaktor}">CHF/h Ziel</th><th class="r" title="Mein Teil ÷ effektive Stunden × ${S().lohnFaktor}">CHF/h eff.</th>
         <th>MwSt.</th><th class="r" title="Rechnungsbetrag">Rechn.-Betrag</th><th title="Datum, an dem oder ab dem du die Rechnung stellen willst">Rechn.-Datum</th><th title="Rechnung gestellt am">Gestellt</th><th title="Zahlung erhalten am">Bezahlt</th><th>Status</th>
@@ -800,7 +800,7 @@
           <div class="fld"><label>Mehrwertsteuer</label>${seg('mwst', [['drauf', 'kommt zum Betrag dazu'], ['inkl', 'im Betrag enthalten'], ['keine', 'keine MwSt.']])}</div>
           <div class="cols2">
             ${txt('d-betrag', d.mwst === 'inkl' ? 'Offerierter Betrag inkl. MwSt.' : 'Offerierter Betrag', 'betrag', 'z. B. 3390+430')}
-            ${txt('d-kosten', 'Kosten für Dritte', 'kosten', '0')}
+            ${txt('d-kosten', 'Kosten', 'kosten', '0')}
             ${txt('d-so', 'Stunden gemäss Offerte', 'stundenOfferte')}
             ${txt('d-sz', 'Stunden Ziel', 'stundenZiel')}
           </div>
