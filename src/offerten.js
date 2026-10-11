@@ -161,7 +161,9 @@
     }
 
     function abschnitt([key, titel]) {
-      const ps = liste().filter((p) => p.status === key).sort((a, b) => (b.erstellt || 0) - (a.erstellt || 0));
+      // Nach dem Datum der jeweils neusten Offerte, die neusten zuoberst
+      const letztes = (p) => p.versionen.reduce((m, v) => (v.datum > m ? v.datum : m), '');
+      const ps = liste().filter((p) => p.status === key).sort((a, b) => (letztes(a) < letztes(b) ? 1 : letztes(a) > letztes(b) ? -1 : (b.erstellt || 0) - (a.erstellt || 0)));
       const auf = state.off.auf.has(key);
       const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
       const extra = key === 'alt' && auf ? `<tr><td colspan="3" class="of-althoch"><button class="btn small" data-of="alt-hoch">Alte Offerten hochladen</button>
