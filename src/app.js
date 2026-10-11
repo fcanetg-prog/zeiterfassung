@@ -252,7 +252,7 @@
     out.offerten = (d.offerten || []).filter((o) => o && o.id).map((o) => ({
       id: o.id, name: o.name || '', kunde: o.kunde || '', status: ['offen', 'zugesagt', 'abgesagt', 'abgeschlossen'].includes(o.status) ? o.status : 'offen',
       zugesagtId: o.zugesagtId || null, erstellt: o.erstellt || 0, mod: o.mod || 0,
-      versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, doc: OD.normalize(v.doc) })),
+      versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc) })),
     }));
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
     out.kontenplaene = {};

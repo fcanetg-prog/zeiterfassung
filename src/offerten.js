@@ -12,10 +12,15 @@
     const liste = () => state.data.offerten;
     const vorlagen = () => state.data.offertVorlagen;
     const projekt = (id) => liste().find((p) => p.id === id);
-    const fassungen = (p) => p.versionen.slice().sort((a, b) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : 0));
+    const fassungen = (p) => p.versionen.slice().sort((a, b) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : (a.erstellt || 0) - (b.erstellt || 0)));
     const pTitel = (p) => [p.kunde, p.name].filter(Boolean).join(' – ') || 'Ohne Namen';
     const vTitel = (v) => `${O.ARTEN[v.doc.art]} vom ${fmtDate(v.datum)}`;
     const kopie = (x) => JSON.parse(JSON.stringify(x));
+    /** Titel einer Fassung in der Liste; bei mehreren am selben Tag mit laufender Nummer. */
+    function vTitelP(p, v) {
+      const gleich = fassungen(p).filter((x) => x.datum === v.datum);
+      return vTitel(v) + (gleich.length > 1 ? ` (${gleich.indexOf(v) + 1})` : '');
+    }
 
     /** Das Dokument, das gerade im Editor offen ist (Fassung eines Projekts oder Vorlage). */
     function offen() {
@@ -34,7 +39,7 @@
 
     function fassungZeile(p, v, opts) {
       return `<tr class="of-fz">
-        <td class="of-art">${esc(vTitel(v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
+        <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
         <td class="of-kurz num">${esc(O.kurz(v.doc))}</td>
         <td class="r of-akt">
           ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde zugesagt. Das Projekt wandert zu den zugesagten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> zugesagt</label>` : ''}
@@ -83,7 +88,8 @@
     function projektZeilen(p) {
       const fs = fassungen(p), letzte = fs[fs.length - 1], st = p.status, auf = pOffen(p);
       const knoepfe = {
-        offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}">Neue Fassung</button>
+        offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
+          <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
         zugesagt: `<button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
           <button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
@@ -124,9 +130,15 @@
     function neuForm() {
       const n = state.off.neu;
       if (!n) return '';
+      const zu = n.pid && projekt(n.pid);
+      const offene = liste().filter((p) => p.status === 'offen').sort((x, y) => pTitel(x).localeCompare(pTitel(y), 'de'));
       return `<form class="pane of-neu" data-of-form="neu" autocomplete="off">
-        <div><label for="on-kunde">Kunde</label><input id="on-kunde" type="text" value="${esc(n.kunde)}" data-of="n-feld" data-key="kunde"></div>
-        <div><label for="on-name">Projekt</label><input id="on-name" type="text" value="${esc(n.name)}" data-of="n-feld" data-key="name"></div>
+        <div><label for="on-pid">Gehört zu</label><select id="on-pid" data-of="n-feld" data-key="pid">
+          <option value="">Neuer Kunde / neues Projekt</option>
+          ${offene.map((p) => `<option value="${p.id}" ${n.pid === p.id ? 'selected' : ''}>${esc(pTitel(p))} (${p.versionen.length} ${p.versionen.length === 1 ? 'Offerte' : 'Offerten'})</option>`).join('')}</select></div>
+        <div><label for="on-kunde">Kunde</label><input id="on-kunde" type="text" value="${esc(zu ? zu.kunde : n.kunde)}" data-of="n-feld" data-key="kunde" ${zu ? 'disabled' : ''}></div>
+        <div><label for="on-name">Projekt</label><input id="on-name" type="text" value="${esc(zu ? zu.name : n.name)}" data-of="n-feld" data-key="name" ${zu ? 'disabled' : ''}></div>
+        <div><label for="on-datum">Datum</label><input id="on-datum" type="date" value="${esc(n.datum)}" data-of="n-feld" data-key="datum"></div>
         <div><label for="on-art">Dokument</label><select id="on-art" data-of="n-feld" data-key="art">
           <option value="offerte" ${n.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${n.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option></select></div>
         <div class="of-vorl"><label>Vorlage</label>
@@ -278,9 +290,11 @@
       const n = state.off.neu;
       const doc = n.doc ? kopie(n.doc) : O.leer(n.art);
       doc.art = n.art;
-      const p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [{ id: uid('ov'), datum: heute, doc }] };
-      liste().push(p);
-      state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: p.versionen[0].id };
+      const v = { id: uid('ov'), datum: n.datum || heute, erstellt: Date.now(), doc };
+      let p = n.pid && projekt(n.pid);
+      if (p) p.versionen.push(v);
+      else { p = { id: uid('of'), name: n.name.trim(), kunde: n.kunde.trim(), status: 'offen', zugesagtId: null, erstellt: Date.now(), mod: 0, versionen: [v] }; liste().push(p); }
+      state.off.neu = null; state.off.auf.add('offen'); state.off.edit = { pid: p.id, vid: v.id };
       persist(); render();
     }
 
@@ -317,7 +331,8 @@
         case 'e-hoch': { hochladen().then((h) => { const o2 = offen(); if (!h || !o2) return; const ziel = o2.v, alt = ziel.doc; h.doc.art = alt.art; ziel.doc = h.doc; persist(); render();
           toast(`Inhalt durch ${h.name} ersetzt`, { actionLabel: 'Rückgängig', action: () => { ziel.doc = alt; persist(); render(); } }); }); break; }
         case 'tex-kopieren': zwischenablage(O.latex(o.doc), 'LaTeX-Code kopiert'); break;
-        case 'neu': state.off.neu = { kunde: '', name: '', art: 'offerte', doc: null, quelle: '' }; render(); { const f = $('#on-kunde'); if (f) f.focus(); } break;
+        case 'neu': { const zp = ds.pid && projekt(ds.pid); const lz = zp && fassungen(zp).pop();
+          state.off.neu = { kunde: '', name: '', art: lz ? lz.doc.art : 'offerte', doc: null, quelle: '', datum: heute, pid: ds.pid || '' }; render(); window.scrollTo(0, 0); { const f = $(zp ? '#on-datum' : '#on-kunde'); if (f) f.focus(); } break; }
         case 'n-zu': state.off.neu = null; render(); break;
         case 'edit': state.off.edit = { pid: p.id, vid: v.id }; render(); window.scrollTo(0, 0); break;
         case 'zurueck': state.off.edit = null; render(); break;
@@ -325,9 +340,7 @@
         case 'e-pdf': pdf(o.doc, dateiName(o.p, o.v, 'pdf'), o.p, o.v); break;
         case 'v-neu': {
           const fs = fassungen(p), letzte = fs[fs.length - 1];
-          // Zwei Fassungen am selben Tag wären nicht zu unterscheiden: dann die bestehende öffnen.
-          if (letzte && letzte.datum === heute) { state.off.edit = { pid: p.id, vid: letzte.id }; render(); toast('Die Fassung von heute ist geöffnet.'); break; }
-          const nv = { id: uid('ov'), datum: heute, doc: kopie(letzte ? letzte.doc : O.leer('offerte')) };
+          const nv = { id: uid('ov'), datum: heute, erstellt: Date.now(), doc: kopie(letzte ? letzte.doc : O.leer('offerte')) };
           p.versionen.push(nv); state.off.edit = { pid: p.id, vid: nv.id }; persist(); render(); window.scrollTo(0, 0); break;
         }
         case 'v-del': {
@@ -426,7 +439,7 @@
         const x = state.data.projects.find((q) => q.id === el.value);
         if (x) { x.offerteId = el.dataset.pid; persist(); render(); toast(`Verknüpft mit ${zLabel(x)}`); }
       }
-      else if (a === 'n-feld' && el.tagName === 'SELECT') { /* nur merken */ }
+      else if (a === 'n-feld' && el.dataset.key === 'pid') { const zp = projekt(el.value), lz = zp && fassungen(zp).pop(); if (lz && !state.off.neu.doc) state.off.neu.art = lz.doc.art; render(); }
     });
 
     return { view, beginneMit, projektZeile, oeffneAktuelle, zeige };
