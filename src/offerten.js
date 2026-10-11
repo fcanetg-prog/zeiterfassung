@@ -70,7 +70,10 @@
     /** Beilagen zu einer Offerte (z. B. E-Mail-Austausch als PDF): anzeigen, öffnen, hinzufügen, entfernen. */
     function anhangZeile(p) {
       const an = p.anhaenge || [];
+      // Bei alten Offerten steht das hochgeladene Original zuoberst; das Datum lässt sich daneben korrigieren.
+      const originale = fassungen(p).filter((v) => v.original);
       return `<div class="of-raster"><span class="of-lab">Beilagen</span><div class="of-stapel">
+        ${originale.map((v) => `<span class="of-chip of-datei of-orig"><button class="of-dlink" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">${esc(vTitel(v))}</button><input type="date" class="inline of-vdat" value="${esc(v.datum)}" data-of="alt-datum" data-pid="${p.id}" data-vid="${v.id}" title="Datum der Offerte ändern" aria-label="Datum der Offerte"></span>`).join('')}
         ${an.map((a, i) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Beilage entfernen" aria-label="Beilage entfernen">×</button></span>`).join('')}
         <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden">+ PDF hinzufügen</button></div></div>`;
     }
@@ -177,7 +180,7 @@
             <button class="btn small ghost" data-of="p-del" data-pid="${p.id}" title="Projekt mit allen Fassungen löschen">Löschen</button>
           </div></td></tr>
         ${auf ? verknuepfZeile(p) : ''}
-        ${auf ? fs.map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1, zugesagt: v.id === p.zugesagtId })).join('') : ''}`;
+        ${auf ? fs.filter((v) => !v.original).map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1, zugesagt: v.id === p.zugesagtId })).join('') : ''}`;
     }
 
     function abschnitt([key, titel]) {
@@ -570,7 +573,7 @@
         persist();
         // Art und Preisart ändern Beschriftungen an mehreren Stellen.
         if (el.tagName === 'SELECT') render();
-      } else if (a === 'alt-datum') { const zp = projekt(el.dataset.pid), zv = zp && zp.versionen.find((x) => x.id === el.dataset.vid); if (zv && el.value) { zv.datum = el.value; persist(); } }
+      } else if (a === 'alt-datum') { const zp = projekt(el.dataset.pid), zv = zp && zp.versionen.find((x) => x.id === el.dataset.vid); if (zv && el.value) { zv.datum = el.value; persist(); render(); } }
       else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
       else if (a === 'p-feld') { const zp = projekt(el.dataset.pid); if (zp && el.dataset.key === 'auftraggeber') adresseUebernehmen(zp); persist(); }
       else if (a === 'n-aus' && el.value && state.off.neu) {

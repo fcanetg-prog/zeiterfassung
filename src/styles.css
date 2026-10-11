@@ -593,3 +593,4 @@ th.r { text-align: right; }
 .bh-abgl th:nth-child(1) { width: 84px; } .bh-abgl th:nth-child(2) { width: 90px; } .bh-abgl th:nth-child(3) { width: 36%; } .bh-abgl th:nth-child(5) { width: 150px; }
 .bh-abgl .abg-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bh-abgl .x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
+.of-orig { background: #fdf1d6; border-color: #e0b866; } .of-orig .of-dlink { font-weight: 600; } .of-orig .of-vdat { width: 118px; font-size: 11.5px; padding: 0 2px; margin-left: 6px; display: inline-block; }
