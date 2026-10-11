@@ -156,8 +156,8 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: .42em .9em .42em 0; text-align: left; white-space: nowrap; line-height: 1.1; }
     th:last-child, td:last-child { padding-right: 0; }
-    th { font-size: .8em; font-weight: 700; letter-spacing: .07em; color: #fff; background: ${TEAL_DUNKEL}; padding-top: .7em; padding-bottom: .7em; }
-    th:first-child { padding-left: .75em; } th:last-child { padding-right: .75em; }
+    th { font-weight: 700; color: #fff; background: ${TEAL_DUNKEL}; padding-top: .7em; padding-bottom: .7em; }
+    th:first-child { padding-left: .6em; } th:last-child { padding-right: .6em; }
     td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
     td:first-child, th:first-child { width: 100%; }
     table:not(.einfach) th:nth-child(n+2), table:not(.einfach) td:nth-child(n+2) { padding-left: 1.4em; }
@@ -170,8 +170,8 @@
     td.ink { color: ${ORANGE}; }
     tbody tr:last-child td { border-bottom: 0; }
     /* Preiszeilen: gleiche Höhe und Schriftgrösse wie die Kopfzeile */
-    tfoot td { font-weight: 700; font-size: .8em; letter-spacing: .07em; color: #fff; background: ${NAVY}; padding: .7em .75em; }
-    tfoot td:last-child { padding-right: .75em; }
+    tfoot td { font-weight: 700; color: #fff; background: ${NAVY}; padding: .7em .6em; }
+    tfoot td:last-child { padding-right: .6em; }
     tfoot tr.p2 td { background: linear-gradient(#5d7389, #5d7389) top / 100% .25mm no-repeat ${NAVY}; }
     tbody tr:not(.bt) td:last-child { padding-right: .6em; }
     footer { position: absolute; right: ${SEITE.rand}mm; bottom: 4.6mm; font-size: 9pt; color: #55656f; }
