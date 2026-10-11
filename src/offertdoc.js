@@ -35,6 +35,8 @@
             was: text(z && z.was),
             aufwand: text(z && z.aufwand).trim(),
             ansatz: zahl(z && z.ansatz),
+            // Einheit des Ansatzes, wenn sie von der des Aufwands abweicht (z. B. Aufwand in Stunden, Ansatz pro Tag)
+            ansatzEinheit: text(z && z.ansatzEinheit).trim(),
             // «offeriert» aus alten Offerten heisst dasselbe wie «inklusive»: wird nicht verrechnet.
             preis: z && z.preis === 'offeriert' ? 'inklusive' : PREIS.includes(z && z.preis) ? z.preis : 'auto',
           })),
@@ -48,10 +50,27 @@
     const m = /^\s*(\d+(?:[.,]\d+)?)\s*(.*)$/.exec(text(a));
     return m ? { menge: zahl(m[1]), einheit: m[2].trim() } : { menge: null, einheit: '' };
   }
+  const STUNDEN_PRO_TAG = 8;
+  /** Einheiten vereinheitlichen: «h», «Std.», «Stunden» → 'h'; «Tag», «Tage», «d» → 'Tag'. */
+  function einheitNorm(e) {
+    const t = text(e).trim().toLowerCase().replace(/\.$/, '');
+    if (/^(h|std|stunde|stunden)$/.test(t)) return 'h';
+    if (/^(tag|tage|tagen|d|tg)$/.test(t)) return 'Tag';
+    return text(e).trim();
+  }
+  /** Menge in der Einheit des Ansatzes: 16h bei einem Ansatz pro Tag sind 2 Tage (8 Stunden = 1 Tag). */
+  function mengeFuerAnsatz(z) {
+    const a = aufwandTeile(z.aufwand);
+    if (a.menge == null) return null;
+    const au = einheitNorm(a.einheit), an = einheitNorm(z.ansatzEinheit || a.einheit);
+    if (au === 'h' && an === 'Tag') return a.menge / STUNDEN_PRO_TAG;
+    if (au === 'Tag' && an === 'h') return a.menge * STUNDEN_PRO_TAG;
+    return a.menge;
+  }
   function zeilenPreis(z) {
     if (z.preis !== 'auto') return 0;
-    const a = aufwandTeile(z.aufwand);
-    return round2(a.menge == null ? z.ansatz : a.menge * z.ansatz);
+    const m = mengeFuerAnsatz(z);
+    return round2(m == null ? z.ansatz : m * z.ansatz);
   }
   const blockTotal = (b) => round2(b.zeilen.reduce((s, z) => s + zeilenPreis(z), 0));
   const teilTotal = (t) => round2(t.bloecke.reduce((s, b) => s + blockTotal(b), 0));
@@ -63,8 +82,9 @@
     const a = aufwandTeile(z.aufwand);
     // Ansätze ohne Nachkommastellen, solange es ganze Franken sind.
     const n = Number.isInteger(z.ansatz) ? String(z.ansatz) : z.ansatz.toFixed(2);
-    if (a.menge == null || !a.einheit) return `${n} Fr.`;
-    return `${n} Fr./${a.einheit}`;
+    const einheit = z.ansatzEinheit || a.einheit;
+    if (a.menge == null || !einheit) return `${n} Fr.`;
+    return `${n} Fr./${einheit}`;
   }
   const preisText = (z) => OHNE[z.preis] || fr(zeilenPreis(z));
   const kopf = (d, t) => `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}:`;
@@ -432,7 +452,10 @@ ${FORMAT}
       return { was, aufwand: '', ansatz: b || 0, preis: 'auto' };
     }
     const aufwand = zellen[1] || '', ansatz = betragAus(zellen[2]), preisZ = zellen[3] || '';
-    const z = { was, aufwand, ansatz: ansatz || 0, preis: 'auto' };
+    const z = { was, aufwand, ansatz: ansatz || 0, ansatzEinheit: '', preis: 'auto' };
+    // «700 Fr./Tag» bei einem Aufwand in Stunden: die Einheit des Ansatzes merken.
+    const em = /\/\s*([A-Za-zäöü.]+)\s*$/.exec(zellen[2] || '');
+    if (em && einheitNorm(em[1]) !== einheitNorm(aufwandTeile(aufwand).einheit)) z.ansatzEinheit = einheitNorm(em[1]);
     // Ein Wort statt eines Betrags heisst: wird nicht verrechnet.
     if (/offerier|geschenk|gratis|kostenlos|offert\b/i.test(preisZ)) z.preis = 'offeriert';
     else if (/inkl/i.test(preisZ) || (preisZ.trim() && betragAus(preisZ) == null && /[a-zäöü]{4,}/i.test(preisZ))) z.preis = 'inklusive';
@@ -612,5 +635,5 @@ ${FORMAT}
 
   const leer = (art) => normalize({ art, teile: [{ nummer: '', titel: '', text: '', bloecke: [{ titel: '', zeilen: [{ was: '', aufwand: '', ansatz: 0, preis: 'auto' }] }] }] });
 
-  return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, teilEnd, preis2Betrag, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer, texZuHtml, bestaetigung, datumLang };
+  return { ARTEN, normalize, aufwandTeile, zeilenPreis, mengeFuerAnsatz, einheitNorm, blockTotal, teilTotal, teilEnd, preis2Betrag, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer, texZuHtml, bestaetigung, datumLang };
 });

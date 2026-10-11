@@ -196,7 +196,7 @@
 
     /* Wird das Einlesen von PDF verbessert, liest die App die abgelegten Originale einmal neu ein.
        Alte Offerten lassen sich in der App nicht bearbeiten, es geht dabei also nichts verloren. */
-    const LESER = 2;
+    const LESER = 3;
     let liestNeu = false;
     async function alteNeuLesen() {
       if (liestNeu || !api.offertOriginalLesen) return;
@@ -304,7 +304,7 @@
             ${b.zeilen.map((z, k) => `<tr>
               <td>${feld(`t.${i}.b.${j}.z.${k}.was`, z.was, 'aria-label="Was"')}</td>
               <td>${feld(`t.${i}.b.${j}.z.${k}.aufwand`, z.aufwand, 'placeholder="2h, pauschal" aria-label="Aufwand"')}</td>
-              <td>${feld(`t.${i}.b.${j}.z.${k}.ansatz`, z.ansatz || '', 'class="r" inputmode="decimal" aria-label="Ansatz"')}</td>
+              <td>${feld(`t.${i}.b.${j}.z.${k}.ansatz`, (z.ansatz || '') + (z.ansatzEinheit ? '/' + z.ansatzEinheit : ''), 'class="r" title="Zahl in Franken. Mit «/Tag» gilt der Ansatz pro Tag: 8 Stunden Aufwand sind ein Tag." aria-label="Ansatz"')}</td>
               <td><select data-of="f" data-pfad="t.${i}.b.${j}.z.${k}.preis" aria-label="Preisart">
                 <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
               <td class="r num ${(z.preis === 'inklusive' || z.preis === 'offeriert') ? 'of-ink' : ''}" id="os-z${i}-${j}-${k}">${O.preisText(z)}</td><td></td>
@@ -375,7 +375,12 @@
       if (teile[i] === 'b') { ziel = ziel.bloecke[+teile[i + 1]]; i += 2; }
       if (teile[i] === 'z') { ziel = ziel.zeilen[+teile[i + 1]]; i += 2; }
       const key = teile[i];
-      ziel[key] = key === 'ansatz' ? (parseFloat(String(wert).replace(/[’'\s]/g, '').replace(',', '.')) || 0) : wert;
+      if (key === 'ansatz') {
+        // «700» oder «700/Tag»: Zahl und, falls angegeben, die Einheit des Ansatzes
+        const m = /^([^/]*)(?:\/\s*(.*))?$/.exec(String(wert));
+        ziel.ansatz = parseFloat(m[1].replace(/[’'\s]/g, '').replace(/fr\.?/i, '').replace(',', '.')) || 0;
+        ziel.ansatzEinheit = m[2] == null ? '' : O.einheitNorm(m[2]);
+      } else ziel[key] = wert;
     }
     /** Summen im Editor nachführen, ohne die Eingabefelder neu aufzubauen. */
     function summen(d) {

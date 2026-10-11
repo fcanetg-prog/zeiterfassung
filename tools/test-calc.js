@@ -209,5 +209,10 @@ console.log('Alle Prüfungen bestanden.');
   const d4 = O.ausLatex(O.latex(d).replace('\\textcolor{inklusive}{inklusive}', 'offeriert')).doc;
   assert.strictEqual(d4.teile[0].bloecke[0].zeilen[0].preis, 'inklusive'); assert.strictEqual(O.teilTotal(d4.teile[0]), 3750); assert.ok(O.html(d4).includes('>inklusive<'));
   assert.strictEqual(new Set(O.html(d4).match(/<main style="font-size:[\d.]+pt/g)).size, 1); assert.ok(O.html(d4).includes('<main style="font-size:10.50pt'));
+  // Ansatz pro Tag bei Aufwand in Stunden: 8 Stunden sind ein Tag
+  const d5 = O.ausLatex(O.latex(d).replace('10h & 215 Fr./h', '16h & 700 Fr./Tag')).doc; const z5 = d5.teile[0].bloecke[0].zeilen[1];
+  assert.strictEqual(z5.ansatzEinheit, 'Tag'); assert.strictEqual(O.zeilenPreis(z5), 1400); assert.strictEqual(O.ansatzText(z5), '700 Fr./Tag');
+  assert.strictEqual(O.zeilenPreis({ aufwand: '2 Tage', ansatz: 700, ansatzEinheit: '', preis: 'auto' }), 1400); assert.strictEqual(O.zeilenPreis({ aufwand: '12h', ansatz: 700, ansatzEinheit: 'Tag', preis: 'auto' }), 1050);
+  assert.deepStrictEqual(O.ausLatex(O.latex(d5)).doc, d5);
   console.log('Offerten bestanden.');
 }
