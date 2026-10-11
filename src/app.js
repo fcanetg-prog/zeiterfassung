@@ -298,7 +298,8 @@
   ];
 
   function years() {
-    const ys = new Set([+heute.slice(0, 4), state.year]);
+    // Das nächste Jahr ist immer wählbar, damit sich ein neues Jahr eröffnen lässt.
+    const ys = new Set([+heute.slice(0, 4), +heute.slice(0, 4) + 1, state.year]);
     for (const p of state.data.projects) ys.add(p.jahr);
     for (const e of state.data.entries) ys.add(+e.datum.slice(0, 4));
     for (const y of Object.keys(state.data.kontenplaene || {})) ys.add(+y);
@@ -775,9 +776,9 @@
   /** Jahre zur Auswahl im Projekt: alle vorhandenen, dazu das Vorjahr und das Folgejahr des aktuellen Jahres. */
   function jahrOptionen(aktuell) {
     const h = +heute.slice(0, 4);
-    const ys = new Set([h - 1, h, h + 1, aktuell, state.year]);
-    for (const p of state.data.projects) ys.add(p.jahr);
-    return [...ys].sort((a, b) => a - b);
+    // Nur die Jahre rund um heute, damit die Auswahl auch nach vielen Jahren kurz bleibt.
+    const ys = new Set([h - 1, h, h + 1, h + 2, aktuell, state.year]);
+    return [...ys].filter(Boolean).sort((a, b) => a - b);
   }
 
   function drawerHtml() {
@@ -796,17 +797,16 @@
           <h3>Projekt</h3>
           <div class="cols2">
             ${fld('d-kunde', 'Kunde', 'kunde', 'list="dl-kunde"')}${fld('d-name', 'Projekt', 'name')}
-            ${fld('d-bereich', 'Bereich', 'bereich', 'list="dl-bereich"')}${fld('d-kategorie', 'Unterbereich', 'kategorie', 'list="dl-kategorie"')}
-          </div>
-          ${OFF.projektZeile(d)}
-          ${datalist('dl-kunde', 'kunde')}${datalist('dl-bereich', 'bereich')}${datalist('dl-kategorie', 'kategorie')}
-          <div class="cols2">
-            <div class="fld"><label>Jahr</label>${seg('jahr', jahrOptionen(d.jahr).map((y) => [y, String(y)]))}</div>
+            ${fld('d-bereich', 'Bereich', 'bereich', 'list="dl-bereich"')}
             <div class="fld"><label>Effort</label>${seg('effort', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']])}</div>
           </div>
+          ${datalist('dl-kunde', 'kunde')}${datalist('dl-bereich', 'bereich')}
+          <div class="fld"><label>Jahr</label>${seg('jahr', jahrOptionen(d.jahr).map((y) => [y, String(y)]))}</div>
+
+          <h3>Offerte</h3>
+          ${OFF.projektZeile(d) || '<p class="dim of-keine">Diesem Kunden ist keine Offerte zugewiesen. Zuweisen kannst du sie im Reiter Offerten unter «Gehört zu Kunde».</p>'}
 
           <h3>Honorar und Stunden</h3>
-          <div class="fld"><label>Mehrwertsteuer</label>${seg('mwst', [['drauf', 'kommt zum Betrag dazu'], ['inkl', 'im Betrag enthalten'], ['keine', 'keine MwSt.']])}</div>
           <div class="cols2">
             ${txt('d-betrag', d.mwst === 'inkl' ? 'Offerierter Betrag inkl. MwSt.' : 'Offerierter Betrag', 'betrag', 'z. B. 3390+430')}
             ${txt('d-kosten', 'Kosten', 'kosten', '0')}
@@ -817,6 +817,7 @@
 
           <h3>Abrechnung</h3>
           <div class="fld">${seg('abrechnung', [['rechnung', 'Ich stelle eine Rechnung'], ['ohne', 'Zahlung ohne Rechnung'], ['intern', 'Keine Abrechnung']])}</div>
+          <div class="fld"><label>Mehrwertsteuer</label>${seg('mwst', [['drauf', 'kommt zum Betrag dazu'], ['inkl', 'im Betrag enthalten'], ['keine', 'keine MwSt.']])}</div>
           ${d.abrechnung === 'intern' ? '' : `<div class="cols3">
             ${d.abrechnung === 'rechnung' ? dat('d-rg', 'Rechnungsdatum', 'rechnungGeplant') + dat('d-rd', 'Rechnung gestellt am', 'rechnungsdatum') : ''}
             ${dat('d-zd', 'Zahlung erhalten am', 'zahlungsdatum')}
@@ -826,7 +827,7 @@
           <div class="fld"><label for="d-adr">Rechnungsadresse</label><textarea id="d-adr" rows="4" placeholder="Firma&#10;Strasse&#10;PLZ Ort" data-action="d-field" data-key="rechnungsadresse">${esc(d.rechnungsadresse)}</textarea></div>
           <div class="cols2">
             <div class="fld"><label for="d-ref">Referenz des Kunden</label><textarea id="d-ref" rows="2" data-action="d-field" data-key="referenz">${esc(d.referenz)}</textarea></div>
-            <div class="fld"><label for="d-mail">E-Mail für die Rechnung</label><input id="d-mail" type="text" value="${esc(d.rechnungsEmail)}" data-action="d-field" data-key="rechnungsEmail"></div>
+            <div class="fld"><label for="d-mail">E-Mail für die Rechnung</label><textarea id="d-mail" rows="2" data-action="d-field" data-key="rechnungsEmail">${esc(d.rechnungsEmail)}</textarea></div>
           </div>
           <div class="fld"><label>Grundlage der Rechnung</label>
             <div class="cols2">${dat('d-ov', 'Offerte vom', 'offerteVom')}${dat('d-ev', 'E-Mail-Austausch vom', 'emailVom')}</div>
@@ -857,6 +858,7 @@
     if (!d.name.trim() && !d.kunde.trim()) { toast('Gib mindestens einen Kunden oder einen Projektnamen ein.', { fehler: true }); return false; }
     if (dr.txt.betrag.trim() && d.betrag == null) { toast('Der offerierte Betrag ist keine gültige Zahl.', { fehler: true }); return false; }
     for (const k of ['kunde', 'name', 'bereich', 'kategorie']) d[k] = d[k].trim();
+    d.rechnungsEmail = String(d.rechnungsEmail || '').replace(/\s+/g, ' ').trim();   // das Feld ist mehrzeilig, die Adresse bleibt einzeilig
     for (const k of ['rechnungGeplant', 'rechnungsdatum', 'zahlungsdatum', 'offerteVom', 'emailVom']) d[k] = d[k] || null;
     d.effort = d.effort == null ? null : +d.effort;
     let verschoben = null;

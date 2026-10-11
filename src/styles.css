@@ -566,3 +566,4 @@ th.r { text-align: right; }
 /* Offerten: Die Liste darf nicht zusammengestaucht werden, sonst wird ihr unteres Ende abgeschnitten statt scrollbar. */
 .main.view-offerten > * { flex-shrink: 0; }
 .main.view-offerten { padding-bottom: 90px; }
+.of-keine { margin: 0 0 6px; font-size: 13px; } .of-pfld .row { margin-bottom: 4px; }

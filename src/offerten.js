@@ -116,11 +116,10 @@
       if (!ps.length) return '';
       const neuste = (p) => fassungen(p).pop();
       ps.sort((a, b) => (neuste(a).datum < neuste(b).datum ? 1 : -1));
-      return `<div class="fld of-pfld"><label>${ps.length === 1 ? 'Offerte' : 'Offerten'} für ${esc(d.kunde)}</label>
+      return `<div class="fld of-pfld">
         ${ps.map((p) => { const v = neuste(p), n = p.versionen.length; return `<div class="row">
           <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.status === 'alt' ? 'alte Offerte' : p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
-          <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button>
-          <button class="btn small" type="button" data-action="offerte-zeigen" data-id="${p.id}">Unter Offerten zeigen</button></div>`; }).join('')}</div>`;
+          <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button></div>`; }).join('')}</div>`;
     }
     function oeffneAktuelle(id) {
       const p = projekt(id); if (!p) { toast('Die verknüpfte Offerte gibt es nicht mehr.', { fehler: true }); return; }

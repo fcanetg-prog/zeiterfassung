@@ -84,20 +84,37 @@
   const PT = 0.3528;          // mm pro Punkt
   const ZEICHEN = 0.54;       // mittlere Zeichenbreite in em (vorsichtig geschätzt)
 
+  // Zeilenhöhen in em, passend zu den Abständen im CSS: Kopf- und Preiszeilen, Blocktitel, normale Zeilen.
+  const EM = { kopf: 2.5, block: 2.2, zeile: 1.98 };
+  const PLATZ = SEITE.h - SEITE.kopf - 1.1 - SEITE.fuss;   // Höhe zwischen Kopfband und Fusszeile
+  /** Höhe der Tabelle eines Teils in em. */
+  function tabelleEm(t) {
+    let em = EM.kopf * (2 + (t.preis2 ? 1 : 0) + (t.rabatt ? 1 : 0));
+    for (const b of t.bloecke) { if (b.titel.trim()) em += EM.block; em += EM.zeile * b.zeilen.length; }
+    return em;
+  }
   function schriftFuer(t, einfach) {
     const breite = SEITE.b - 2 * SEITE.rand;
     const fest = einfach ? 34 : 112;                      // Spalten rechts von «Was», in mm
-    let laengste = 12, zeilen = 2 + (t.preis2 ? 1 : 0) + (t.rabatt ? 1 : 0);                        // Kopf- und Preiszeile
+    let laengste = 12;
     for (const b of t.bloecke) {
-      if (b.titel.trim()) { zeilen++; laengste = Math.max(laengste, b.titel.length * 1.08); }
-      for (const z of b.zeilen) { zeilen++; laengste = Math.max(laengste, z.was.length); }
+      if (b.titel.trim()) laengste = Math.max(laengste, b.titel.length * 1.08);
+      for (const z of b.zeilen) laengste = Math.max(laengste, z.was.length);
     }
     const nachBreite = (breite - fest - 6) / (laengste * ZEICHEN * PT);
-    const nachHoehe = (SEITE.h - SEITE.kopf - SEITE.fuss - 16) / (zeilen * 1.95 * PT);
-    return Math.max(5, Math.min(10.5, nachBreite * 0.94, nachHoehe * 0.94));
+    const nachHoehe = (PLATZ - 10) / (tabelleEm(t) * PT);
+    return Math.max(5, Math.min(10.5, nachBreite * 0.94, nachHoehe));
+  }
+  /**
+   * Abstand der Tabelle vom oberen Rand des freien Bereichs, gleich für alle Folien:
+   * Die höchste Tabelle steht mittig, alle anderen beginnen auf derselben Höhe.
+   */
+  function tabellenOben(d) {
+    const hoechste = Math.max(0, ...d.teile.map((t) => tabelleEm(t) * schriftFuer(t, istEinfach(t)) * PT));
+    return Math.max(4, (PLATZ - hoechste) / 2);
   }
 
-  function teilHtml(d, t) {
+  function teilHtml(d, t, oben) {
     const einfach = istEinfach(t);
     const spalten = einfach ? 2 : 5;
     const pt = schriftFuer(t, einfach);
@@ -119,7 +136,7 @@
     return `<section class="folie">
       <header>
         <h2><b>${esc(titel)}</b>${t.titel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(t.titel)}</span>` : ''}</h2></header>
-      <main style="font-size:${pt.toFixed(2)}pt">
+      <main style="font-size:${pt.toFixed(2)}pt;padding-top:${oben.toFixed(2)}mm">
       <table class="${einfach ? 'einfach' : ''}">
         <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th class="r">Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
         <tbody>${zeilen}</tbody>
@@ -152,7 +169,7 @@
     h2 b { display: block; font-weight: 700; font-size: 16pt; }
     h2 span { display: block; color: #cfe9ea; margin-top: .8mm; }
     /* Tabelle mittig zwischen Kopfband und Fusszeile */
-    main { position: absolute; left: ${SEITE.rand}mm; right: ${SEITE.rand}mm; top: ${SEITE.kopf + 1.1}mm; bottom: ${SEITE.fuss}mm; display: flex; align-items: center; }
+    main { position: absolute; left: ${SEITE.rand}mm; right: ${SEITE.rand}mm; top: ${SEITE.kopf + 1.1}mm; bottom: ${SEITE.fuss}mm; display: flex; align-items: flex-start; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: .42em .9em .42em 0; text-align: left; white-space: nowrap; line-height: 1.1; }
     th:last-child, td:last-child { padding-right: 0; }
@@ -190,7 +207,8 @@
         <p class="art">${ARTEN[d.art]}</p><div class="strich"></div>
         ${m.kunde ? `<p class="kunde">${esc(m.kunde)}</p>` : ''}${m.name ? `<p class="projekt">${esc(m.name)}</p>` : ''}
         ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;
-    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t)).join('\n')}`;
+    const oben = tabellenOben(d);
+    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t, oben)).join('\n')}`;
     // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
     const b = m.bestaetigung;
     return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Vertrag' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
