@@ -33,11 +33,19 @@
 
     /* ---------- Listen ---------- */
 
-    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen']];
+    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen'], ['alt', 'Alte Offerten']];
     // Projekte unter «Offen» sind von Anfang an aufgeklappt, die übrigen zu; «umgekehrt» merkt sich die Ausnahmen.
     const pOffen = (p) => (p.status === 'offen') !== state.off.umgekehrt.has(p.id);
 
     function fassungZeile(p, v, opts) {
+      // Alte Offerten: Das Original-PDF bleibt unverändert; der eingelesene Inhalt dient nur als Vorlage.
+      if (v.original) return `<tr class="of-fz">
+        <td class="of-art">${esc(O.ARTEN[v.doc.art])} vom <input type="date" class="inline of-vdat" value="${esc(v.datum)}" data-of="alt-datum" data-pid="${p.id}" data-vid="${v.id}" aria-label="Datum der Offerte"></td>
+        <td class="of-kurz num">${v.lesbar ? esc(O.kurz(v.doc)) : '<span class="dim">Inhalt nicht eingelesen, nur das Original ist abgelegt</span>'}</td>
+        <td class="r of-akt">
+          <button class="btn small primary" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">Original öffnen</button>
+          ${v.lesbar ? `<button class="btn small" data-of="pdf" data-pid="${p.id}" data-vid="${v.id}" title="Dieselbe Offerte im neuen Layout erzeugen">Neues Layout</button>` : ''}
+        </td></tr>`;
       return `<tr class="of-fz">
         <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
         <td class="of-kurz num">${esc(O.kurz(v.doc))}</td>
@@ -110,14 +118,14 @@
       ps.sort((a, b) => (neuste(a).datum < neuste(b).datum ? 1 : -1));
       return `<div class="fld of-pfld"><label>${ps.length === 1 ? 'Offerte' : 'Offerten'} für ${esc(d.kunde)}</label>
         ${ps.map((p) => { const v = neuste(p), n = p.versionen.length; return `<div class="row">
-          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
+          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.status === 'alt' ? 'alte Offerte' : p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
           <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button>
           <button class="btn small" type="button" data-action="offerte-zeigen" data-id="${p.id}">Unter Offerten zeigen</button></div>`; }).join('')}</div>`;
     }
     function oeffneAktuelle(id) {
       const p = projekt(id); if (!p) { toast('Die verknüpfte Offerte gibt es nicht mehr.', { fehler: true }); return; }
       const fs = fassungen(p), v = fs[fs.length - 1];
-      pdf(v.doc, dateiName(p, v, 'pdf'), p, v);
+      if (v.original) originalOeffnen(v); else pdf(v.doc, dateiName(p, v, 'pdf'), p, v);
     }
     function zeige(id) {
       const p = projekt(id); if (!p) return;
@@ -137,6 +145,7 @@
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgeschlossen: `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>
           <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
+        alt: '',
       }[st];
       return `<tr class="of-pz ${auf ? 'auf' : ''}">
           <td colspan="3"><div class="of-kopf">
@@ -156,16 +165,45 @@
       const ps = liste().filter((p) => p.status === key).sort((a, b) => (b.erstellt || 0) - (a.erstellt || 0));
       const auf = state.off.auf.has(key);
       const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
+      const extra = key === 'alt' && auf ? `<tr><td colspan="3" class="of-althoch"><button class="btn small" data-of="alt-hoch">Alte Offerten hochladen</button>
+          <span class="dim">Mehrere PDF auf einmal wählbar. Die Originale werden unverändert abgelegt und stehen bei «Neue Offerte» als Vorlage bereit.</span></td></tr>` : '';
       return `<tbody class="of-ab">
         <tr class="of-abk" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="of-pfeil2">${auf ? '▾' : '▸'}</span> <b>${titel}</b> <span class="of-zahl">${ps.length}</span></td></tr>
-        ${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText}</td></tr>`) : ''}
+        ${extra}${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText || 'Noch keine alten Offerten.'}</td></tr>`) : ''}
       </tbody>`;
+    }
+
+    async function originalOeffnen(v) {
+      const r = api.offertOriginal ? await api.offertOriginal(v.original) : { ok: false, error: 'Nur in der Desktop-App.' };
+      if (!r.ok) toast('Das Original lässt sich nicht öffnen: ' + r.error, { fehler: true });
+    }
+    /** Mehrere alte Offerten als PDF übernehmen: Original ablegen, Inhalt als Vorlage einlesen. */
+    async function alteHochladen() {
+      const r = api.offertAlteWaehlen ? await api.offertAlteWaehlen() : { fehler: 'Nur in der Desktop-App.' };
+      if (!r || r.canceled) return;
+      if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
+      let gelesen = 0, nur = 0, schonDa = 0;
+      const vorhanden = new Set(); for (const p of liste()) for (const v of p.versionen) if (v.original) vorhanden.add(v.original);
+      for (const d of r.dateien || []) {
+        if (vorhanden.has(d.datei)) { schonDa++; continue; }   // dieselbe Datei wurde schon einmal abgelegt
+        const e = d.seiten ? O.ausPdf(d.seiten) : { fehler: 'x' };
+        const basis = d.name.replace(/\.pdf$/i, '');
+        const m = /^(\d{4})[-_.]?(\d{2})[-_.]?(\d{2})[\s_-]*(.*)$/.exec(basis);
+        const datum = m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31 ? `${m[1]}-${m[2]}-${m[3]}` : (d.datum || heute);
+        const titel = (m ? m[4] : basis).replace(/[_]+/g, ' ').trim() || basis;
+        const doc = e.doc || O.leer(/kostenvoranschlag/i.test(basis) ? 'kostenvoranschlag' : 'offerte');
+        liste().push({ id: uid('of'), name: titel, kunde: '', kundeLinks: [], auftraggeber: '', status: 'alt', zugesagtId: null, erstellt: Date.now() + gelesen + nur, mod: 0,
+          versionen: [{ id: uid('ov'), datum, erstellt: Date.now(), doc, original: d.datei, lesbar: !!e.doc }] });
+        if (e.doc) gelesen++; else nur++;
+      }
+      state.off.auf.add('alt'); persist(); render();
+      toast(`${gelesen + nur} ${gelesen + nur === 1 ? 'Offerte' : 'Offerten'} abgelegt${nur ? `, davon ${nur} nur als Original (Tabelle nicht erkannt)` : ''}${schonDa ? `; ${schonDa} waren schon vorhanden` : ''}. Trag jetzt Kunde und Projekt ein und weise sie zu.`, { dauer: 9000 });
     }
 
     /** Alle Fassungen aller Offerten-Projekte, die neusten zuerst. */
     function bestehende() {
       const out = [];
-      for (const p of liste()) for (const v of p.versionen) out.push({ p, v });
+      for (const p of liste()) for (const v of p.versionen) if (!v.original || v.lesbar) out.push({ p, v });
       return out.sort((a, b) => (a.v.datum < b.v.datum ? 1 : a.v.datum > b.v.datum ? -1 : (b.p.erstellt || 0) - (a.p.erstellt || 0)));
     }
 
@@ -433,6 +471,8 @@
         case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
         case 'verk-weg': { p.kundeLinks = (p.kundeLinks || []).filter((k) => k !== ds.key); persist(); render(); break; }
         case 'ab-pdf': auftragsbestaetigung(p); break;
+        case 'alt-hoch': alteHochladen(); break;
+        case 'original': originalOeffnen(v); break;
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
         // LaTeX-Code einfügen
@@ -477,7 +517,8 @@
         persist();
         // Art und Preisart ändern Beschriftungen an mehreren Stellen.
         if (el.tagName === 'SELECT') render();
-      } else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
+      } else if (a === 'alt-datum') { const zp = projekt(el.dataset.pid), zv = zp && zp.versionen.find((x) => x.id === el.dataset.vid); if (zv && el.value) { zv.datum = el.value; persist(); } }
+      else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
       else if (a === 'p-feld') { const zp = projekt(el.dataset.pid); if (zp && el.dataset.key === 'auftraggeber') adresseUebernehmen(zp); persist(); }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);

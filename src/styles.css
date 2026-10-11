@@ -561,3 +561,5 @@ th.r { text-align: right; }
 .agb-edit label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
 .agb-edit textarea { width: 100%; font-family: Consolas, "Courier New", monospace; font-size: 12.5px; line-height: 1.45; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; }
 .agb-edit code { background: var(--line-soft); padding: 0 4px; border-radius: 3px; }
+.of-althoch { padding: 8px 12px 8px 34px !important; background: #fbfcfc; } .of-althoch .dim { margin-left: 10px; font-size: 12px; }
+.of-art .of-vdat { width: 130px; display: inline-block; font-weight: 500; padding: 2px 4px; }

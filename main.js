@@ -506,6 +506,36 @@ if (!app.requestSingleInstanceLock()) {
         return { ok: true };
       } catch (err) { return { ok: false, error: err.message }; }
     });
+    // Alte Offerten: mehrere PDF wählen, Originale unverändert unter «Offerten/Alt» ablegen und den Text zum Einlesen zurückgeben.
+    ipcMain.handle('offerte:alteWaehlen', async () => {
+      const r = await dialog.showOpenDialog(win, { title: 'Alte Offerten wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
+      if (r.canceled || !r.filePaths.length) return { canceled: true };
+      try {
+        const dir = path.join(dataDir(), 'Offerten', 'Alt');
+        fs.mkdirSync(dir, { recursive: true });
+        const dateien = [];
+        for (const quelle of r.filePaths) {
+          const roh = fs.readFileSync(quelle);
+          const name = path.basename(quelle).replace(/[\\/:*?"<>|]/g, '_');
+          // Gleicher Name mit anderem Inhalt: nicht überschreiben, sondern nummerieren.
+          let datei = name, n = 1;
+          while (fs.existsSync(path.join(dir, datei)) && !fs.readFileSync(path.join(dir, datei)).equals(roh)) datei = name.replace(/(\.pdf)?$/i, ` (${++n})$1`);
+          if (!fs.existsSync(path.join(dir, datei))) fs.writeFileSync(path.join(dir, datei), roh);
+          let seiten = null;
+          try { seiten = await pdfSeiten(new Uint8Array(roh)); } catch { /* nur das Original ablegen */ }
+          const d = fs.statSync(quelle).mtime;
+          dateien.push({ name, datei, seiten, datum: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` });
+        }
+        return { dateien };
+      } catch (err) { return { fehler: `Die Dateien konnten nicht übernommen werden: ${err.message}` }; }
+    });
+    ipcMain.handle('offerte:original', async (_e, datei) => {
+      const f = path.join(dataDir(), 'Offerten', 'Alt', path.basename(String(datei)));
+      if (!fs.existsSync(f)) return { ok: false, error: 'Die Datei fehlt im Ordner «Offerten/Alt».' };
+      if (process.env.ZEITERFASSUNG_KEIN_OEFFNEN) return { ok: true };
+      const fehler = await shell.openPath(f);
+      return fehler ? { ok: false, error: fehler } : { ok: true };
+    });
     ipcMain.handle('offerte:open', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'PDF einer Offerte wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }, { name: 'LaTeX oder Text', extensions: ['tex', 'txt', 'json'] }], properties: ['openFile'] });
       if (r.canceled || !r.filePaths[0]) return { canceled: true };
