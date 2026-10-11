@@ -373,7 +373,11 @@ function createWindow() {
     win.webContents.setZoomLevel(z);
     const cfg = readConfig(); if (cfg.zoom !== z) { cfg.zoom = z; try { writeConfig(cfg); } catch { /* egal */ } }
   };
-  win.webContents.on('did-finish-load', () => { const z = readConfig().zoom; if (typeof z === 'number') win.webContents.setZoomLevel(z); });
+  win.webContents.on('did-finish-load', () => {
+    const z = readConfig().zoom; if (typeof z === 'number') win.webContents.setZoomLevel(z);
+    // Zoomen mit zwei Fingern auf dem Touchpad (wie in Chrome); ist in Electron sonst abgeschaltet.
+    win.webContents.setVisualZoomLevelLimits(1, 4).catch(() => { /* nicht verfügbar */ });
+  });
   win.webContents.on('zoom-changed', (_e, richtung) => zoomSetzen(win.webContents.getZoomLevel() + (richtung === 'in' ? 0.5 : -0.5)));
   win.webContents.on('before-input-event', (ev, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
