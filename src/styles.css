@@ -521,3 +521,10 @@ th.r { text-align: right; }
 .of-dialog label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; } .of-dialog label input { display: block; width: 100%; margin-top: 3px; }
 .of-dialog textarea { width: 100%; font-family: Consolas, monospace; font-size: 12px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 12px; }
 .of-dialog .row { display: flex; gap: 10px; }
+
+/* Auswertung: «Monate» und «Nach Bereich» gleich hoch, die Bereichstabelle füllt ihren Kasten. */
+@media (min-width: 1241px) {
+  .aus { align-items: stretch; }
+  .aus .sec.gleich { display: flex; flex-direction: column; }
+  .aus .sec.gleich table { flex: 1; height: 100%; }
+}

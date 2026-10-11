@@ -31,11 +31,12 @@
   function fmtH(x) {
     if (!C.isNum(x)) return '–';
     const neg = x < 0;
-    const t = (Math.round(Math.abs(x) * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
-    const [g, r] = t.split('.');
-    return (neg ? '−' : '') + g.replace(/\B(?=(\d{3})+(?!\d))/g, '’') + (r ? '.' + r : '');
+    // Immer zwei Nachkommastellen, damit die Punkte in Tabellen untereinander stehen.
+    const [g, r] = (Math.round(Math.abs(x) * 100) / 100).toFixed(2).split('.');
+    return (neg && +(g + r) ? '−' : '') + g.replace(/\B(?=(\d{3})+(?!\d))/g, '’') + '.' + r;
   }
-  const fmtH1 = (x) => (C.isNum(x) ? fmtCHF(x, 1) : '–');
+  const fmtH1 = fmtH;
+  const fmtKurz = (x) => String(Math.round(x * 100) / 100);   // Achsenbeschriftung in Grafiken
 
   /* ============ Speicher-Schnittstelle (Desktop-App oder Browser-Vorschau) ============ */
 
@@ -655,7 +656,7 @@
           <td class="r num">${fmtCHF(f.meinTeil)}</td>
           <td class="r num">${fmtH(p.stundenOfferte)}</td>
           <td class="r num">${fmtH(p.stundenZiel)}</td>
-          <td class="r num ${over ? 'over-text' : ''}">${f.stundenEff ? fmtH(f.stundenEff) : '<span class="dim">0</span>'}</td>
+          <td class="r num ${over ? 'over-text' : ''}">${f.stundenEff ? fmtH(f.stundenEff) : '<span class="dim">0.00</span>'}</td>
           <td class="r num cs" style="${scale(f.lohnZiel)}">${C.isNum(f.lohnZiel) ? fmtCHF(f.lohnZiel, 0) : '–'}</td>
           <td class="r num cs" style="${scale(f.lohnEff)}">${C.isNum(f.lohnEff) ? fmtCHF(f.lohnEff, 0) : '–'}</td>
           <td class="dim">${p.abrechnung === 'intern' ? '' : MWST_KURZ[p.mwst]}</td>
@@ -989,7 +990,7 @@
     const x = (i) => L + (i / (n - 1)) * (W - L - R);
     const y = (v) => T + (1 - v / max) * (H - T - B);
     let grid = '';
-    for (let v = 0; v <= max + 1e-9; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="gl"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" class="ax" text-anchor="end">${fmtH(v)}</text>`;
+    for (let v = 0; v <= max + 1e-9; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="gl"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" class="ax" text-anchor="end">${fmtKurz(v)}</text>`;
     let months = '';
     for (let m = 0; m < 12; m++) {
       const i = C.dayOfYear(`${opts.year}-${pad(m + 1)}-01`);
@@ -1073,7 +1074,7 @@
         </table>
         <p class="hint">Soll pro Monat: (365 − 104 Wochenendtage − ${s.ferientage} Ferientage) ÷ 12 × ${s.stundenProTag} h × ${s.pensum}%. Der laufende Monat zählt mit dem vollen Soll.</p>
       </section>
-      <section class="sec">
+      <section class="sec gleich">
         <h2>Nach Bereich</h2>
         <table class="list bereiche">
           <thead><tr><th>Bereich</th><th class="r">Stunden</th><th colspan="2">Anteil</th></tr></thead>
