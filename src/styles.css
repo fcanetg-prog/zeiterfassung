@@ -563,3 +563,6 @@ th.r { text-align: right; }
 .agb-edit code { background: var(--line-soft); padding: 0 4px; border-radius: 3px; }
 .of-althoch { padding: 8px 12px 8px 34px !important; background: #fbfcfc; } .of-althoch .dim { margin-left: 10px; font-size: 12px; }
 .of-art .of-vdat { width: 130px; display: inline-block; font-weight: 500; padding: 2px 4px; }
+/* Offerten: Die Liste darf nicht zusammengestaucht werden, sonst wird ihr unteres Ende abgeschnitten statt scrollbar. */
+.main.view-offerten > * { flex-shrink: 0; }
+.main.view-offerten { padding-bottom: 90px; }
