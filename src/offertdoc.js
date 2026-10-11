@@ -109,10 +109,10 @@
     });
     const titel = `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}`;
     // Titel im Kopfband ebenfalls einzeilig halten
-    const platz = SEITE.b - 2 * SEITE.rand - 92;
+    const platz = SEITE.b - 2 * SEITE.rand;
     const tpt = Math.max(6, Math.min(11, platz / ((t.titel.length + 2) * 0.56 * PT)));
     return `<section class="folie">
-      <header><div class="logo"></div>
+      <header>
         <h2><b>${esc(titel)}</b>${t.titel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(t.titel)}</span>` : ''}</h2></header>
       <main style="font-size:${pt.toFixed(2)}pt">
       <table class="${einfach ? 'einfach' : ''}">
@@ -134,16 +134,15 @@
     .folie:last-child { break-after: auto; }
     /* Titelfolie */
     .titel { background: ${NAVY} __OFFERTE_TITELBILD__ center / cover no-repeat; color: #fff; }
-    .titel .block { position: absolute; left: 6.4mm; top: 70mm; width: 80mm; }
+    .titel .block { position: absolute; left: 6.4mm; top: 84mm; width: 74mm; }
     .titel .art { font-size: 17pt; font-weight: 700; letter-spacing: .02em; margin: 0 0 3mm; }
     .titel .strich { width: 16mm; height: .9mm; background: ${TEAL}; margin: 0 0 4mm; }
     .titel .kunde { font-size: 11.5pt; font-weight: 700; margin: 0 0 1.2mm; }
     .titel .projekt { font-size: 10.5pt; margin: 0 0 5mm; line-height: 1.3; }
     .titel .datum { font-size: 8.5pt; color: #b9c7d4; }
     /* Inhaltsfolien */
-    header { position: absolute; left: 0; top: 0; width: 100%; height: ${SEITE.kopf}mm; background: ${NAVY}; color: #fff; display: flex; align-items: center; padding: 0 ${SEITE.rand}mm 0 ${SEITE.rand - 3}mm; border-bottom: 1.1mm solid ${TEAL}; }
-    .logo { flex: none; width: 82mm; height: 14mm; background: __OFFERTE_LOGO__ left center / contain no-repeat; }
-    h2 { margin: 0 0 0 auto; font-weight: 400; white-space: nowrap; text-align: right; line-height: 1.25; }
+    header { position: absolute; left: 0; top: 0; width: 100%; height: ${SEITE.kopf}mm; background: ${NAVY}; color: #fff; display: flex; align-items: center; padding: 0 ${SEITE.rand}mm; border-bottom: 1.1mm solid ${TEAL}; }
+    h2 { margin: 0; font-weight: 400; white-space: nowrap; text-align: left; line-height: 1.25; }
     h2 b { display: block; font-weight: 700; font-size: 16pt; }
     h2 span { display: block; color: #cfe9ea; margin-top: .8mm; }
     /* Tabelle mittig zwischen Kopfband und Fusszeile */

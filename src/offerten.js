@@ -44,6 +44,42 @@
         </td></tr>`;
     }
 
+    /* Verknüpfung mit den Projekten der Zeiterfassung: Im Projekt lässt sich so die neuste Offerte öffnen. */
+    const zLabel = (x) => `${[x.kunde, x.name].filter(Boolean).join(' – ')} (${x.jahr})`;
+    function verknuepfZeile(p) {
+      const verkn = state.data.projects.filter((x) => x.offerteId === p.id);
+      const frei = state.data.projects.filter((x) => x.offerteId !== p.id && !x.archiviert && x.abrechnung !== 'intern')
+        .sort((a, b) => b.jahr - a.jahr || zLabel(a).localeCompare(zLabel(b), 'de'));
+      return `<tr class="of-vz"><td colspan="3"><div class="of-verk">
+        <span class="dim">Gehört zu Projekt:</span>
+        ${verkn.map((x) => `<span class="of-chip">${esc(zLabel(x))}<button data-of="verk-weg" data-zid="${x.id}" title="Verknüpfung lösen" aria-label="Verknüpfung lösen">×</button></span>`).join('')}
+        <select data-of="verk-neu" data-pid="${p.id}" aria-label="Mit einem Projekt verknüpfen">
+          <option value="">${verkn.length ? 'weiteres Projekt hinzufügen …' : 'Projekt wählen …'}</option>
+          ${frei.map((x) => `<option value="${x.id}">${esc(zLabel(x))}${x.offerteId ? ' · hat schon eine Offerte' : ''}</option>`).join('')}
+        </select></div></td></tr>`;
+    }
+    /** Zeile im Projektfenster: neuste Offerte öffnen. */
+    function projektZeile(offerteId) {
+      const p = offerteId && projekt(offerteId);
+      if (!p) return '';
+      const fs = fassungen(p), v = fs[fs.length - 1];
+      if (!v) return '';
+      return `<div class="fld of-pfld"><label>Offerte</label><div class="row">
+        <span>${esc(vTitel(v))}${fs.length > 1 ? ` <span class="dim">(neuste von ${fs.length})</span>` : ''}</span>
+        <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button>
+        <button class="btn small" type="button" data-action="offerte-zeigen" data-id="${p.id}">Unter Offerten zeigen</button></div></div>`;
+    }
+    function oeffneAktuelle(id) {
+      const p = projekt(id); if (!p) { toast('Die verknüpfte Offerte gibt es nicht mehr.', { fehler: true }); return; }
+      const fs = fassungen(p), v = fs[fs.length - 1];
+      pdf(v.doc, dateiName(p, v, 'pdf'), p, v);
+    }
+    function zeige(id) {
+      const p = projekt(id); if (!p) return;
+      state.off.edit = null; state.off.auf.add(p.status);
+      if (!pOffen(p)) { if (state.off.umgekehrt.has(p.id)) state.off.umgekehrt.delete(p.id); else state.off.umgekehrt.add(p.id); }
+    }
+
     function projektZeilen(p) {
       const fs = fassungen(p), letzte = fs[fs.length - 1], st = p.status, auf = pOffen(p);
       const knoepfe = {
@@ -64,6 +100,7 @@
             ${knoepfe}
             <button class="btn small ghost" data-of="p-del" data-pid="${p.id}" title="Projekt mit allen Fassungen löschen">Löschen</button>
           </div></td></tr>
+        ${auf ? verknuepfZeile(p) : ''}
         ${auf ? fs.map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1, zugesagt: v.id === p.zugesagtId })).join('') : ''}`;
     }
 
@@ -325,6 +362,7 @@
         }
         case 'p2-neu': { o.doc.teile[+ds.t].preis2 = { label: 'Preis pro Folge', betrag: 0 }; persist(); render(); const f = $(`[data-pfad="t.${ds.t}.preis2.betrag"]`); if (f) f.focus(); break; }
         case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
+        case 'verk-weg': { const x = state.data.projects.find((q) => q.id === ds.zid); if (x) { x.offerteId = null; persist(); render(); } break; }
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
         // LaTeX-Code einfügen
@@ -371,9 +409,13 @@
         if (el.tagName === 'SELECT') render();
       } else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
       else if (a === 'p-feld') persist();
+      else if (a === 'verk-neu') {
+        const x = state.data.projects.find((q) => q.id === el.value);
+        if (x) { x.offerteId = el.dataset.pid; persist(); render(); toast(`Verknüpft mit ${zLabel(x)}`); }
+      }
       else if (a === 'n-feld' && el.tagName === 'SELECT') { /* nur merken */ }
     });
 
-    return { view, beginneMit };
+    return { view, beginneMit, projektZeile, oeffneAktuelle, zeige };
   };
 })();

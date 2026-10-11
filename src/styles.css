@@ -548,3 +548,9 @@ th.r { text-align: right; }
 .of-vorl .btn { margin-right: 6px; } .of-vinfo { font-size: 12px; color: var(--muted); } .of-vinfo.ok { color: var(--teal-deep); font-weight: 600; }
 .of-nakt { display: flex; gap: 10px; margin-left: auto; }
 .of-pzeile { display: flex; align-items: center; gap: 10px; } .of-pzeile .of-plabel { width: 240px; font-weight: 700; } .of-platz { width: 66px; flex: none; }
+.of-box .of-liste tr.of-vz td { padding: 4px 12px 6px 54px; background: #fbfcfc; }
+.of-verk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.of-verk select { font-size: 12px; padding: 3px 6px; max-width: 320px; }
+.of-chip { display: inline-flex; align-items: center; gap: 4px; background: #e3f1f1; border: 1px solid #b9dcdc; border-radius: 11px; padding: 1px 4px 1px 9px; }
+.of-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 0 3px; }
+.of-pfld .row { gap: 8px; }

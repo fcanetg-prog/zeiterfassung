@@ -245,8 +245,8 @@ function bildAlsCss(basis) {
 }
 /** Setzt Titelbild und Logo aus dem Ordner «Vorlagen» in die Offerte ein; fehlen sie, steht der Firmenname als Text. */
 function offertBilder(html) {
-  const titel = bildAlsCss('offerte-titel'), logo = bildAlsCss('offerte-logo');
-  return html.split('__OFFERTE_TITELBILD__').join(titel || '').split('__OFFERTE_LOGO__').join(logo || 'none');
+  const titel = bildAlsCss('offerte-titel');
+  return html.split('__OFFERTE_TITELBILD__').join(titel || '');
 }
 function speichereOffertBilder(bilder) {
   const dir = path.join(dataDir(), VORLAGEN_DIR);
@@ -444,7 +444,11 @@ if (!app.requestSingleInstanceLock()) {
       starteWaechter();
       return { path: ziel, vorhanden };
     });
-    ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath(), offertBilder: { titel: !!bildAlsCss('offerte-titel'), logo: !!bildAlsCss('offerte-logo') } }));
+    // Rückfragen als eigenes Dialogfenster: Nach dem eingebauten confirm() nimmt Windows in Textfeldern sonst keine Tastatureingaben mehr an.
+    ipcMain.on('dlg:confirm', (ev, text) => {
+      ev.returnValue = dialog.showMessageBoxSync(win, { type: 'question', buttons: ['OK', 'Abbrechen'], defaultId: 0, cancelId: 1, noLink: true, title: 'Zeiterfassung', message: String(text) }) === 0;
+    });
+    ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath(), offertBilder: { titel: !!bildAlsCss('offerte-titel') } }));
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }
     });

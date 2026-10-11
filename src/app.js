@@ -81,6 +81,8 @@
     },
   };
 
+  if (window.api && window.api.confirm) window.confirm = (t) => window.api.confirm(t);
+
   /* ============ Zustand ============ */
 
   const heute = todayIso();
@@ -270,7 +272,7 @@
       rechnungGeplant: p.rechnungGeplant || null, rechnungsdatum: p.rechnungsdatum || null, zahlungsdatum: p.zahlungsdatum || null,
       rechnungsadresse: p.rechnungsadresse || '', referenz: p.referenz || '', rechnungsEmail: p.rechnungsEmail || '',
       rechnungstext: p.rechnungstext || '', offerteVom: p.offerteVom || null, emailVom: p.emailVom || null,
-      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, zahlungBank: p.zahlungBank || null, mod: p.mod || 0,
+      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, zahlungBank: p.zahlungBank || null, offerteId: p.offerteId || null, mod: p.mod || 0,
     }));
     const ids = new Set(out.projects.map((p) => p.id));
     out.entries = d.entries.filter((e) => e && e.datum && ids.has(e.projectId) && C.isNum(e.stunden))
@@ -790,6 +792,7 @@
             ${fld('d-kunde', 'Kunde', 'kunde', 'list="dl-kunde"')}${fld('d-name', 'Projekt', 'name')}
             ${fld('d-bereich', 'Bereich', 'bereich', 'list="dl-bereich"')}${fld('d-kategorie', 'Unterbereich', 'kategorie', 'list="dl-kategorie"')}
           </div>
+          ${OFF.projektZeile(d.offerteId)}
           ${datalist('dl-kunde', 'kunde')}${datalist('dl-bereich', 'bereich')}${datalist('dl-kategorie', 'kategorie')}
           <div class="cols2">
             <div class="fld"><label>Jahr</label>${seg('jahr', jahrOptionen(d.jahr).map((y) => [y, String(y)]))}</div>
@@ -1158,10 +1161,9 @@
         ${state.sync ? `<p class="hint ${state.sync.fehler ? 'warn' : ''}">${esc(state.sync.fehler || state.sync.text)}</p>` : ''}
       </section>
       <section class="sec"><h2>Offerten</h2>
-        <p>Titelbild der ersten Folie und Logo im Kopfband. Die Bilder liegen im Ordner «Vorlagen» neben deinen Daten und gelten damit für beide Rechner.</p>
+        <p>Titelbild der ersten Folie. Es liegt im Ordner «Vorlagen» neben deinen Daten und gilt damit für beide Rechner.</p>
         <div class="row">
           <button class="btn" data-action="offert-bild" data-art="titel">Titelbild wählen</button><span class="${(state.info.offertBilder || {}).titel ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).titel ? 'vorhanden' : 'fehlt: die Titelfolie ist einfarbig blau'}</span>
-          <button class="btn" data-action="offert-bild" data-art="logo">Logo wählen</button><span class="${(state.info.offertBilder || {}).logo ? 'pos' : 'warn'}">${(state.info.offertBilder || {}).logo ? 'vorhanden' : 'fehlt'}</span>
         </div>
       </section>
       <section class="sec"><h2>Daten</h2>
@@ -1247,7 +1249,7 @@
     if (r.data && r.data.typ === 'offertbilder') {
       const e = api.offertBilder ? await api.offertBilder(r.data) : { ok: false, error: 'Nur in der Desktop-App.' };
       if (e.ok) state.info = await api.info();
-      toast(e.ok ? `Titelbild und Logo für die Offerten sind gespeichert (${e.anzahl} Bilder).` : 'Die Bilder konnten nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
+      toast(e.ok ? 'Das Titelbild für die Offerten ist gespeichert.' : 'Die Bilder konnten nicht gespeichert werden: ' + e.error, e.ok ? undefined : { fehler: true });
       return;
     }
     if (r.data && r.data.typ === 'offertvorlage') {
@@ -1361,6 +1363,8 @@
       case 'export': { const r = await api.exportFile(state.data); if (r && r.path) toast('Exportiert nach ' + r.path); break; }
       case 'export-csv': { const r = await api.exportCsv(`Projekte-${state.year}.csv`, projectsCsv()); if (r && r.path) toast('Exportiert nach ' + r.path); break; }
       case 'open-folder': api.openFolder(); break;
+      case 'offerte-oeffnen': OFF.oeffneAktuelle(el.dataset.id); break;
+      case 'offerte-zeigen': state.drawer = null; state.view = 'offerten'; OFF.zeige(el.dataset.id); render(); break;
       case 'offert-bild': {
         if (!api.offertBildWaehlen) { toast('Nur in der Desktop-App.', { fehler: true }); break; }
         const r = await api.offertBildWaehlen(el.dataset.art);
