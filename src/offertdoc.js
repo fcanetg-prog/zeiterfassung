@@ -25,7 +25,8 @@
         nummer: text(t && t.nummer).trim(),
         titel: text(t && t.titel),
         text: text(t && t.text),
-        umbruch: !!(t && t.umbruch),
+        preisLabel: text(t && t.preisLabel).trim() || 'Preis',
+        preis2: t && t.preis2 && typeof t.preis2 === 'object' ? { label: text(t.preis2.label).trim() || 'Preis pro Folge', betrag: zahl(t.preis2.betrag) } : null,
         bloecke: (Array.isArray(t && t.bloecke) ? t.bloecke : []).map((b) => ({
           titel: text(b && b.titel),
           zeilen: (Array.isArray(b && b.zeilen) ? b.zeilen : []).map((z) => ({
@@ -81,7 +82,7 @@
   function schriftFuer(t, einfach) {
     const breite = SEITE.b - 2 * SEITE.rand;
     const fest = einfach ? 34 : 112;                      // Spalten rechts von «Was», in mm
-    let laengste = 12, zeilen = 2;                        // Kopf- und Preiszeile
+    let laengste = 12, zeilen = t.preis2 ? 3.2 : 2;                        // Kopf- und Preiszeile
     for (const b of t.bloecke) {
       if (b.titel.trim()) { zeilen++; laengste = Math.max(laengste, b.titel.length * 1.08); }
       for (const z of b.zeilen) { zeilen++; laengste = Math.max(laengste, z.was.length); }
@@ -117,12 +118,13 @@
       <table class="${einfach ? 'einfach' : ''}">
         <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th class="r">Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
         <tbody>${zeilen}</tbody>
-        <tfoot><tr><td colspan="${spalten - 1}">Preis</td><td class="r">${fr(teilTotal(t))}</td></tr></tfoot>
+        <tfoot><tr><td colspan="${spalten - 1}">${esc(t.preisLabel)}</td><td class="r">${fr(teilTotal(t))}</td></tr>
+          ${t.preis2 ? `<tr class="p2"><td colspan="${spalten - 1}">${esc(t.preis2.label)}</td><td class="r">${fr(t.preis2.betrag)}</td></tr>` : ''}</tfoot>
       </table></main>
       <footer>Alle Preise exkl. Mehrwertsteuer</footer></section>`;
   }
 
-  const NAVY = '#18334e', TEAL = '#27b9bf', TEAL_DUNKEL = '#1a8f96';
+  const NAVY = '#18334e', TEAL = '#27b9bf', TEAL_DUNKEL = '#1a8f96', ORANGE = '#e07a2f';
   const CSS = `
     @page { size: ${SEITE.b}mm ${SEITE.h}mm; margin: 0; }
     * { box-sizing: border-box; }
@@ -160,7 +162,8 @@
     tr.bt td:last-child { padding-right: .6em; }
     table.einfach tbody td:first-child { padding-left: 0; }
     tr.entf td { color: #9aa6b0; }
-    td.ink { color: #1b9aa0; font-style: italic; }
+    td.ink { color: ${ORANGE}; }
+    tfoot tr.p2 td { border-top: .25mm solid #5d7389; }
     tfoot td { font-weight: 700; font-size: 1.12em; color: #fff; background: ${NAVY}; padding: .6em .55em; }
     tfoot td:last-child { padding-right: .55em; }
     tbody tr:not(.bt) td:last-child { padding-right: .6em; }
@@ -196,7 +199,6 @@
   function teilLatex(d, t) {
     const einfach = istEinfach(t);
     const out = [];
-    if (t.umbruch) out.push('\\newpage');
     out.push(`\\noindent{\\large\\textbf{${tex(kopf(d, t))}}} {\\footnotesize\\textbf{${tex(t.titel)}}}`, '', '\\medskip');
     if (t.text.trim()) out.push(`\\noindent ${texKursiv(t.text)}`, '', '\\medskip');
     out.push(einfach ? '\\noindent\\begin{tabularx}{\\textwidth}{|X|r|}' : '\\noindent\\begin{tabularx}{\\textwidth}{|X|llr|r|}', '\\hline');
@@ -213,8 +215,10 @@
       });
       out.push('\\hline');
     });
-    out.push('\\hline', einfach ? `\\textbf{Preis} & \\textbf{${tex(fr(teilTotal(t)))}} \\\\ \\hline`
-      : `\\textbf{Preis} & & & & \\textbf{${tex(fr(teilTotal(t)))}} \\\\ \\hline`, '\\end{tabularx}', '', '\\bigskip\\bigskip', '');
+    const summe = (label, betrag) => (einfach ? `\\textbf{${tex(label)}} & \\textbf{${tex(fr(betrag))}} \\\\ \\hline` : `\\textbf{${tex(label)}} & & & & \\textbf{${tex(fr(betrag))}} \\\\ \\hline`);
+    out.push('\\hline', summe(t.preisLabel, teilTotal(t)));
+    if (t.preis2) out.push(summe(t.preis2.label, t.preis2.betrag));
+    out.push('\\end{tabularx}', '', '\\bigskip\\bigskip', '');
     return out.join('\n');
   }
 
@@ -249,7 +253,6 @@ ${d.teile.map((t) => teilLatex(d, t)).join('\n')}
       "nummer": "1a",              // steht nach «Offerte» bzw. «Kostenvoranschlag»; darf leer sein
       "titel": "Panel-Moderation (rund 45 Minuten) mit drei Gästen, plus Q&A",
       "text": "Einleitung. *Sternchen* setzen Wörter kursiv.",
-      "umbruch": false,            // true = dieser Teil beginnt auf einer neuen Seite
       "bloecke": [
         {
           "titel": "Projektmanagement und Recherchearbeiten",
@@ -339,6 +342,8 @@ ${FORMAT}
     }
     return z;
   }
+  /** Taugt eine Zeile als Titel? Fliesstext (lang oder mit Punkt am Ende) nicht. */
+  const alsTitel = (z) => z.length <= 90 && !/[.;,]$/.test(z.trim());
   const istSumme = (was) => /^(preis|total|gesamt(preis|total)?|summe)\b/i.test(text(was).trim());
 
   /** Liest LaTeX-Code (aus der App oder eigene Vorlagen mit Tabellen) in die feste Form ein. */
@@ -350,16 +355,16 @@ ${FORMAT}
     const teile = []; let art = null, pos = 0, m;
     while ((m = re.exec(s))) {
       const davor = s.slice(pos, m.index); pos = re.lastIndex;
-      const umbruch = /\\(newpage|clearpage|pagebreak)\b/.test(davor);
       const abs = davor.split(/\n\s*\n|\\\\|\\(?:par|medskip|bigskip|smallskip|newpage|clearpage|pagebreak)\b/).map(texKlar).filter(Boolean);
-      const t = { nummer: '', titel: '', text: '', umbruch, bloecke: [] };
+      const t = { nummer: '', titel: '', text: '', bloecke: [] };
       const ki = abs.findIndex((x) => KOPF_RE.test(x));
       if (ki >= 0) {
         const k = KOPF_RE.exec(abs[ki]);
         if (!art) art = k[1].toLowerCase();
         t.nummer = k[2].trim(); t.titel = abs[ki].slice(k.index + k[0].length).replace(/\*/g, '').trim();
         t.text = abs.slice(ki + 1).join(' ');
-      } else if (abs.length) { t.titel = abs[0].replace(/\*/g, ''); t.text = abs.slice(1).join(' '); }
+      } else if (abs.length && alsTitel(abs[0])) { t.titel = abs[0].replace(/\*/g, ''); t.text = abs.slice(1).join(' '); }
+      else t.text = abs.join(' ');
       // Tabelle: Spaltenangaben am Anfang überspringen, dann Zeile für Zeile
       let inhalt = m[2];
       for (let i = 0; i < 3; i++) { const g = /^\s*(\[[^\]]*\]|\{(?:[^{}]|\{[^{}]*\})*\})/.exec(inhalt); if (!g) break; inhalt = inhalt.slice(g[0].length); }
@@ -369,7 +374,12 @@ ${FORMAT}
         const zellen = rz.replace(/\\(hline|toprule|midrule|bottomrule|cline\{[^}]*\}|endhead|endfoot|endlastfoot|endfirsthead)/g, '').split(/(?<!\\)&/).map(texKlar);
         if (!zellen.some(Boolean)) continue;
         const rest = zellen.slice(1).filter(Boolean);
-        if (/^was$/i.test(zellen[0]) || (fett && istSumme(zellen[0]))) continue;
+        if (/^was$/i.test(zellen[0])) continue;
+        if (fett && istSumme(zellen[0]) && rest.length <= 1) {
+          if (!t._summe) { t._summe = true; t.preisLabel = zellen[0]; }
+          else if (!t.preis2) t.preis2 = { label: zellen[0], betrag: betragAus(rest[0]) || 0 };
+          continue;
+        }
         if (!rest.length && fett) { block = { titel: zellen[0], zeilen: [] }; t.bloecke.push(block); continue; }
         if (!block) { block = { titel: '', zeilen: [] }; t.bloecke.push(block); }
         block.zeilen.push(zeileAus(zellen, zellen.length < 4));
@@ -401,10 +411,30 @@ ${FORMAT}
     return out + (kursivOffen ? '*' : '');
   }
 
+  const KOPF_PDF = /^(Offerte|Kostenvoranschlag)\b[ \t]*([0-9]+[ \t]?[a-zA-Z]?\b|[A-Z]\b)?[ \t]*:?[ \t]*(.*)$/i;
+
   function ausPdf(seiten) {
-    const teile = []; let art = null, t = null, tab = null, block = null;
-    (seiten || []).forEach((seite, si) => {
-      let ersteAufSeite = true;
+    const teile = []; let art = null, t = null, tab = null, block = null, vor = [];
+    const neuerTeil = () => {
+      // Titel suchen: zuletzt genannte «Offerte …»/«Kostenvoranschlag …», sonst die erste fette oder überhaupt erste Zeile davor.
+      const nt = { nummer: '', titel: '', text: '', bloecke: [] };
+      let ki = -1;
+      for (let i = vor.length - 1; i >= 0; i--) if (KOPF_PDF.test(vor[i].ganz)) { ki = i; break; }
+      if (ki >= 0) {
+        const k = KOPF_PDF.exec(vor[ki].ganz);
+        if (!art) art = k[1].toLowerCase();
+        nt.nummer = (k[2] || '').replace(/\s+/g, '');
+        const rest = vor.slice(ki + 1);
+        if (k[3].trim()) { nt.titel = k[3].trim(); nt.text = fliess(rest.map((l) => l.kursiv)); }
+        else { nt.titel = rest.length ? rest[0].ganz : ''; nt.text = fliess(rest.slice(1).map((l) => l.kursiv)); }
+      } else if (vor.length) {
+        const l = vor.find((x) => x.fett) || vor[vor.length - 1];
+        if (alsTitel(l.ganz)) nt.titel = l.ganz;
+      }
+      vor = []; teile.push(nt); return nt;
+    };
+    const fliess = (zl) => zl.reduce((acc, l) => (/[a-zäöü]-$/.test(acc) && /^[a-zäöü]/.test(l) ? acc.slice(0, -1) + l : acc ? acc + ' ' + l : l), '');
+    (seiten || []).forEach((seite) => {
       const items = (seite.items || []).filter((i) => text(i.s).trim());
       // Zeilen bilden: gleiche Grundlinie (± 2.5)
       const zeilen = [];
@@ -414,49 +444,54 @@ ${FORMAT}
       }
       for (const z of zeilen) {
         z.items.sort((a, b) => a.x - b.x);
-        const ganz = verbinde(z.items);
-        const kopf = !tab && z.items[0].fett && KOPF_RE.exec(ganz);
-        if (kopf && kopf.index === 0) {
-          if (!art) art = kopf[1].toLowerCase();
-          t = { nummer: kopf[2].trim(), titel: ganz.slice(kopf[0].length).trim(), text: '', umbruch: si > 0 && ersteAufSeite, bloecke: [], _zeilen: [] };
-          teile.push(t); tab = null; block = null; ersteAufSeite = false; continue;
+        const istKopfzeile = /^was$/i.test(z.items[0].s.trim()) && z.items.some((i) => /^total$/i.test(i.s.trim()));
+        if (tab && !istKopfzeile) {
+          // Tabellenzeile: Stücke den Spalten zuordnen
+          const stuecke = [[], [], [], [], []];
+          let vorher = -1;
+          for (const it of z.items) {
+            const s = it.s.trim(), r = it.x + it.w;
+            let k;
+            if (tab.einfach) k = tab.rTotal != null && Math.abs(r - tab.rTotal) < 4 && betragAus(s) != null && it !== z.items[0] ? 4 : 0;
+            else if (it.x < tab.xAufwand - 3) k = 0;
+            else {
+              // Spalte, deren linker oder rechter Rand am besten passt (Spalten können links- oder rechtsbündig sein)
+              let best = 1e9; k = 4;
+              tab.sp.forEach((c, ci) => { const ab = Math.min(Math.abs(it.x - c.l), Math.abs(r - c.r)); if (ab < best - 0.01) { best = ab; k = ci + 1; } });
+            }
+            // Ein Stück, das lückenlos an das vorige anschliesst, gehört in dieselbe Spalte.
+            const letzter = vorher >= 0 ? stuecke[vorher][stuecke[vorher].length - 1] : null;
+            if (letzter && it.x - (letzter.x + letzter.w) <= 1.2) k = vorher;
+            stuecke[k].push(it); vorher = k;
+          }
+          const zellen = stuecke.map((l) => verbinde(l));
+          const summe = istSumme(zellen[0]) && !zellen[1] && !zellen[2] && !zellen[3] && betragAus(zellen[4]) != null;
+          if (tab.summe) {
+            // Nach der Preiszeile kann eine zweite folgen («Preis pro Folge»); alles andere gehört nicht mehr zur Tabelle.
+            if (summe && !t.preis2) { t.preis2 = { label: zellen[0], betrag: betragAus(zellen[4]) }; continue; }
+            tab = null; block = null;
+          } else if (summe) { t.preisLabel = zellen[0]; tab.summe = true; continue; }
+          else {
+            // Blocktitel: nur Text in der ersten Spalte, allenfalls mit dem Blocktotal ganz rechts
+            if (zellen[0] && !zellen[1] && !zellen[2] && !zellen[3] && (!zellen[4] || (!tab.einfach && z.items[0].fett))) { block = { titel: zellen[0], zeilen: [] }; t.bloecke.push(block); continue; }
+            if (!block) { block = { titel: '', zeilen: [] }; t.bloecke.push(block); }
+            block.zeilen.push(tab.einfach ? zeileAus([zellen[0], zellen[4]], true) : zeileAus(zellen, false));
+            continue;
+          }
         }
-        if (!t) continue;
-        ersteAufSeite = false;
-        if (!tab && /^was$/i.test(z.items[0].s.trim())) {
+        if (istKopfzeile) {
           const sp = (name) => z.items.find((i) => i.s.trim().toLowerCase() === name);
           const total = sp('total'), preis = sp('preis'), aufwand = sp('aufwand'), ansatz = sp('ansatz');
-          tab = { einfach: !(aufwand && ansatz && preis), xAufwand: aufwand && aufwand.x, xAnsatz: ansatz && ansatz.x, rPreis: preis && preis.x + preis.w, rTotal: total ? total.x + total.w : null };
-          t.text = t._zeilen.reduce((acc, l) => (/[a-zäöü]-$/.test(acc) && /^[a-zäöü]/.test(l) ? acc.slice(0, -1) + l : acc ? acc + ' ' + l : l), '');
-          block = null; continue;
+          t = neuerTeil(); block = null;
+          tab = { einfach: !(aufwand && ansatz && preis), xAufwand: aufwand && aufwand.x, xAnsatz: ansatz && ansatz.x, rTotal: total ? total.x + total.w : null, summe: false,
+            sp: [aufwand, ansatz, preis, total].filter(Boolean).map((c) => ({ l: c.x, r: c.x + c.w })) };
+          continue;
         }
-        if (!tab) { t._zeilen.push(verbinde(z.items, true)); continue; }
-        // Tabellenzeile: Stücke den Spalten zuordnen
-        const stuecke = [[], [], [], [], []];
-        let vorher = -1;
-        for (const it of z.items) {
-          const s = it.s.trim(), r = it.x + it.w;
-          let k;
-          if (tab.einfach) k = tab.rTotal != null && Math.abs(r - tab.rTotal) < 4 && betragAus(s) != null && it !== z.items[0] ? 4 : 0;
-          else if (it.x < tab.xAufwand - 3) k = 0;
-          else if (it.x < tab.xAnsatz - 3) k = 1;
-          else if (Math.abs(it.x - tab.xAnsatz) < 3) k = 2;
-          else if (r <= tab.rPreis + 4) k = 3;
-          else k = 4;
-          // Ein Stück, das lückenlos an das vorige anschliesst, gehört in dieselbe Spalte.
-          const letzter = vorher >= 0 ? stuecke[vorher][stuecke[vorher].length - 1] : null;
-          if (letzter && it.x - (letzter.x + letzter.w) <= 1.2) k = vorher;
-          stuecke[k].push(it); vorher = k;
-        }
-        const zellen = stuecke.map((l) => verbinde(l));
-        if (istSumme(zellen[0]) && !zellen[1] && !zellen[2] && !zellen[3]) { tab = null; block = null; t._fertig = true; continue; }
-        if (zellen[0] && !zellen[1] && !zellen[2] && !zellen[3] && !zellen[4]) { block = { titel: zellen[0], zeilen: [] }; t.bloecke.push(block); continue; }
-        if (!block) { block = { titel: '', zeilen: [] }; t.bloecke.push(block); }
-        block.zeilen.push(tab.einfach ? zeileAus([zellen[0], zellen[4]], true) : zeileAus(zellen, false));
+        vor.push({ ganz: verbinde(z.items), kursiv: verbinde(z.items, true), fett: !!z.items[0].fett });
       }
     });
-    const gut = teile.filter((x) => x.bloecke.length);
-    if (!gut.length) return { fehler: 'Im PDF ist keine Offerte mit einer Tabelle «Was … Total» zu erkennen. Versuch es mit dem LaTeX-Code.' };
+    const gut = teile.filter((x) => x.bloecke.some((b) => b.zeilen.length));
+    if (!gut.length) return { fehler: 'Im PDF ist keine Tabelle mit der Kopfzeile «Was … Total» zu finden. Versuch es mit dem LaTeX-Code.' };
     return { doc: normalize({ art: art || 'offerte', teile: gut }) };
   }
 
@@ -469,7 +504,7 @@ ${FORMAT}
     return ausAntwort(t);
   }
 
-  const leer = (art) => normalize({ art, teile: [{ nummer: '', titel: '', text: 'Alle Preise verstehen sich exkl. Mwst.', bloecke: [{ titel: '', zeilen: [{ was: '', aufwand: '', ansatz: 0, preis: 'auto' }] }] }] });
+  const leer = (art) => normalize({ art, teile: [{ nummer: '', titel: '', text: '', bloecke: [{ titel: '', zeilen: [{ was: '', aufwand: '', ansatz: 0, preis: 'auto' }] }] }] });
 
   return { ARTEN, normalize, aufwandTeile, zeilenPreis, blockTotal, teilTotal, istEinfach, ansatzText, preisText, fr, kopf, kurz, html, latex, promptAnpassen, promptVorlage, ausAntwort, ausLatex, ausPdf, ausDatei, leer };
 });

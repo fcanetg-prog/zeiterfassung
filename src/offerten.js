@@ -113,7 +113,6 @@
           <b>${esc(O.ARTEN[d.art])}</b>
           ${feld(`t.${i}.nummer`, t.nummer, 'class="of-nr" placeholder="Nr." aria-label="Nummer"')}
           ${feld(`t.${i}.titel`, t.titel, 'class="of-titel" placeholder="Titel" aria-label="Titel"')}
-          <label class="of-umbruch" title="Dieser Teil beginnt im Dokument auf einer neuen Seite"><input type="checkbox" data-of="f" data-pfad="t.${i}.umbruch" ${t.umbruch ? 'checked' : ''}> neue Seite</label>
           <button class="btn small" data-of="t-dup" data-t="${i}" title="Diesen Teil verdoppeln, z. B. für eine Variante">Verdoppeln</button>
           <button class="btn small ghost" data-of="t-del" data-t="${i}" title="Diesen Teil löschen">×</button>
         </div>
@@ -134,8 +133,14 @@
               <td><button class="btn small ghost" data-of="z-del" data-t="${i}" data-b="${j}" data-z="${k}" title="Zeile löschen">×</button></td></tr>`).join('')}
             <tr class="of-plus"><td colspan="7"><button class="btn small" data-of="z-neu" data-t="${i}" data-b="${j}">+ Zeile</button></td></tr>`).join('')}
           </tbody>
-          <tfoot><tr><td colspan="5"><button class="btn small" data-of="b-neu" data-t="${i}">+ Block</button> <b class="of-preis">Preis</b>${einfach ? ' <span class="dim">einfache Preisliste: im Dokument nur «Was» und «Total»</span>' : ''}</td>
-            <td class="r num" id="os-t${i}"><b>${O.fr(O.teilTotal(t))}</b></td><td></td></tr></tfoot>
+          <tfoot><tr><td colspan="5"><div class="of-pzeile"><button class="btn small" data-of="b-neu" data-t="${i}">+ Block</button>
+              ${feld(`t.${i}.preisLabel`, t.preisLabel, 'class="of-plabel" placeholder="Preis" aria-label="Bezeichnung der Preiszeile"')}
+              ${einfach ? '<span class="dim">einfache Preisliste: im Dokument nur «Was» und «Total»</span>' : ''}</div></td>
+            <td class="r num" id="os-t${i}"><b>${O.fr(O.teilTotal(t))}</b></td><td></td></tr>
+            ${t.preis2 ? `<tr><td colspan="5"><div class="of-pzeile"><span class="of-platz"></span>${feld(`t.${i}.preis2.label`, t.preis2.label, 'class="of-plabel" placeholder="Preis pro Folge" aria-label="Bezeichnung der zweiten Preiszeile"')}</div></td>
+              <td>${feld(`t.${i}.preis2.betrag`, t.preis2.betrag || '', 'class="r" inputmode="decimal" placeholder="Betrag" aria-label="Betrag der zweiten Preiszeile"')}</td>
+              <td><button class="btn small ghost" data-of="p2-del" data-t="${i}" title="Zweite Preiszeile entfernen">×</button></td></tr>`
+            : `<tr><td colspan="7"><button class="btn small" data-of="p2-neu" data-t="${i}" title="Zum Beispiel «Preis pro Folge»">+ zweite Preiszeile</button></td></tr>`}</tfoot>
         </table>
       </section>`;
     }
@@ -185,6 +190,7 @@
       if (pfad === 'art') { doc.art = wert; return; }
       let ziel = doc.teile[+teile[1]];
       let i = 2;
+      if (teile[2] === 'preis2') { if (!ziel.preis2) return; ziel.preis2[teile[3]] = teile[3] === 'betrag' ? (parseFloat(String(wert).replace(/[’'\s]/g, '').replace(',', '.')) || 0) : wert; return; }
       if (teile[i] === 'b') { ziel = ziel.bloecke[+teile[i + 1]]; i += 2; }
       if (teile[i] === 'z') { ziel = ziel.zeilen[+teile[i + 1]]; i += 2; }
       const key = teile[i];
@@ -317,6 +323,8 @@
           const z = o.doc.teile[+ds.t].bloecke[+ds.b].zeilen; z.push({ was: '', aufwand: '', ansatz: 0, preis: 'auto' }); persist(); render();
           const f = $(`[data-pfad="t.${ds.t}.b.${ds.b}.z.${z.length - 1}.was"]`); if (f) f.focus(); break;
         }
+        case 'p2-neu': { o.doc.teile[+ds.t].preis2 = { label: 'Preis pro Folge', betrag: 0 }; persist(); render(); const f = $(`[data-pfad="t.${ds.t}.preis2.betrag"]`); if (f) f.focus(); break; }
+        case 'p2-del': o.doc.teile[+ds.t].preis2 = null; persist(); render(); break;
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 
         // LaTeX-Code einfügen

@@ -547,3 +547,4 @@ th.r { text-align: right; }
 .of-box .of-liste tr.of-fz .of-art { width: 300px; font-weight: 500; }
 .of-vorl .btn { margin-right: 6px; } .of-vinfo { font-size: 12px; color: var(--muted); } .of-vinfo.ok { color: var(--teal-deep); font-weight: 600; }
 .of-nakt { display: flex; gap: 10px; margin-left: auto; }
+.of-pzeile { display: flex; align-items: center; gap: 10px; } .of-pzeile .of-plabel { width: 240px; font-weight: 700; } .of-platz { width: 66px; flex: none; }

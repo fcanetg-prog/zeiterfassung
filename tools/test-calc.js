@@ -178,5 +178,10 @@ console.log('Alle Prüfungen bestanden.');
     I('Vorbereitung', 45, 104, 60, { fett: true }), I('Recherche', 45, 116, 50), I('3h', 540, 116, 10), I('215 Fr./h', 606, 116, 40), I('645.00 Fr.', 680, 116, 41), I('645.00 Fr.', 743, 116, 41),
     I('Preis', 45, 130, 23, { fett: true }), I('645.00 Fr.', 743, 130, 41, { fett: true })] }]);
   assert.ok(!pd.fehler); assert.deepStrictEqual(pd.doc, O.normalize({ art: 'offerte', teile: [{ nummer: '2', titel: 'Referat', text: 'Die *Firma* offeriert.', bloecke: [{ titel: 'Vorbereitung', zeilen: [{ was: 'Recherche', aufwand: '3h', ansatz: 215 }] }] }] }));
+  // Zweite Preiszeile und eigene Bezeichnung
+  const d2 = O.normalize(JSON.parse(JSON.stringify(d))); assert.strictEqual(d2.teile[0].preisLabel, 'Preis'); assert.strictEqual(d2.teile[0].preis2, null);
+  d2.teile[0].preisLabel = 'Preis für 4 Folgen'; d2.teile[0].preis2 = { label: 'Preis pro Folge', betrag: 937.5 };
+  const h2 = O.html(d2); assert.ok(h2.includes('Preis für 4 Folgen')); assert.ok(h2.includes('937.50 Fr.'));
+  assert.deepStrictEqual(O.ausLatex(O.latex(d2)).doc, d2);
   console.log('Offerten bestanden.');
 }
