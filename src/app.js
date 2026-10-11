@@ -230,14 +230,14 @@
     el.className = 'show' + (opts && opts.fehler ? ' fehler' : '');
     el.innerHTML = `<span>${esc(text)}</span>` + (toastAction ? `<button data-action="toast-action">${esc(opts.actionLabel)}</button>` : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.className = ''; toastAction = null; }, opts && opts.action ? 7000 : 3200);
+    toastTimer = setTimeout(() => { el.className = ''; toastAction = null; }, (opts && opts.dauer) || (opts && opts.action ? 7000 : 3200));
   }
 
   /* ============ Normalisieren importierter Daten ============ */
 
   function normalize(d) {
     if (!d || !Array.isArray(d.projects) || !Array.isArray(d.entries)) throw new Error('Die Datei enthält keine Zeiterfassungs-Daten.');
-    const out = C.emptyData();
+    const out = Object.assign({}, d, C.emptyData());   // Unbekanntes aus neueren Versionen bleibt erhalten
     out.settings = Object.assign({}, C.DEFAULTS, d.settings || {});
     out.history = d.history || {};
     out.geloescht = Object.assign({}, d.geloescht || {});
@@ -359,9 +359,9 @@
     return `<div class="leer"><div class="leer-box">
       <h1>Zeiterfassung</h1>
       ${state.fehler ? `<p class="warn">${esc(state.fehler)}</p>` : ''}
-      <p>Es sind noch keine Daten vorhanden. Importiere die Datei mit deinen bisherigen Stunden und Projekten aus dem Excel, oder starte mit einer leeren Erfassung.</p>
+      ${state.veraltet ? '' : `<p>Es sind noch keine Daten vorhanden. Importiere die Datei mit deinen bisherigen Stunden und Projekten aus dem Excel, oder starte mit einer leeren Erfassung.</p>
       <div class="row"><button class="btn primary" data-action="import">Daten importieren</button>
-      <button class="btn" data-action="start-empty">Leer starten</button></div>
+      <button class="btn" data-action="start-empty">Leer starten</button></div>`}
     </div></div>`;
   }
 
@@ -1158,6 +1158,7 @@
         ${state.sync ? `<p class="hint ${state.sync.fehler ? 'warn' : ''}">${esc(state.sync.fehler || state.sync.text)}</p>` : ''}
       </section>
       <section class="sec"><h2>Daten</h2>
+        <p>Version ${esc(state.info.version)}. Enthalten sind ${state.data.projects.length} Projekte, ${state.data.entries.length} Zeiteinträge, ${state.data.buchungen.filter((b) => !b.vorschlag).length} Buchungen (${Object.keys(state.data.kontenplaene).join(', ') || 'keine Buchhaltung'}) und ${state.data.offerten.length} Offerten-Projekte. Auf beiden Rechnern müssen hier dieselben Zahlen stehen.</p>
         <p>Gespeichert in <code>${esc(state.info.dataPath)}</code>. Jede Änderung wird sofort gesichert; im Unterordner «Sicherungen» liegt pro Tag eine Kopie des Vortagsstands.</p>
         <p>Für die Arbeit auf zwei Rechnern legst du den Speicherort in deinen Dropbox-Ordner und wählst auf dem zweiten Rechner denselben Ordner. Änderungen vom anderen Rechner erscheinen dann von selbst.</p>
         <div class="row">
@@ -1451,7 +1452,9 @@
       state.info = await api.info();
       const r = await api.load();
       if (r.error) state.fehler = r.error;
+      if (r.veraltet) { state.fehler = r.veraltet; state.veraltet = true; state.geladen = true; render(); return; }
       if (r.data) { state.data = normalize(r.data); merkeAbbild(); recompute(); ladeEntwurf(); }
+      if (r.wiederhergestellt) setTimeout(() => toast(`Die Buchhaltung fehlte in der Datendatei und wurde aus den Sicherungen zurückgeholt (${r.wiederhergestellt} Buchungen). Bitte kontrolliere die letzten Buchungen.`, { dauer: 15000 }), 600);
       if (r.eingearbeitet) setTimeout(() => toast('Änderungen von einem anderen Rechner wurden eingearbeitet.'), 400);
       if (api.onChanged) api.onChanged(holeAenderungen);
     } catch (e) {

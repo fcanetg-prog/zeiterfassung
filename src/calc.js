@@ -428,7 +428,12 @@
         if (!kontenplaene[jahr] || (plan.mod || 0) > (kontenplaene[jahr].mod || 0)) kontenplaene[jahr] = plan;
       }
     }
+    // Teile, die diese Version nicht kennt (aus einer neueren App), unverändert mitnehmen.
+    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'offerten', 'offertVorlagen', 'history']);
+    const fremd = {};
+    for (const q of [a, b]) for (const k of Object.keys(q)) if (!bekanntK.has(k) && fremd[k] === undefined) fremd[k] = q[k];
     return {
+      ...fremd,
       version: 1,
       settings: neuer.settings || a.settings || b.settings,
       settingsMod: neuer.settingsMod || 0,

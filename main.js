@@ -10,6 +10,10 @@ const Calc = require('./src/calc.js');
 const DATA_FILE = 'zeiterfassung-daten.json';
 const BACKUP_DIR = 'Sicherungen';
 const KEEP_BACKUPS = 60;
+// Stand des Datenformats. Eine ältere App darf eine Datei mit höherem Stand nicht überschreiben,
+// weil sie neuere Teile (Buchhaltung, Offerten) nicht kennt und beim Speichern entfernen würde.
+const SCHEMA = 2;
+const ZU_NEU = 'Deine Daten stammen von einer neueren Version der App. Bitte installiere auf diesem Rechner die neuste Version; bis dahin wird hier nichts gespeichert.';
 
 let win = null;
 
@@ -88,6 +92,8 @@ function ersetzeDatei(tmp, file, data) {
 }
 
 function schreibe(file, data) {
+  data.schema = Math.max(SCHEMA, data.schema || 0);
+  data.appVersion = app.getVersion();
   const tmp = `${file}.${rechnerName()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 1), 'utf8');
   ersetzeDatei(tmp, file, data);
@@ -109,6 +115,26 @@ function loadData() {
     }
   }
   bekannt = dateiStand(file);
+  if (data && (data.schema || 0) > SCHEMA) return { data, path: file, veraltet: ZU_NEU };
+
+  // Fehlt die Buchhaltung ganz, obwohl Sicherungen eine enthalten, hat eine ältere App-Version sie beim
+  // Speichern entfernt: aus den Sicherungen (aller Rechner) zurückholen. Gelöschtes bleibt gelöscht.
+  let wiederhergestellt = 0;
+  const ohneBh = (d) => !(d.buchungen && d.buchungen.length) && !Object.keys(d.kontenplaene || {}).length;
+  if (data && ohneBh(data)) {
+    const sdir = path.join(dir, BACKUP_DIR);
+    let namen = [];
+    try { namen = fs.readdirSync(sdir).filter((f) => f.endsWith('.json')).sort(); } catch { /* keine Sicherungen */ }
+    for (const name of namen) {
+      try {
+        const s = JSON.parse(fs.readFileSync(path.join(sdir, name), 'utf8'));
+        if (!s || ohneBh(s)) continue;
+        data = Calc.mergeData(data, { projects: [], entries: [], buchungen: s.buchungen || [], kontenplaene: s.kontenplaene || {} });
+      } catch { /* unlesbare Sicherung überspringen */ }
+    }
+    wiederhergestellt = (data.buchungen || []).length;
+    if (!ohneBh(data)) { backup(file, true); schreibe(file, data); }
+  }
 
   // Konfliktkopien einarbeiten und danach zu den Sicherungen legen.
   let eingearbeitet = 0;
@@ -123,7 +149,7 @@ function loadData() {
     } catch { /* unlesbare Kopie liegen lassen */ }
   }
   if (eingearbeitet && data) schreibe(file, data);
-  return { data, path: file, eingearbeitet };
+  return { data, path: file, eingearbeitet, wiederhergestellt };
 }
 
 /** Erste Speicherung des Tages auf diesem Rechner: den bisherigen Stand als Sicherung ablegen. */
@@ -141,6 +167,8 @@ function backup(file, mitZeit) {
 function saveData(data, opts) {
   const file = dataPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Schreibt inzwischen eine neuere App-Version in diese Datei, nichts überschreiben.
+  try { if (fs.existsSync(file) && (JSON.parse(fs.readFileSync(file, 'utf8')).schema || 0) > SCHEMA) return { ok: false, error: ZU_NEU }; } catch { /* unlesbar: wie bisher weiter */ }
   backup(file, opts && opts.sicherungErzwingen);
   // Hat inzwischen ein anderer Rechner geschrieben, dessen Änderungen nicht überschreiben, sondern zusammenführen.
   let zusammengefuehrt = null;
