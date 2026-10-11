@@ -554,3 +554,4 @@ th.r { text-align: right; }
 .of-chip { display: inline-flex; align-items: center; gap: 4px; background: #e3f1f1; border: 1px solid #b9dcdc; border-radius: 11px; padding: 1px 4px 1px 9px; }
 .of-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 0 3px; }
 .of-pfld .row { gap: 8px; }
+.of-vorl .of-aus { max-width: 300px; margin-right: 8px; }

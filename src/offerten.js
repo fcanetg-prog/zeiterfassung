@@ -114,6 +114,13 @@
       </tbody>`;
     }
 
+    /** Alle Fassungen aller Offerten-Projekte, die neusten zuerst. */
+    function bestehende() {
+      const out = [];
+      for (const p of liste()) for (const v of p.versionen) out.push({ p, v });
+      return out.sort((a, b) => (a.v.datum < b.v.datum ? 1 : a.v.datum > b.v.datum ? -1 : (b.p.erstellt || 0) - (a.p.erstellt || 0)));
+    }
+
     function neuForm() {
       const n = state.off.neu;
       if (!n) return '';
@@ -123,9 +130,11 @@
         <div><label for="on-art">Dokument</label><select id="on-art" data-of="n-feld" data-key="art">
           <option value="offerte" ${n.art === 'offerte' ? 'selected' : ''}>Offerte</option><option value="kostenvoranschlag" ${n.art === 'kostenvoranschlag' ? 'selected' : ''}>Kostenvoranschlag</option></select></div>
         <div class="of-vorl"><label>Vorlage</label>
-          <button class="btn" type="button" data-of="n-hoch" title="PDF oder LaTeX-Datei einer bestehenden Offerte. Ihr Inhalt wird übernommen.">Hochladen</button>
-          <button class="btn" type="button" data-of="dialog" data-art="neu" title="LaTeX-Code aus der Zwischenablage einfügen">LaTeX-Code einfügen</button>
-          <span class="of-vinfo ${n.doc ? 'ok' : ''}">${n.doc ? `${esc(n.quelle || 'Vorlage')}: ${n.doc.teile.length} ${n.doc.teile.length === 1 ? 'Teil' : 'Teile'} erkannt` : 'PDF oder LaTeX. Ohne Vorlage beginnst du leer.'}</span></div>
+          <button class="btn" type="button" data-of="n-hoch" title="PDF einer bestehenden Offerte wählen. Die Tabellen darin werden übernommen.">PDF hochladen</button>
+          <select class="of-aus" data-of="n-aus" aria-label="Bestehende Offerte als Vorlage übernehmen" title="Eine Offerte aus diesem Programm als Vorlage übernehmen" ${bestehende().length ? '' : 'disabled'}>
+            <option value="">${bestehende().length ? 'Bestehende Offerte übernehmen …' : 'Noch keine bestehenden Offerten'}</option>
+            ${bestehende().map((x) => `<option value="${x.p.id}|${x.v.id}">${esc(pTitel(x.p))} · ${esc(vTitel(x.v))}</option>`).join('')}</select>
+          <span class="of-vinfo ${n.doc ? 'ok' : ''}">${n.doc ? `${esc(n.quelle || 'Vorlage')}: ${n.doc.teile.length} ${n.doc.teile.length === 1 ? 'Teil' : 'Teile'} übernommen` : 'Ohne Vorlage beginnst du leer.'}</span></div>
         <div class="of-nakt"><button class="btn primary" type="submit">Anlegen und bearbeiten</button>
           <button class="btn" type="button" data-of="n-zu">Abbrechen</button></div>
       </form>`;
@@ -409,6 +418,10 @@
         if (el.tagName === 'SELECT') render();
       } else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
       else if (a === 'p-feld') persist();
+      else if (a === 'n-aus' && el.value && state.off.neu) {
+        const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
+        if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
+      }
       else if (a === 'verk-neu') {
         const x = state.data.projects.find((q) => q.id === el.value);
         if (x) { x.offerteId = el.dataset.pid; persist(); render(); toast(`Verknüpft mit ${zLabel(x)}`); }

@@ -482,7 +482,7 @@ if (!app.requestSingleInstanceLock()) {
       } catch (err) { return { ok: false, error: err.message }; }
     });
     ipcMain.handle('offerte:open', async () => {
-      const r = await dialog.showOpenDialog(win, { title: 'Vorlage wählen (PDF oder LaTeX)', filters: [{ name: 'Offerte', extensions: ['pdf', 'tex', 'txt', 'json'] }], properties: ['openFile'] });
+      const r = await dialog.showOpenDialog(win, { title: 'PDF einer Offerte wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }, { name: 'LaTeX oder Text', extensions: ['tex', 'txt', 'json'] }], properties: ['openFile'] });
       if (r.canceled || !r.filePaths[0]) return { canceled: true };
       const file = r.filePaths[0], name = path.basename(file);
       try {
