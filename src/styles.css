@@ -614,3 +614,16 @@ th.r { text-align: right; }
 .grid tr.dnd-oben td { box-shadow: inset 0 3px 0 #27b9bf; }
 .grid tr.dnd-unten td { box-shadow: inset 0 -3px 0 #27b9bf; }
 .of-drop.ueber { outline: 2px dashed #27b9bf; outline-offset: 3px; background: #e9f7f7; border-radius: 8px; }
+
+/* Rechnungen: aufklappbare Abschnitte */
+.re-kopf { cursor: pointer; user-select: none; display: flex; align-items: baseline; gap: 6px; margin: 0; }
+.re-ab.auf .re-kopf { margin-bottom: 12px; }
+.re-kopf:hover { color: var(--teal-dark, #1a8f96); }
+.re-summe { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Nach Bereich: Totale */
+.bereiche tr.b-summe td { font-weight: 700; border-bottom: 2px solid var(--line); }
+#toast button[data-action="toast-zu"] { margin-left: 8px; }
+.sec.re-ab h2.re-kopf { margin: 0; }
+.sec.re-ab.auf h2.re-kopf { margin-bottom: 12px; }
+.sec.re-ab:not(.auf) { padding-bottom: 18px; padding-top: 18px; }

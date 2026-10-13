@@ -97,6 +97,7 @@
     year: +heute.slice(0, 4),
     filter: { q: '', status: 'alle', archiv: false },
     zu: new Set(),
+    reAuf: new Set(),
     drawer: null,
     combo: { q: '', projectId: null, open: false, idx: 0 },
     form: { stunden: '', notiz: '', beginn: '' },
@@ -233,9 +234,14 @@
     const el = $('#toast');
     toastAction = (opts && opts.action) || null;
     el.className = 'show' + (opts && opts.fehler ? ' fehler' : '');
-    el.innerHTML = `<span>${esc(text)}</span>` + (toastAction ? `<button data-action="toast-action">${esc(opts.actionLabel)}</button>` : '');
+    const fehler = !!(opts && opts.fehler);
+    el.innerHTML = `<span>${esc(text)}</span>` + (toastAction ? `<button data-action="toast-action">${esc(opts.actionLabel)}</button>` : '')
+      + (fehler ? '<button data-action="toast-zu" title="Meldung schliessen" aria-label="Meldung schliessen">OK</button>' : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.className = ''; toastAction = null; }, (opts && opts.dauer) || (opts && opts.action ? 7000 : 3200));
+    // Fehlermeldungen bleiben stehen, bis sie mit OK geschlossen werden; andere Meldungen je nach Länge länger sichtbar.
+    if (fehler && !(opts && opts.dauer)) return;
+    const lesezeit = 2500 + String(text).length * 60;
+    toastTimer = setTimeout(() => { el.className = ''; toastAction = null; }, (opts && opts.dauer) || Math.max(opts && opts.action ? 8000 : 4000, Math.min(lesezeit, 15000)));
   }
 
   /* ============ Normalisieren importierter Daten ============ */
@@ -1020,6 +1026,14 @@
     return ` <span class="pill ${st.ok ? 's-gestellt' : 's-offen'}" title="${esc(st.ok ? 'Die Rechnung liegt fürs Google-Skript bereit; der Gmail-Entwurf entsteht am Rechnungsdatum.' : 'Kein Gmail-Entwurf möglich: ' + st.text)}">${esc(st.ok ? st.text : 'kein Entwurf')}</span>`;
   }
 
+  /** Auf- und zuklappbarer Abschnitt der Rechnungen (beim Start alle zu). */
+  function reAbschnitt(key, titel, n, betrag, inhalt) {
+    const auf = state.reAuf.has(key);
+    return `<section class="sec re-ab ${auf ? 'auf' : ''}"><h2 class="re-kopf" data-action="re-auf" data-key="${key}" role="button" tabindex="0" aria-expanded="${auf}">
+      <span class="chev">${auf ? '▾' : '▸'}</span> ${titel} <span class="dim">${n}</span>${betrag != null && n ? `<small class="re-summe">${fmtCHF(betrag)}</small>` : ''}</h2>
+      ${auf ? inhalt() : ''}</section>`;
+  }
+
   function viewRechnungen() {
     const by = { faellig: [], offen: [], geplant: [], gestellt: [], ueberfaellig: [], pruefen: [], bezahlt: [] };
     for (const p of yearProjects()) { const c = figs(p).status.code; if (by[c]) by[c].push(p); }
@@ -1077,25 +1091,19 @@
       <div class="tile"><span>Bezahlt</span><b>${fmtCHF(bezahlt.reduce((s, p) => s + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0))}</b><i>${bezahlt.length} Zahlungen</i></div>
     </div>
 
-    <section class="sec"><h2>Rechnung stellen <span class="dim">${zuStellen.length}</span></h2>
+    ${reAbschnitt('stellen', 'Rechnung stellen', zuStellen.length, sum(zuStellen), () => `
       ${zuStellen.length ? '' : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
       ${teil('Jetzt stellen', 'Rechnungsdatum heute oder schon vorbei', jetzt, 'jetzt')}
       ${teil('Später stellen', 'Rechnungsdatum liegt in der Zukunft', spaeter, '')}
       ${teil('Noch ohne Rechnungsdatum', 'Stunden erfasst, aber noch kein Datum gesetzt', ohneDatum, '')}
       ${by.geplant.length ? `<button class="link more" data-action="toggle-leere">${state.zeigeLeere ? 'Ausblenden' : `${by.geplant.length} weitere Projekte ohne erfasste Stunden zeigen`}</button>
-        ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt']) : ''}` : ''}
-    </section>
+        ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt']) : ''}` : ''}`)}
 
-    <section class="sec"><h2>Warten auf Zahlung <span class="dim">${offen.length}</span></h2>
-      ${offen.length ? table(offen, ['geplant', 'gestellt', 'bezahlt', 'btn-bezahlt']) : '<div class="empty">Keine offenen Rechnungen.</div>'}
-    </section>
+    ${reAbschnitt('warten', 'Warten auf Zahlung', offen.length, sum(offen), () => (offen.length ? table(offen, ['geplant', 'gestellt', 'bezahlt', 'btn-bezahlt']) : '<div class="empty">Keine offenen Rechnungen.</div>'))}
 
-    ${by.pruefen.length ? `<section class="sec"><h2>Zahlung ohne Rechnung prüfen <span class="dim">${by.pruefen.length}</span></h2>
-      ${table(by.pruefen, ['bezahlt', 'btn-bezahlt'])}</section>` : ''}
+    ${by.pruefen.length ? reAbschnitt('pruefen', 'Zahlung ohne Rechnung prüfen', by.pruefen.length, null, () => table(by.pruefen, ['bezahlt', 'btn-bezahlt'])) : ''}
 
-    <section class="sec"><h2>Bezahlt <span class="dim">${bezahlt.length}</span></h2>
-      ${bezahlt.length ? table(bezahlt, ['geplant', 'gestellt', 'bezahlt']) : '<div class="empty">Noch keine Zahlungen erfasst.</div>'}
-    </section>`;
+    ${reAbschnitt('bezahlt', 'Bezahlt', bezahlt.length, bezahlt.reduce((s2, p) => s2 + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0), () => (bezahlt.length ? table(bezahlt, ['geplant', 'gestellt', 'bezahlt']) : '<div class="empty">Noch keine Zahlungen erfasst.</div>'))}`;
   }
 
   /* ============ Auswertung ============ */
@@ -1185,7 +1193,12 @@
       }
       return [{ name, h: g.h, intern, pct: basis > 0 ? (g.h / basis) * 100 : 0 }];
     });
-    bereichZeilen.forEach((z, i) => { z.letzterIntern = z.intern && !(bereichZeilen[i + 1] && bereichZeilen[i + 1].intern); });
+    // Zuerst Intern mit Total, dann Extern mit Total.
+    const zInt = bereichZeilen.filter((z) => z.intern), zExt = bereichZeilen.filter((z) => !z.intern).map((z) => Object.assign(z, { name: `Extern: ${z.name || 'Ohne Bereich'}` }));
+    const proz = (h) => (totalH > 0 ? (h / totalH) * 100 : 0);
+    bereichZeilen.length = 0;
+    if (zInt.length) bereichZeilen.push(...zInt, { name: 'Total intern', h: internH, intern: true, pct: proz(internH), summe: true });
+    if (zExt.length) bereichZeilen.push(...zExt, { name: 'Total extern', h: externH, intern: false, pct: proz(externH), summe: true });
 
     return `
     <header class="head aus-kopf"><h1>Auswertung ${y}</h1>
@@ -1210,11 +1223,11 @@
         <h2>Nach Bereich</h2>
         <table class="list bereiche">
           <thead><tr><th>Bereich</th><th class="r">Stunden</th><th colspan="2">Anteil</th></tr></thead>
-          <tbody>${bereichZeilen.map((z) => `<tr class="${z.intern ? 'b-intern' : ''}${z.letzterIntern ? ' b-intern-ende' : ''}"><td>${esc(z.name || 'Ohne Bereich')}</td><td class="r num">${fmtH(z.h)}</td>
+          <tbody>${bereichZeilen.map((z) => `<tr class="${z.intern ? 'b-intern' : ''}${z.summe ? ' b-summe' : ''}" ${z.summe ? `title="${z.intern ? 'Intern' : 'Extern'} in Prozent aller Stunden"` : ''}><td>${esc(z.name || 'Ohne Bereich')}</td><td class="r num">${fmtH(z.h)}</td>
             <td class="bcell"><span class="bar ${z.intern ? '' : 'extern'}"><i style="width:${z.pct.toFixed(1)}%"></i></span></td><td class="r num pct">${z.pct.toFixed(0)}%</td></tr>`).join('')}</tbody>
           <tfoot><tr><td>Total</td><td class="r num">${fmtH(totalH)}</td><td colspan="2" class="dim">davon ${fmtH(externH)} ohne Intern</td></tr></tfoot>
         </table>
-        <p class="hint">Intern in Prozent aller Stunden. Die übrigen Bereiche in Prozent der Stunden, die nicht auf Intern gingen.</p>
+        <p class="hint">Intern und die beiden Totale in Prozent aller Stunden. Die externen Bereiche in Prozent der Stunden, die nicht auf Intern gingen.</p>
       </section>
       <section class="sec">
         <h2>Kumulierte Stunden im Jahresvergleich</h2>
@@ -1476,6 +1489,8 @@
         break;
       }
       case 'toast-action': if (toastAction) { const f = toastAction; toastAction = null; $('#toast').className = ''; f(); } break;
+      case 'toast-zu': { const t = $('#toast'); t.className = ''; toastAction = null; break; }
+      case 're-auf': if (state.reAuf.has(el.dataset.key)) state.reAuf.delete(el.dataset.key); else state.reAuf.add(el.dataset.key); render(); break;
       case 'toggle-group': if (state.zu.has(el.dataset.group)) state.zu.delete(el.dataset.group); else state.zu.add(el.dataset.group); render(); break;
       case 'open-project': openDrawer(projById(el.dataset.id)); break;
       case 'new-project': openDrawer(newProject()); break;

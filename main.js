@@ -296,20 +296,41 @@ function webAppErlaubt(url) {
   return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url);
 }
 
-async function webAppAnfrage(url, inhalt) {
+/** Kurzer, lesbarer Auszug aus einer HTML-Fehlerseite von Google (Titel und erste Zeilen). */
+function htmlAuszug(text) {
+  const t = String(text || '');
+  const titel = (/<title[^>]*>([\s\S]*?)<\/title>/i.exec(t) || [])[1] || '';
+  const body = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+  const teile = [titel.trim(), body].filter(Boolean);
+  return teile.join(' – ').slice(0, 220);
+}
+
+async function webAppEinmal(url, inhalt) {
   let res;
   try {
     res = await net.fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(inhalt), redirect: 'follow' });
   } catch (err) {
-    throw new Error('Keine Verbindung zum Google-Skript. Prüfe die Internetverbindung.');
+    const e = new Error('Keine Verbindung zum Google-Skript. Prüfe die Internetverbindung.'); e.nochmals = true; throw e;
   }
   const text = await res.text();
   let antwort;
   try { antwort = JSON.parse(text); } catch {
-    throw new Error('Das Google-Skript antwortet nicht wie erwartet. Prüfe die Adresse der Web-App und ob der Zugriff auf «Jeder» steht.');
+    const auszug = htmlAuszug(text);
+    const e = new Error(`Das Google-Skript antwortet nicht wie erwartet (HTTP ${res.status}${auszug ? `: ${auszug}` : ''}).`);
+    e.nochmals = true; e.status = res.status; throw e;
   }
   if (!antwort.ok) throw new Error(antwort.fehler || 'Das Google-Skript meldet einen Fehler.');
   return antwort;
+}
+
+/** Google antwortet ab und zu kurz mit einer Fehlerseite: einmal nach ein paar Sekunden neu versuchen. */
+async function webAppAnfrage(url, inhalt) {
+  try { return await webAppEinmal(url, inhalt); }
+  catch (err) {
+    if (!err.nochmals) throw err;
+    await new Promise((r) => setTimeout(r, 5000));
+    return webAppEinmal(url, inhalt);
+  }
 }
 
 /**

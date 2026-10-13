@@ -7,7 +7,7 @@
     const { state, esc, fmtDate, heute, persist, render, toast, api, uid } = ctx;
     const $ = (sel, root) => (root || document).querySelector(sel);
 
-    state.off = { edit: null, neu: null, dialog: null, auf: new Set(['offen']), umgekehrt: new Set() };
+    state.off = { edit: null, neu: null, dialog: null, auf: new Set(), umgekehrt: new Set() };
 
     const liste = () => state.data.offerten;
     const vorlagen = () => state.data.offertVorlagen;
