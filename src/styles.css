@@ -771,3 +771,13 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .list.pd th.c { padding-left: 8px; }
 .list.pd tr.pd-trenn.pd-monat td { background: #eef3f9; color: #2d4f78; border-top: 3px solid #fff; border-bottom: 2px solid #9fb6d3; }
 .list.pd col.c-titel { width: 42%; } .list.pd col.c-was { width: 22%; } .list.pd col.c-anf { width: 17%; } .list.pd col.c-chk { width: 19%; }
+/* Pendenzen: Wochentag statt Datum in der laufenden Woche */
+.pd-wort-z { position: relative; display: inline-block; }
+.pd-wort { border: 0; background: none; padding: 3px 6px; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink, #1c2b2b); cursor: pointer; border-radius: 4px; }
+.pd-wort:hover { background: rgba(255, 255, 255, .8); box-shadow: 0 0 0 1px var(--line); }
+.pd-dat-versteckt { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.pd-intern-hinweis { margin: 6px 0 0; font-size: 12.5px; }
+/* Pendenzen: rechte Spalten zwischen den beiden letzten Fassungen (weiter rechts, etwas enger) */
+.list.pd col.c-titel { width: 58%; } .list.pd col.c-was { width: 17%; } .list.pd col.c-anf { width: 12%; } .list.pd col.c-chk { width: 13%; }
+.list.pd .pd-wsel { min-width: 0; max-width: 100%; }
+.list.pd col.c-titel { width: auto; } .list.pd col.c-was { width: 215px; } .list.pd col.c-anf { width: 12%; } .list.pd col.c-chk { width: 11%; }

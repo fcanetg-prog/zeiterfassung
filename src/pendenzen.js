@@ -43,13 +43,21 @@
     const farbe = (t) => 'pd-f-' + (FARBEN[t] || 'andere');
     const tagChips = (p) => p.tags.map((t) => `<button class="pd-tag ${farbe(t)} ${state.pd.tag === t ? 'filter' : ''}" data-pd="tag-filter" data-tag="${esc(t)}" title="Nur Pendenzen mit diesem Tag zeigen">${esc(t)}</button>`).join('');
 
+    /** In der laufenden Woche «Heute», «Morgen» oder der Wochentag statt des Datums; ein Klick öffnet den Kalender. */
+    function datumZelle(p, ueber) {
+      const input = (cls) => `<input type="date" class="inline ${cls} ${ueber ? 'pd-ueber' : ''}" value="${esc(p.faellig)}" data-pd="faellig" data-id="${p.id}" aria-label="Fällig am">`;
+      if (!p.faellig || ueber || p.faellig > sonntag()) return input('');
+      const wort = p.faellig === heute ? 'Heute' : p.faellig === P.addTage(heute, 1) ? 'Morgen' : new Date(p.faellig + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'long' });
+      return `<span class="pd-wort-z"><button type="button" class="pd-wort" data-pd="datum-wahl" data-id="${p.id}" title="${fmtDate(p.faellig)} – klicken zum Ändern">${wort}</button>${input('pd-dat-versteckt')}</span>`;
+    }
+
     function zeile(p) {
       const ueber = !p.erledigt && p.faellig && p.faellig < heute;
       return `<tr class="zb pd-z ${p.erledigt ? 'pd-erl' : ''}" data-pd="oeffnen" data-id="${p.id}">
-        <td class="pd-dat">${p.erledigt ? `<span class="dim pd-erldat">${fmtDate(p.erledigt)}</span>` : `<input type="date" class="inline ${ueber ? 'pd-ueber' : ''}" value="${esc(p.faellig)}" data-pd="faellig" data-id="${p.id}" aria-label="Fällig am">`}</td>
+        <td class="pd-dat">${p.erledigt ? `<span class="dim pd-erldat">${fmtDate(p.erledigt)}</span>` : datumZelle(p, ueber)}</td>
         <td class="pd-titel">${tagChips(p)}<b>${esc(p.titel || 'Ohne Titel')}</b></td>
         ${p.erledigt ? '<td class="pd-was"></td>' : `<td class="pd-was"><select class="inline pd-wsel ${p.wasTun ? 'pd-w-' + p.wasTun : ''}" data-pd="wasTun" data-id="${p.id}" aria-label="Was tun">${P.WAS_TUN.map(([k, l]) => `<option value="${k}" ${p.wasTun === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>`}
-        <td class="pd-anf"><button class="pd-anfrage ${p.anfrage}" data-pd="anfrage" data-id="${p.id}" title="Klicken zum Wechseln: offen → bestätigt → abgesagt">${({ offen: 'Offen', bestaetigt: 'Bestätigt', abgesagt: 'Abgesagt' })[p.anfrage]}</button></td>
+        <td class="pd-anf">${p.tags.includes('Intern') ? '' : `<button class="pd-anfrage ${p.anfrage}" data-pd="anfrage" data-id="${p.id}" title="Klicken zum Wechseln: offen → bestätigt → abgesagt">${({ offen: 'Offen', bestaetigt: 'Bestätigt', abgesagt: 'Abgesagt' })[p.anfrage]}</button>`}</td>
         <td class="pd-chk"><input type="checkbox" data-pd="erledigt" data-id="${p.id}" ${p.erledigt ? 'checked' : ''} title="${p.erledigt ? `Erledigt am ${fmtDate(p.erledigt)} – Haken entfernen, um sie wieder zu öffnen` : 'Als erledigt abhaken'}" aria-label="Erledigt"></td>
       </tr>`;
     }
@@ -60,12 +68,11 @@
     /** Offene Pendenzen in Teilen: heute (inkl. überfällige), morgen, Rest dieser Kalenderwoche, ab nächster Woche. Leere Teile entfallen. */
     function wochenTeile(ps) {
       const so = sonntag(), morgen = P.addTage(heute, 1);
-      const tag = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'long' });
       const teile = [
-        ['pd-heute', `Heute · ${tag(heute)} ${fmtDate(heute)}`, ps.filter((p) => p.faellig && p.faellig <= heute)],
-        ['pd-morgen', `Morgen · ${tag(morgen)} ${fmtDate(morgen)}`, ps.filter((p) => p.faellig === morgen)],
-        ['pd-diese', `Rest dieser Woche · bis Sonntag ${fmtDate(so)}`, ps.filter((p) => p.faellig > morgen && p.faellig <= so)],
-        ['pd-monat', `Nächste 30 Tage · bis ${fmtDate(P.addTage(heute, 30))}`, ps.filter((p) => p.faellig > so && p.faellig !== morgen && p.faellig <= P.addTage(heute, 30))],
+        ['pd-heute', 'Heute', ps.filter((p) => p.faellig && p.faellig <= heute)],
+        ['pd-morgen', 'Morgen', ps.filter((p) => p.faellig === morgen)],
+        ['pd-diese', 'Rest dieser Woche', ps.filter((p) => p.faellig > morgen && p.faellig <= so)],
+        ['pd-monat', 'Nächste 30 Tage', ps.filter((p) => p.faellig > so && p.faellig !== morgen && p.faellig <= P.addTage(heute, 30))],
         ['pd-danach', 'Später', ps.filter((p) => !p.faellig || (p.faellig > so && p.faellig !== morgen && p.faellig > P.addTage(heute, 30)))],
       ];
       const kopf = (cls, text, n) => `<tr class="pd-trenn ${cls}"><td colspan="5"><span>${text}</span><span class="pd-trenn-n">${n}</span></td></tr>`;
@@ -124,7 +131,7 @@
           <div class="fld"><label for="pd-f-titel">Aufgabe</label><input id="pd-f-titel" type="text" value="${esc(p.titel)}" data-pd="feld" data-key="titel" placeholder="z. B. Moderation: Kunde / Ansprechperson"></div>
           <div class="cols2">
             <div class="fld"><label for="pd-f-faellig">Fällig am</label><input id="pd-f-faellig" type="date" value="${esc(p.faellig)}" data-pd="feld" data-key="faellig"></div>
-            <div class="fld"><label>Anfrage</label>${seg('anfrage', P.ANFRAGE)}</div>
+            <div class="fld"><label>Anfrage</label>${p.tags.includes('Intern') ? '<p class="dim pd-intern-hinweis">Intern: keine Anfrage, läuft laufend.</p>' : seg('anfrage', P.ANFRAGE)}</div>
           </div>
           <div class="fld"><label>Was tun</label>${seg('wasTun', P.WAS_TUN)}</div>
           <div class="fld"><label>Tags</label><div class="pd-tagwahl">
@@ -185,6 +192,7 @@
         case 'oeffnen': if (ev.target.closest('input, select, button')) break; state.pd.offen = el.dataset.id; render(); break;
         case 'erledigt': if (p) erledigen(p, el.checked); break;
         case 'erledigt-knopf': if (p) { const an = !p.erledigt; state.pd.offen = null; erledigen(p, an); } break;
+        case 'datum-wahl': { const i = el.parentElement.querySelector('input[type=date]'); if (i) { try { i.showPicker(); } catch (_) { i.focus(); } } break; }
         case 'anfrage': if (p) { p.anfrage = ({ offen: 'bestaetigt', bestaetigt: 'abgesagt', abgesagt: 'offen' })[p.anfrage] || 'offen'; jetztSpeichern(); render(); } break;
         case 'tag-toggle': if (p) { const t = el.dataset.tag; p.tags = p.tags.includes(t) ? p.tags.filter((x) => x !== t) : [...p.tags, t]; jetztSpeichern(); render(); } break;
         case 'tag-filter': ev.stopPropagation(); state.pd.tag = state.pd.tag === el.dataset.tag ? '' : el.dataset.tag; render(); break;

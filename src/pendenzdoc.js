@@ -6,7 +6,7 @@
   'use strict';
 
   /** «Was tun» ersetzt die Priorität aus Asana: Low → Rückmeldung überwachen, Medium → kurz nachfragen. */
-  const WAS_TUN = [['rueckmeldung', 'Rückmeldung überwachen'], ['nachfragen', 'Nachfragen'], ['umsetzen', 'Umsetzen']];
+  const WAS_TUN = [['rueckmeldung', 'Rückmeldung überwachen'], ['nachfragen', 'Kurzes E-Mail schreiben'], ['umsetzen', 'Umsetzen']];
   const WAS_TUN_TEXT = Object.fromEntries(WAS_TUN);
   /** Anfrage: «offen» ist erst eine Anfrage an mich, «bestaetigt» eine richtige Aufgabe. */
   const ANFRAGE = [['offen', 'Offen'], ['bestaetigt', 'Bestätigt'], ['abgesagt', 'Abgesagt']];
