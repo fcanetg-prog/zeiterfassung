@@ -574,17 +574,18 @@ if (!app.requestSingleInstanceLock()) {
     }
     // Beilagen zu Offerten (E-Mail-Austausch usw.): unverändert unter «Offerten/Beilagen» ablegen.
     ipcMain.handle('offerte:anhangWaehlen', async () => {
-      const r = await dialog.showOpenDialog(win, { title: 'Beilagen wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
+      const r = await dialog.showOpenDialog(win, { title: 'Beilagen wählen', filters: [{ name: 'Alle Dateien', extensions: ['*'] }, { name: 'PDF', extensions: ['pdf'] }, { name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'gif', 'heic', 'webp'] }], properties: ['openFile', 'multiSelections'] });
       if (r.canceled || !r.filePaths.length) return { canceled: true };
       return anhaengeAblegen(r.filePaths);
     });
-    ipcMain.handle('offerte:anhangAblegen', (_e, pfade) => anhaengeAblegen(nurPdf(pfade)));
-    /** Aus dem Explorer hineingezogene Dateien: nur bestehende PDF. */
-    function nurPdf(pfade) {
-      return (Array.isArray(pfade) ? pfade : []).map(String).filter((f) => /\.pdf$/i.test(f) && fs.existsSync(f) && fs.statSync(f).isFile());
+    ipcMain.handle('offerte:anhangAblegen', (_e, pfade) => anhaengeAblegen(nurDateien(pfade)));
+    /** Aus dem Explorer hineingezogene Dateien: nur bestehende Dateien (keine Ordner). */
+    function nurDateien(pfade) {
+      return (Array.isArray(pfade) ? pfade : []).map(String).filter((f) => { try { return fs.statSync(f).isFile(); } catch { return false; } });
     }
+    const nurPdf = (pfade) => nurDateien(pfade).filter((f) => /\.pdf$/i.test(f));
     function anhaengeAblegen(filePaths) {
-      if (!filePaths.length) return { fehler: 'Bitte PDF-Dateien hineinziehen.' };
+      if (!filePaths.length) return { fehler: 'Bitte Dateien (keine Ordner) hineinziehen.' };
       const r = { filePaths };
       try {
         const dir = path.join(dataDir(), 'Offerten', 'Beilagen');
@@ -594,7 +595,7 @@ if (!app.requestSingleInstanceLock()) {
           const roh = fs.readFileSync(quelle);
           const name = path.basename(quelle).replace(/[\\/:*?"<>|]/g, '_');
           let datei = name, n = 1;
-          while (fs.existsSync(path.join(dir, datei)) && !fs.readFileSync(path.join(dir, datei)).equals(roh)) datei = name.replace(/(\.pdf)?$/i, ` (${++n})$1`);
+          while (fs.existsSync(path.join(dir, datei)) && !fs.readFileSync(path.join(dir, datei)).equals(roh)) datei = name.replace(/(\.[^.\s]+)?$/, ` (${++n})$1`);
           if (!fs.existsSync(path.join(dir, datei))) fs.writeFileSync(path.join(dir, datei), roh);
           dateien.push({ name, datei });
         }
@@ -618,6 +619,8 @@ if (!app.requestSingleInstanceLock()) {
       const f = path.join(dataDir(), 'Offerten', 'Beilagen', path.basename(String(datei)));
       if (!fs.existsSync(f)) return { ok: false, error: 'Die Datei fehlt im Ordner «Offerten/Beilagen».' };
       if (process.env.ZEITERFASSUNG_KEIN_OEFFNEN) return { ok: true };
+      // Ausführbare Dateien nie starten, nur im Explorer zeigen.
+      if (/\.(exe|bat|cmd|com|msi|scr|ps1|vbs|vbe|js|jse|wsf|wsh|lnk|hta|cpl|jar|reg|url)$/i.test(f)) { shell.showItemInFolder(f); return { ok: true }; }
       const fehler = await shell.openPath(f);
       return fehler ? { ok: false, error: fehler } : { ok: true };
     });

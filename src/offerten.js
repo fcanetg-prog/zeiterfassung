@@ -87,8 +87,8 @@
         .sort((x, y) => (x.d && y.d ? (x.d < y.d ? 1 : x.d > y.d ? -1 : x.i - y.i) : x.d ? -1 : y.d ? 1 : x.i - y.i));
       return `<div class="of-raster of-drop" data-drop="beilage" data-pid="${p.id}"><span class="of-lab">Beilagen</span><div class="of-stapel">
         ${originale.map((v) => `<span class="of-chip of-datei of-orig"><button class="of-dlink" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">${esc(vTitel(v))}</button><input type="date" class="inline of-vdat" value="${esc(v.datum)}" data-of="alt-datum" data-pid="${p.id}" data-vid="${v.id}" title="Datum der Offerte ändern" aria-label="Datum der Offerte"><button data-of="orig-weg" data-pid="${p.id}" data-vid="${v.id}" title="Dieses PDF löschen" aria-label="PDF löschen">×</button></span>`).join('')}
-        ${sortiert.map(({ a, i }) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Diese Beilage löschen" aria-label="Beilage löschen">×</button></span>`).join('')}
-        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden. Du kannst sie auch aus dem Explorer hierher ziehen.">+ PDF hinzufügen</button></div></div>`;
+        ${sortiert.map(({ a, i }) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="Datei öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Diese Beilage löschen" aria-label="Beilage löschen">×</button></span>`).join('')}
+        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch als PDF oder ein Bild. Du kannst sie auch aus dem Explorer hierher ziehen.">+ Datei hinzufügen</button></div></div>`;
     }
     async function anhangHinzu(p, pfade) {
       const r = pfade ? await api.offertAnhangAblegen(pfade) : api.offertAnhangWaehlen ? await api.offertAnhangWaehlen() : { fehler: 'Nur in der Desktop-App.' };
@@ -495,11 +495,14 @@
       const z = dropZiel(e); dropWeg();
       if (!z) return;
       const pfade = [...e.dataTransfer.files].map((f) => (api.pfadVon ? api.pfadVon(f) : '')).filter(Boolean);
-      const pdfs = pfade.filter((f) => /\.pdf$/i.test(f));
-      if (!pdfs.length) { toast('Bitte PDF-Dateien hineinziehen.', { fehler: true }); return; }
-      if (pdfs.length < pfade.length) toast(`${pfade.length - pdfs.length} Datei(en) übersprungen: nur PDF möglich.`);
-      if (z.dataset.drop === 'alt') alteHochladen(pdfs);
-      else { const p = projekt(z.dataset.pid); if (p) anhangHinzu(p, pdfs); }
+      if (!pfade.length) { toast('Bitte Dateien aus dem Explorer hineinziehen.', { fehler: true }); return; }
+      if (z.dataset.drop === 'alt') {
+        // Alte Offerten werden eingelesen: nur PDF.
+        const pdfs = pfade.filter((f) => /\.pdf$/i.test(f));
+        if (!pdfs.length) { toast('Alte Offerten bitte als PDF hineinziehen.', { fehler: true }); return; }
+        if (pdfs.length < pfade.length) toast(`${pfade.length - pdfs.length} Datei(en) übersprungen: alte Offerten nur als PDF.`);
+        alteHochladen(pdfs);
+      } else { const p = projekt(z.dataset.pid); if (p) anhangHinzu(p, pfade); }
     });
 
     document.addEventListener('click', (ev) => {

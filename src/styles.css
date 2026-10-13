@@ -319,7 +319,7 @@ th.r { text-align: right; }
 .bereiche .bar i { background: var(--teal); border-radius: 4px; }
 .bereiche .bar.extern i { background: #e08a1e; }
 .bereiche td.pct { width: 52px; }
-.bereiche tr.b-intern td { border-bottom: 2px solid var(--line); }
+.bereiche tr.b-intern-ende td { border-bottom: 2px solid var(--line); }
 .bereiche tfoot td.dim { font-weight: 400; }
 
 .head .bignum + .bignum { margin-left: 26px; padding-left: 26px; border-left: 1px solid var(--line); }

@@ -1170,10 +1170,22 @@
     const istIntern = (name) => String(name || '').trim().toLowerCase() === 'intern';
     const internH = [...groups.entries()].reduce((a, [name, g]) => a + (istIntern(name) ? g.h : 0), 0);
     const externH = totalH - internH;
-    const bereichZeilen = [...groups.entries()].map(([name, g]) => {
+    // Intern aufgeteilt auf seine Teilbereiche (die Projekte unter Intern), je in Prozent aller Stunden.
+    const internTeile = new Map();
+    const internProj = yearProjects().filter((p) => istIntern(p.bereich));
+    const mehrKunden = new Set(internProj.map((p) => p.kunde)).size > 1;
+    for (const p of internProj) {
+      const key = mehrKunden ? [p.kunde, p.name].filter(Boolean).join(' – ') : p.name || p.kunde;
+      internTeile.set(key, (internTeile.get(key) || 0) + figs(p).stundenEff);
+    }
+    const bereichZeilen = [...groups.entries()].flatMap(([name, g]) => {
       const intern = istIntern(name), basis = intern ? totalH : externH;
-      return { name, h: g.h, intern, pct: basis > 0 ? (g.h / basis) * 100 : 0 };
+      if (intern && internTeile.size > 1) {
+        return [...internTeile.entries()].map(([teil, h]) => ({ name: `${name}: ${teil}`, h, intern: true, pct: totalH > 0 ? (h / totalH) * 100 : 0 }));
+      }
+      return [{ name, h: g.h, intern, pct: basis > 0 ? (g.h / basis) * 100 : 0 }];
     });
+    bereichZeilen.forEach((z, i) => { z.letzterIntern = z.intern && !(bereichZeilen[i + 1] && bereichZeilen[i + 1].intern); });
 
     return `
     <header class="head aus-kopf"><h1>Auswertung ${y}</h1>
@@ -1198,7 +1210,7 @@
         <h2>Nach Bereich</h2>
         <table class="list bereiche">
           <thead><tr><th>Bereich</th><th class="r">Stunden</th><th colspan="2">Anteil</th></tr></thead>
-          <tbody>${bereichZeilen.map((z) => `<tr class="${z.intern ? 'b-intern' : ''}"><td>${esc(z.name || 'Ohne Bereich')}</td><td class="r num">${fmtH(z.h)}</td>
+          <tbody>${bereichZeilen.map((z) => `<tr class="${z.intern ? 'b-intern' : ''}${z.letzterIntern ? ' b-intern-ende' : ''}"><td>${esc(z.name || 'Ohne Bereich')}</td><td class="r num">${fmtH(z.h)}</td>
             <td class="bcell"><span class="bar ${z.intern ? '' : 'extern'}"><i style="width:${z.pct.toFixed(1)}%"></i></span></td><td class="r num pct">${z.pct.toFixed(0)}%</td></tr>`).join('')}</tbody>
           <tfoot><tr><td>Total</td><td class="r num">${fmtH(totalH)}</td><td colspan="2" class="dim">davon ${fmtH(externH)} ohne Intern</td></tr></tfoot>
         </table>
