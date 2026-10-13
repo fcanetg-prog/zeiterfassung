@@ -679,3 +679,7 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .of-pz .of-kopf .of-kunde { flex: 0 0 170px; } .of-pz .of-kopf .of-name { flex: 0 0 250px; }
 .of-pz .of-kopf .of-anz { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .of-pz .of-kopf .btn { flex: none; }
+/* Gleiche Schrift überall: Kunde fett (700), Spaltentitel 12px, Balkentitel 14px */
+.grid td.kunde, .list.re td.k b, .of-kopf .of-kunde { font-weight: 700; }
+.grid th, .list.re th { font-size: 12px; font-weight: 600; letter-spacing: normal; color: var(--muted); }
+.grid tr.grp.klapp-kopf > td.klapp-titel { font-size: 14px; }
