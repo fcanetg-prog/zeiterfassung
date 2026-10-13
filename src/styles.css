@@ -742,3 +742,21 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .list.pd td.pd-leer { padding-left: var(--k-einzug); color: var(--muted); height: 36px; }
 .yearpick[hidden] { display: none; }
 .pd-anfrage.abgesagt { background: #f3f3f3; border-color: #d0d0d0; color: #8a8a8a; text-decoration: line-through; }
+/* Pendenzen: Tag-Farben (fünf Gruppen, übrige neutral) */
+.pd-tag.pd-f-journ    { background: #e3eefb; border-color: #a9c6ec; color: #1f4e8c; }
+.pd-tag.pd-f-intern   { background: #e8ecec; border-color: #b8c4c5; color: #3d5054; }
+.pd-tag.pd-f-auftritt { background: #fdecdc; border-color: #f0bd8c; color: #9a4f0a; }
+.pd-tag.pd-f-medien   { background: #f1e6f8; border-color: #cfb0e3; color: #6b3790; }
+.pd-tag.pd-f-teaching { background: #e2f3e6; border-color: #a6d6b1; color: #1f6b33; }
+.pd-tag.pd-f-andere   { background: #f6f6f4; border-color: #d6d6cf; color: #5c5c55; }
+.pd-tag.filter { box-shadow: 0 0 0 2px var(--teal-deep); }
+.pd-tagwahl .pd-tag.aus { background: #fff; border-color: var(--line); color: var(--muted); }
+.pd-tagwahl .pd-tag:not(.aus) { font-weight: 600; }
+/* Pendenzen: Trennbalken heute / morgen / Rest der Woche / danach */
+.list.pd tr.pd-trenn.pd-heute td  { background: #fbe9e7; color: #9c2a1f; border-bottom: 2px solid #e07a6e; }
+.list.pd tr.pd-trenn.pd-morgen td { background: #fdf3e2; color: #8a5a0c; border-top: 3px solid #fff; border-bottom: 2px solid #e8b35c; }
+.list.pd tr.pd-trenn.pd-diese td  { border-top: 3px solid #fff; }
+.pd-tag.pd-f-intern { background: #dcf1f1; border-color: #93cfd1; color: #136e73; }
+.pd-tagwahl .pd-tag.aus { background: #fff; color: inherit; opacity: .7; border-style: dashed; }
+.pd-tagwahl .pd-tag.aus.pd-f-journ { color: #1f4e8c; } .pd-tagwahl .pd-tag.aus.pd-f-intern { color: #136e73; } .pd-tagwahl .pd-tag.aus.pd-f-auftritt { color: #9a4f0a; }
+.pd-tagwahl .pd-tag.aus.pd-f-medien { color: #6b3790; } .pd-tagwahl .pd-tag.aus.pd-f-teaching { color: #1f6b33; } .pd-tagwahl .pd-tag.aus.pd-f-andere { color: #5c5c55; }

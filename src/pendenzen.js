@@ -37,7 +37,13 @@
       return liste().filter((p) => !p.erledigt && p.faellig && p.faellig <= heute).length;
     }
 
-    const tagChips = (p) => p.tags.map((t) => `<button class="pd-tag ${state.pd.tag === t ? 'on' : ''}" data-pd="tag-filter" data-tag="${esc(t)}" title="Nur Pendenzen mit diesem Tag zeigen">${esc(t)}</button>`).join('');
+    /** Farbgruppen der Tags: Journalismus-Bereiche, Intern, Auftritte, Medien, Teaching; übrige neutral. */
+    const FARBEN = {
+      Texte: 'journ', Geldcast: 'journ', 'Börsenstrasse Fünfzehn': 'journ', 'Schweizer Wirtschaft Daily': 'journ', 'Angebot und Nachgefragt': 'journ',
+      Intern: 'intern', 'Moderationen | Referate | Panel': 'auftritt', Expertenauftritte: 'auftritt', Medienauftritte: 'medien', Teaching: 'teaching',
+    };
+    const farbe = (t) => 'pd-f-' + (FARBEN[t] || 'andere');
+    const tagChips = (p) => p.tags.map((t) => `<button class="pd-tag ${farbe(t)} ${state.pd.tag === t ? 'filter' : ''}" data-pd="tag-filter" data-tag="${esc(t)}" title="Nur Pendenzen mit diesem Tag zeigen">${esc(t)}</button>`).join('');
 
     function zeile(p) {
       const ueber = !p.erledigt && p.faellig && p.faellig < heute;
@@ -54,12 +60,18 @@
     /** Sonntag der laufenden Kalenderwoche (Montag bis Sonntag). */
     function sonntag() { const d = new Date(heute + 'T12:00:00'); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.toISOString().slice(0, 10); }
     /** Offene Pendenzen in zwei Teilen: diese Kalenderwoche (inkl. überfällige) und alles danach. */
+    /** Offene Pendenzen in Teilen: heute (inkl. überfällige), morgen, Rest dieser Kalenderwoche, ab nächster Woche. Leere Teile entfallen. */
     function wochenTeile(ps) {
-      const so = sonntag();
-      const diese = ps.filter((p) => p.faellig && p.faellig <= so), spaeter = ps.filter((p) => !(p.faellig && p.faellig <= so));
+      const so = sonntag(), morgen = P.addTage(heute, 1);
+      const tag = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'long' });
+      const teile = [
+        ['pd-heute', `Heute · ${tag(heute)} ${fmtDate(heute)}`, ps.filter((p) => p.faellig && p.faellig <= heute)],
+        ['pd-morgen', `Morgen · ${tag(morgen)} ${fmtDate(morgen)}`, ps.filter((p) => p.faellig === morgen)],
+        ['pd-diese', `Rest dieser Woche · bis Sonntag ${fmtDate(so)}`, ps.filter((p) => p.faellig > morgen && p.faellig <= so)],
+        ['pd-danach', 'Ab nächster Woche', ps.filter((p) => !p.faellig || (p.faellig > so && p.faellig !== morgen))],
+      ];
       const kopf = (cls, text, n) => `<tr class="pd-trenn ${cls}"><td colspan="6"><span>${text}</span><span class="pd-trenn-n">${n}</span></td></tr>`;
-      return `<tbody data-zebra>${kopf('pd-diese', `Diese Woche · bis Sonntag ${fmtDate(so)}`, diese.length)}${diese.map(zeile).join('') || '<tr><td colspan="6" class="pd-leer">Diese Woche ist nichts mehr fällig.</td></tr>'}</tbody>
-        <tbody data-zebra>${kopf('pd-danach', 'Ab nächster Woche', spaeter.length)}${spaeter.map(zeile).join('')}</tbody>`;
+      return teile.filter(([, , l]) => l.length).map(([cls, text, l]) => `<tbody data-zebra>${kopf(cls, text, l.length)}${l.map(zeile).join('')}</tbody>`).join('');
     }
 
     function abschnittHtml([key, titel], gruppen) {
@@ -115,7 +127,7 @@
           </div>
           <div class="fld"><label>Was tun</label>${seg('wasTun', P.WAS_TUN)}</div>
           <div class="fld"><label>Tags</label><div class="pd-tagwahl">
-            ${[...new Set([...alleTags(), ...p.tags])].map((t) => `<button type="button" class="pd-tag ${p.tags.includes(t) ? 'on' : ''}" data-pd="tag-toggle" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
+            ${[...new Set([...alleTags(), ...p.tags])].map((t) => `<button type="button" class="pd-tag ${farbe(t)} ${p.tags.includes(t) ? '' : 'aus'}" data-pd="tag-toggle" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
             <input id="pd-f-tag" type="text" placeholder="Neues Tag …" data-pd="tag-neu" autocomplete="off"></div></div>
           <div class="fld"><label for="pd-f-todos">To-Dos</label><textarea id="pd-f-todos" class="pd-notiz pd-todos" rows="8" data-pd="feld" data-key="todos" spellcheck="true">${esc(p.todos)}</textarea></div>
           <div class="fld"><label for="pd-f-notiz">Notizen</label><textarea id="pd-f-notiz" class="pd-notiz" rows="16" data-pd="feld" data-key="notiz" spellcheck="true">${esc(p.notiz)}</textarea></div>
