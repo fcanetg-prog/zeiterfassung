@@ -687,3 +687,37 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .bereiche tr.b-summe td { background: #d6e3e3; }
 .bereiche tr.b-summe .bar { background: rgba(255, 255, 255, .75); }
 .bereiche tr.b-summe td, .bereiche tr.b-summe td.num, .bereiche tr.b-summe td.pct { font-weight: 700; }
+
+/* ===== Pendenzen (gleicher Look wie Rechnungen) ===== */
+.list.pd { table-layout: fixed; width: 100%; min-width: 1000px; font-size: var(--k-schrift); }
+.list.pd col.c-chk { width: 46px; } .list.pd col.c-titel { width: 26%; } .list.pd col.c-schritt { width: auto; }
+.list.pd col.c-dat { width: 128px; } .list.pd col.c-was { width: 170px; } .list.pd col.c-tags { width: 15%; } .list.pd col.c-akt { width: 104px; }
+.list.pd td { height: var(--k-zeile); padding: 0 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.list.pd th { background: var(--k-kopf); font-size: 12px; color: var(--muted); font-weight: 600; padding: 9px 8px; }
+.list.pd td.pd-chk, .list.pd th:first-child { padding-left: var(--k-einzug); padding-right: 0; }
+.list.pd td.pd-chk input { width: 15px; height: 15px; cursor: pointer; vertical-align: middle; }
+.list.pd tr.pd-z { cursor: pointer; }
+.list.pd tr.zb.zebra > td { background: var(--k-zebra); }
+.list.pd tr.zb:hover > td { background: var(--k-hover); }
+.list.pd td.pd-titel b { font-weight: 700; }
+.list.pd td.pd-schritt { color: var(--muted); }
+.list.pd tr.pd-erl td.pd-titel b, .list.pd tr.pd-erl td.pd-schritt { text-decoration: line-through; color: var(--muted); font-weight: 400; }
+.list.pd td.pd-dat input { width: 100%; font-size: 12.5px; padding: 3px 0 3px 3px; }
+.list.pd .pd-ueber { color: #b3261e; font-weight: 700; }
+.list.pd .pd-wsel { width: 100%; font-size: 12.5px; padding: 3px 4px; border-color: transparent; background: transparent; color: var(--muted); }
+.list.pd .pd-wsel:hover, .list.pd .pd-wsel:focus { border-color: var(--line); background: #fff; }
+.list.pd .pd-wsel.pd-w-rueckmeldung { color: #1d5f8a; font-weight: 600; }
+.list.pd .pd-wsel.pd-w-nachfragen { color: #b5620f; font-weight: 600; }
+.list.pd td.pd-akt { text-align: right; padding-right: 14px; }
+.pd-tag { display: inline-block; border: 1px solid #cdd5e2; background: #eef1f6; color: var(--ink, #1c2b2b); border-radius: 10px; padding: 0 8px; margin-right: 4px; font-size: 11.5px; line-height: 18px; cursor: pointer; }
+.pd-tag:hover { border-color: var(--teal-deep); }
+.pd-tag.on { background: var(--teal-deep); border-color: var(--teal-deep); color: #fff; }
+.klapp-hinweis { margin-left: 12px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.klapp-hinweis.pd-rot { color: #b3261e; font-weight: 700; }
+.pd-tagzeile { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pd-tagzeile input { flex: 1; min-width: 160px; }
+.pd-drawer { width: min(760px, 96vw); }
+.pd-notiz { width: 100%; font: inherit; font-size: 13px; line-height: 1.5; white-space: pre-wrap; min-height: 360px; resize: vertical; }
+.pd-drawer .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.list.pd col.c-was { width: 205px; } .list.pd col.c-akt { width: 124px; } .list.pd col.c-titel { width: 24%; } .list.pd col.c-tags { width: 13%; }
+.list.pd td.pd-akt { overflow: visible; }

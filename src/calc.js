@@ -23,7 +23,7 @@
   }
 
   function emptyData() {
-    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [] };
+    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [], pendenzen: [] };
   }
 
   /** Stunden pro Projekt: Map projectId -> Summe */
@@ -434,7 +434,7 @@
       for (const [jahr, bz] of Object.entries(quelle)) if (!bankZeilen[jahr] || (bz.mod || 0) > (bankZeilen[jahr].mod || 0)) bankZeilen[jahr] = bz;
     }
     // Teile, die diese Version nicht kennt (aus einer neueren App), unverändert mitnehmen.
-    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'history']);
+    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'pendenzen', 'history']);
     const fremd = {};
     for (const q of [a, b]) for (const k of Object.keys(q)) if (!bekanntK.has(k) && fremd[k] === undefined) fremd[k] = q[k];
     return {
@@ -444,6 +444,7 @@
       settingsMod: neuer.settingsMod || 0,
       projects, entries, geloescht, buchungen, kontenplaene, bankZeilen,
       offerten: mergeList(a.offerten, b.offerten), offertVorlagen: mergeList(a.offertVorlagen, b.offertVorlagen),
+      pendenzen: mergeList(a.pendenzen, b.pendenzen),
       history: Object.assign({}, b.history || {}, a.history || {}),
     };
   }

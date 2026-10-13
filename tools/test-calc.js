@@ -216,3 +216,31 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(O.ausLatex(O.latex(d5)).doc, d5);
   console.log('Offerten bestanden.');
 }
+
+// Pendenzen: Asana-CSV, Einteilung, Abgleich zwischen zwei Rechnern
+{
+  const P = require('../src/pendenzdoc.js');
+  const csv = 'Task ID,Created At,Completed At,Name,Due Date,Tags,Notes,Parent task,Priority\n'
+    + '1,2026-01-02,,Moderation: Muster AG,2026-10-20,"Corporate,offen","19.10. RM hier?\n\n*mit ""excuse""",,Low\n'
+    + '2,2026-01-02,2026-05-01,Erledigt,2026-05-01,Admin,,,\n'
+    + '3,2026-01-03,,Admin: Planung ,2026-10-01,Admin,"\'----\nHISTORY",,Medium\n'
+    + '4,2026-01-04,,Teilschritt,,,,Admin: Planung,\n';
+  const r = P.ausAsanaCsv(csv, (() => { let i = 0; return () => 'pd' + (++i); })());
+  assert.strictEqual(r.pendenzen.length, 3); assert.strictEqual(r.erledigt, 1);
+  const [a, b, c] = r.pendenzen;
+  assert.deepStrictEqual([a.titel, a.anfrage, a.tags, a.wasTun, a.faellig, a.asanaId], ['Moderation: Muster AG', 'offen', ['Corporate'], 'rueckmeldung', '2026-10-20', '1']);
+  assert.strictEqual(a.notiz, '19.10. RM hier?\n\n*mit "excuse"');
+  assert.deepStrictEqual([b.titel, b.wasTun, b.anfrage, b.notiz], ['Admin: Planung', 'nachfragen', 'bestaetigt', '----\nHISTORY']);
+  assert.ok(c.notiz.startsWith('Unteraufgabe von: Admin: Planung'));
+  assert.strictEqual(P.abschnitt(a, '2026-10-13'), 'anfragen'); assert.strictEqual(P.abschnitt(b, '2026-10-13'), 'faellig');
+  assert.strictEqual(P.abschnitt(c, '2026-10-13'), 'spaeter'); assert.strictEqual(P.abschnitt({ ...b, faellig: '2026-10-18' }, '2026-10-13'), 'woche');
+  assert.strictEqual(P.abschnitt({ ...b, erledigt: '2026-10-13' }, '2026-10-13'), 'erledigt');
+  assert.strictEqual(P.naechsterSchritt(a), '19.10. RM hier?'); assert.strictEqual(P.naechsterSchritt(b), '');
+  assert.ok(P.ausAsanaCsv('a,b\n1,2').fehler);
+  // Zwei Rechner: jüngere Fassung pro Pendenz gewinnt, Löschungen bleiben gelöscht
+  const A = Object.assign(C.emptyData(), { pendenzen: [{ ...a, mod: 5 }, { ...b, mod: 5 }] });
+  const B = Object.assign(C.emptyData(), { pendenzen: [{ ...a, titel: 'neu', mod: 9 }], geloescht: { [b.id]: 7 } });
+  const m = C.mergeData(A, B);
+  assert.deepStrictEqual(m.pendenzen.map((x) => x.titel), ['neu']);
+  console.log('Pendenzen bestanden.');
+}

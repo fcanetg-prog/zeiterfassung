@@ -123,6 +123,7 @@
       b: new Map(state.data.buchungen.map((r) => [r.id, ohneMod(r)])),
       o: new Map(state.data.offerten.map((r) => [r.id, ohneMod(r)])),
       v: new Map(state.data.offertVorlagen.map((r) => [r.id, ohneMod(r)])),
+      t: new Map((state.data.pendenzen || []).map((r) => [r.id, ohneMod(r)])),
       k: Object.fromEntries(Object.entries(state.data.kontenplaene).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
       z: Object.fromEntries(Object.entries(state.data.bankZeilen || {}).map(([j, bz]) => [j, JSON.stringify(bz.zeilen)])),
       s: JSON.stringify(state.data.settings),
@@ -132,7 +133,7 @@
     const jetzt = Date.now();
     const d = state.data;
     if (!d.geloescht) d.geloescht = {};
-    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v]]) {
+    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v], [d.pendenzen || (d.pendenzen = []), abbild.t || new Map()]]) {
       const da = new Set();
       for (const r of liste) {
         da.add(r.id);
@@ -271,6 +272,7 @@
       zugesagtId: o.zugesagtId || (o.status === 'alt' && o.versionen && o.versionen[0] ? o.versionen[0].id : null), erstellt: o.erstellt || 0, mod: o.mod || 0,
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc), ...(v.original ? { original: String(v.original), lesbar: !!v.lesbar, gelesen: v.gelesen || 1 } : {}) })),
     }));
+    out.pendenzen = (d.pendenzen || []).map(window.PendenzDoc.normalize).filter(Boolean);
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
     out.bankZeilen = {};
     for (const [jahr, bz] of Object.entries(d.bankZeilen || {})) {
@@ -305,6 +307,7 @@
 
   const NAV = [
     ['erfassen', 'Zeiterfassung'],
+    ['pendenzen', 'Pendenzen'],
     ['projekte', 'Projekte'],
     ['offerten', 'Offerten'],
     ['rechnungen', 'Rechnungen'],
@@ -347,13 +350,13 @@
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
 
-    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), offerten: () => OFF.view(), einstellungen: viewEinstellungen };
+    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), offerten: () => OFF.view(), pendenzen: () => PD.view(), einstellungen: viewEinstellungen };
     const wocheH = weekTotal(heute);
     $('#app').innerHTML = `
       <nav class="side">
         <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 8.5V16l5 3.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div><strong>Zeiterfassung</strong><span>Fabio Canetg GmbH</span></div></div>
-        <div class="navlist">${NAV.map(([k, l]) => `<button class="nav ${state.view === k ? 'on' : ''}" data-action="nav" data-view="${k}">${l}${k === 'rechnungen' && faelligAnzahl() ? `<span class="zahl" title="Rechnungen, die jetzt zu stellen sind">${faelligAnzahl()}</span>` : ''}</button>`).join('')}</div>
+        <div class="navlist">${NAV.map(([k, l]) => `<button class="nav ${state.view === k ? 'on' : ''}" data-action="nav" data-view="${k}">${l}${k === 'rechnungen' && faelligAnzahl() ? `<span class="zahl" title="Rechnungen, die jetzt zu stellen sind">${faelligAnzahl()}</span>` : ''}${k === 'pendenzen' && PD.faelligAnzahl() ? `<span class="zahl" title="Pendenzen, die heute fällig oder überfällig sind">${PD.faelligAnzahl()}</span>` : ''}</button>`).join('')}</div>
         <label class="yearpick">Jahr
           <select id="year-select" data-action="year">${years().map((y) => `<option ${y === state.year ? 'selected' : ''}>${y}</option>`).join('')}</select>
         </label>
@@ -371,7 +374,7 @@
       <main class="main view-${state.view}">${views[state.view]()}</main>`;
 
     zebra();
-    $('#drawer-root').innerHTML = state.drawer ? drawerHtml() : '';
+    $('#drawer-root').innerHTML = state.drawer ? drawerHtml() : PD.istOffen() ? PD.drawerHtml() : '';
     const m2 = $('.main'); if (m2) m2.scrollTop = scroll;
     const db2 = $('.dbody'); if (db2) db2.scrollTop = dscroll;
     const tw2 = $('.table-wrap'); if (tw2 && tscroll) { tw2.scrollLeft = tscroll[0]; tw2.scrollTop = tscroll[1]; }
@@ -1322,7 +1325,7 @@
         <div class="row"><button class="btn primary" data-action="agb-speichern">Speichern</button><button class="btn" data-action="agb-zu">Abbrechen</button></div>
       </section>` : ''}
       <section class="sec"><h2>Daten</h2>
-        <p>Version ${esc(state.info.version)}. Enthalten sind ${state.data.projects.length} Projekte, ${state.data.entries.length} Zeiteinträge, ${state.data.buchungen.filter((b) => !b.vorschlag).length} Buchungen (${Object.keys(state.data.kontenplaene).join(', ') || 'keine Buchhaltung'}) und ${state.data.offerten.length} Offerten-Projekte. Auf beiden Rechnern müssen hier dieselben Zahlen stehen.</p>
+        <p>Version ${esc(state.info.version)}. Enthalten sind ${state.data.projects.length} Projekte, ${state.data.entries.length} Zeiteinträge, ${state.data.buchungen.filter((b) => !b.vorschlag).length} Buchungen (${Object.keys(state.data.kontenplaene).join(', ') || 'keine Buchhaltung'}) ${state.data.offerten.length} Offerten-Projekte und ${(state.data.pendenzen || []).filter((x) => !x.erledigt).length} offene Pendenzen. Auf beiden Rechnern müssen hier dieselben Zahlen stehen.</p>
         <p>Gespeichert in <code>${esc(state.info.dataPath)}</code>. Jede Änderung wird sofort gesichert; im Unterordner «Sicherungen» liegt pro Tag eine Kopie des Vortagsstands.</p>
         <p>Für die Arbeit auf zwei Rechnern legst du den Speicherort in deinen Dropbox-Ordner und wählst auf dem zweiten Rechner denselben Ordner. Änderungen vom anderen Rechner erscheinen dann von selbst.</p>
         <div class="row">
@@ -1469,6 +1472,7 @@
     // Eine Importdatei ohne Buchhaltung (z. B. der Excel-Import) lässt die vorhandene Buchhaltung stehen.
     if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; neu.bankZeilen = state.data.bankZeilen || {}; }
     if (state.data && !r.data.offerten && !r.data.offertVorlagen) { neu.offerten = state.data.offerten; neu.offertVorlagen = state.data.offertVorlagen; }
+    if (state.data && !r.data.pendenzen) neu.pendenzen = state.data.pendenzen || [];
     neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;
     await persist({ ersetzen: true });
@@ -1673,6 +1677,7 @@
     }
     if (el.id === 'f-beginn' && ev.key === 'Enter') { ev.preventDefault(); merkeEntwurf(); persist(); toast('Beginn gemerkt'); $('#f-stunden').focus(); return; }
     if (ev.key === 'Escape' && state.drawer) { state.drawer = null; render(); return; }
+    if (ev.key === 'Escape' && PD.istOffen()) { PD.schliessen(); return; }
     if (ev.key === 'Enter' && el.classList && el.classList.contains('prow')) { openDrawer(projById(el.dataset.id)); }
   });
 
@@ -1722,6 +1727,7 @@
 
   const BH = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid });
   const OFF = window.Offerten({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
+  const PD = window.Pendenzen({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
   window.__zeit = { state, render, persist };
   start();
 })();
