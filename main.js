@@ -351,6 +351,41 @@ async function pushInvoices(jobs, absender, ziel, erzwingen) {
 
 /* ---------- Fenster ---------- */
 
+/* ---------- Hinweis auf neuere Version (nur nachfragen, nichts installieren) ---------- */
+
+const RELEASES = 'https://api.github.com/repos/fcanetg-prog/zeiterfassung/releases/latest';
+
+function versionTeile(v) {
+  const m = String(v || '').match(/(\d+)\.(\d+)\.(\d+)/);
+  return m ? m.slice(1).map(Number) : null;
+}
+
+function istNeuer(a, b) {
+  const x = versionTeile(a), y = versionTeile(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+}
+
+async function neueVersion() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    const res = await net.fetch(RELEASES, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Zeiterfassung' }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const r = await res.json();
+    const tp = versionTeile(r.tag_name);
+    if (!tp) return null;
+    const neu = tp.join('.');
+    if (!istNeuer(neu, app.getVersion())) return null;
+    const url = /^https:\/\/github\.com\//.test(r.html_url || '') ? r.html_url : 'https://github.com/fcanetg-prog/zeiterfassung/releases/latest';
+    return { version: neu, installiert: app.getVersion(), url };
+  } catch (_) {
+    return null; /* offline oder GitHub nicht erreichbar: still nichts anzeigen */
+  }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1440,
@@ -468,6 +503,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('dlg:confirm', (ev, text) => {
       ev.returnValue = dialog.showMessageBoxSync(win, { type: 'question', buttons: ['OK', 'Abbrechen'], defaultId: 0, cancelId: 1, noLink: true, title: 'Zeiterfassung', message: String(text) }) === 0;
     });
+    ipcMain.handle('app:update', () => neueVersion());
     ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataPath: dataPath(), offertBilder: { titel: !!bildAlsCss('offerte-titel'), agb: fs.existsSync(path.join(dataDir(), VORLAGEN_DIR, AGB_DATEI)) } }));
     ipcMain.handle('invoice:push', async (_e, jobs, absender, ziel, erzwingen) => {
       try { return await pushInvoices(jobs, absender, ziel, erzwingen); } catch (err) { return { ok: false, fehler: err.message }; }

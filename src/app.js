@@ -350,6 +350,12 @@
         <label class="yearpick">Jahr
           <select id="year-select" data-action="year">${years().map((y) => `<option ${y === state.year ? 'selected' : ''}>${y}</option>`).join('')}</select>
         </label>
+        ${state.update && !state.updateZu ? `<div class="update-hinweis" role="status">
+          <button class="update-zu" data-action="update-zu" title="Ausblenden">×</button>
+          <strong>Neue Version ${esc(state.update.version)}</strong>
+          <span>Installiert ist ${esc(state.update.installiert)}.</span>
+          <a href="${esc(state.update.url)}" target="_blank" rel="noopener">Herunterladen</a>
+        </div>` : ''}
         <div class="side-foot">
           <div><span>Heute</span><b>${fmtH(dayTotal(heute))} h</b></div>
           <div><span>Diese Woche</span><b>${fmtH(wocheH)} h</b></div>
@@ -1346,6 +1352,7 @@
     if (!el) return;
     const a = el.dataset.action;
     switch (a) {
+      case 'update-zu': state.updateZu = true; render(); break;
       case 'nav': state.view = el.dataset.view; state.drawer = null; render(); if (state.view === 'erfassen') $('#combo-input').focus(); break;
       case 'day': setDate(addDays(state.date, +el.dataset.step)); render(); break;
       case 'today': setDate(heute); render(); break;
@@ -1555,6 +1562,18 @@
     scheduleSync();
     const ci = $('#combo-input'); if (ci) ci.focus();
   }
+
+  async function pruefeUpdate() {
+    if (!api.update) return;
+    try {
+      const u = await api.update();
+      if (!u) return;
+      if (state.update && state.update.version === u.version) return;
+      state.update = u; state.updateZu = false; render();
+    } catch (_) { /* egal */ }
+  }
+  setTimeout(pruefeUpdate, 1500);
+  setInterval(pruefeUpdate, 6 * 3600 * 1000);
 
   const BH = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid });
   const OFF = window.Offerten({ state, esc, fmtDate, heute, persist, render, toast, api, uid });

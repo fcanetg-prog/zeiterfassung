@@ -594,3 +594,11 @@ th.r { text-align: right; }
 .bh-abgl .abg-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bh-abgl .x { position: absolute; top: 6px; right: 8px; border: 0; background: none; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
 .of-orig { background: #fdf1d6; border-color: #e0b866; } .of-orig .of-dlink { font-weight: 600; } .of-orig .of-vdat { width: 118px; font-size: 11.5px; padding: 0 2px; margin-left: 6px; display: inline-block; }
+
+/* Hinweis auf neuere Version */
+.update-hinweis { margin-top: auto; position: relative; background: #27b9bf; color: #fff; border-radius: 8px; padding: 10px 28px 10px 12px; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.35; }
+.update-hinweis strong { font-size: 13px; }
+.update-hinweis a { color: #fff; font-weight: 600; text-decoration: underline; margin-top: 3px; }
+.update-zu { position: absolute; top: 4px; right: 6px; background: none; border: 0; color: #fff; font-size: 16px; line-height: 1; cursor: pointer; opacity: .8; padding: 2px 4px; }
+.update-zu:hover { opacity: 1; }
+.update-hinweis + .side-foot { margin-top: 12px; }
