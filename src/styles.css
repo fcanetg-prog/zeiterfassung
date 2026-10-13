@@ -683,3 +683,7 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .grid td.kunde, .list.re td.k b, .of-kopf .of-kunde { font-weight: 700; }
 .grid th, .list.re th { font-size: 12px; font-weight: 600; letter-spacing: normal; color: var(--muted); }
 .grid tr.grp.klapp-kopf > td.klapp-titel { font-size: 14px; }
+/* Nach Bereich: Totalzeilen farbig hinterlegt (wie die Balken der Abschnitte) */
+.bereiche tr.b-summe td { background: #d6e3e3; }
+.bereiche tr.b-summe .bar { background: rgba(255, 255, 255, .75); }
+.bereiche tr.b-summe td, .bereiche tr.b-summe td.num, .bereiche tr.b-summe td.pct { font-weight: 700; }
