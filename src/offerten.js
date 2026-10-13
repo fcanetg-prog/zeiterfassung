@@ -49,6 +49,7 @@
         <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
         <td class="of-kurz num">${esc(O.kurz(v.doc))}</td>
         <td class="r of-akt">
+          <label class="of-haken of-versch${v.verschickt ? ' an' : ''}" title="${v.verschickt ? `Am ${fmtDate(v.verschickt)} als verschickt markiert` : 'Haken setzen, wenn diese Offerte an den Kunden ging'}"><input type="checkbox" data-of="verschickt" data-pid="${p.id}" data-vid="${v.id}"${v.verschickt ? ' checked' : ''}> verschickt</label>
           ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde zugesagt. Das Projekt wandert zu den zugesagten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> zugesagt</label>` : ''}
           <button class="btn small" data-of="edit" data-pid="${p.id}" data-vid="${v.id}">${opts.fest ? 'Ansehen' : 'Bearbeiten'}</button>
           <button class="btn small" data-of="pdf" data-pid="${p.id}" data-vid="${v.id}">PDF</button>
@@ -180,7 +181,7 @@
             <button class="btn small ghost" data-of="p-del" data-pid="${p.id}" title="Projekt mit allen Fassungen löschen">Löschen</button>
           </div></td></tr>
         ${auf ? verknuepfZeile(p) : ''}
-        ${auf ? fs.filter((v) => !v.original).map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1, zugesagt: v.id === p.zugesagtId })).join('') : ''}`;
+        ${auf ? fs.filter((v) => !v.original).reverse().map((v) => fassungZeile(p, v, { haken: st === 'offen' && v === letzte, fest: st !== 'offen', loeschbar: st === 'offen' && fs.length > 1, zugesagt: v.id === p.zugesagtId })).join('') : ''}`;
     }
 
     function abschnitt([key, titel]) {
@@ -480,6 +481,7 @@
           const i = p.versionen.indexOf(v); p.versionen.splice(i, 1); persist(); render();
           toast('Fassung gelöscht', { actionLabel: 'Rückgängig', action: () => { p.versionen.splice(i, 0, v); persist(); render(); } }); break;
         }
+        case 'verschickt': v.verschickt = el.checked ? heute : null; persist(); render(); break;
         case 'zusage': {
           p.status = 'zugesagt'; p.zugesagtId = v.id; const nAdr = adresseUebernehmen(p, true); persist(); render();
           toast(`${vTitel(v)} ist zugesagt${nAdr ? `, Auftraggeber als Rechnungsadresse in ${nAdr} ${nAdr === 1 ? 'Projekt' : 'Projekte'} übernommen` : ''}`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
