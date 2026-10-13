@@ -676,12 +676,12 @@
         <td colspan="6"></td><td class="r num">${fmtH(sg.eff)}</td>
         <td></td><td class="r num">${C.isNum(sg.lohn) ? fmtCHF(sg.lohn, 0) : ''}</td><td></td><td class="r num">${sg.rech ? fmtCHF(sg.rech) : ''}</td><td colspan="4"></td></tr>`;
       if (zu) continue;
-      let lastKunde = null;
+      let lastKunde = null, zeile = 0;
       for (const p of g.items) {
         const f = figs(p);
         const neuKunde = p.kunde !== lastKunde; lastKunde = p.kunde;
         const over = C.isNum(p.stundenZiel) && f.stundenEff > p.stundenZiel;
-        body += `<tr class="prow ${neuKunde ? 'first' : ''} ${p.archiviert ? 'arch' : ''}" data-action="open-project" data-id="${p.id}" tabindex="0" draggable="true" data-dnd="projekt" data-b="${esc(p.bereich)}" data-k="${esc(p.kunde)}">
+        body += `<tr class="prow ${neuKunde ? 'first' : ''} ${p.archiviert ? 'arch' : ''} ${zeile++ % 2 ? 'zebra' : ''}" data-action="open-project" data-id="${p.id}" tabindex="0" draggable="true" data-dnd="projekt" data-b="${esc(p.bereich)}" data-k="${esc(p.kunde)}">
           <td class="kunde"${neuKunde ? ' title="Am Kundennamen ziehen, um alle Projekte dieses Kunden zu verschieben"' : ''}>${neuKunde ? esc(p.kunde) : ''}</td>
           <td class="pname">${esc(p.name)}${p.notiz ? ' <span class="note-dot" title="' + esc(p.notiz) + '">Notiz</span>' : ''}</td>
           <td>${effortDots(p.effort)}</td>
@@ -1321,7 +1321,17 @@
     const std = C.parseHours(state.form.stunden);
     if (!state.combo.projectId) { toast('Wähle zuerst ein Projekt.', { fehler: true }); $('#combo-input').focus(); return; }
     if (std == null || std <= 0 || std > 24) { toast('Gib die Stunden als Zahl ein, zum Beispiel 1.5 oder 1:30.', { fehler: true }); $('#f-stunden').focus(); return; }
-    state.data.entries.push({ id: uid('e'), datum: state.date, projectId: state.combo.projectId, stunden: Math.round(std * 100) / 100, notiz: state.form.notiz.trim() });
+    // Pro Tag und Projekt nur ein Eintrag: weitere Stunden werden zum bestehenden Eintrag addiert.
+    const da = state.data.entries.find((e) => e.datum === state.date && e.projectId === state.combo.projectId);
+    const notiz = state.form.notiz.trim();
+    if (da) {
+      const vorher = { stunden: da.stunden, notiz: da.notiz };
+      da.stunden = Math.round((da.stunden + std) * 100) / 100;
+      if (notiz && !String(da.notiz || '').split('; ').includes(notiz)) da.notiz = da.notiz ? `${da.notiz}; ${notiz}` : notiz;
+      setTimeout(() => toast(`${fmtH(std)} h zu «${projLabel(projById(da.projectId))}» addiert, neu ${fmtH(da.stunden)} h`, { actionLabel: 'Rückgängig', action: () => { Object.assign(da, vorher); persist(); render(); } }), 0);
+    } else {
+      state.data.entries.push({ id: uid('e'), datum: state.date, projectId: state.combo.projectId, stunden: Math.round(std * 100) / 100, notiz });
+    }
     state.combo = { q: '', projectId: null, open: false, idx: 0 };
     state.form = { stunden: '', notiz: '', beginn: '' };
     merkeEntwurf();

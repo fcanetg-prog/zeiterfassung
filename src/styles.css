@@ -187,10 +187,13 @@ th.r { text-align: right; }
 .grid td.kunde { font-weight: 600; }
 .prow { cursor: pointer; }
 .prow.first td { border-top: 1px solid var(--line); }
-.prow:hover td, .prow:hover td.kunde, .prow:hover td.pname { background: #f2f8f8; }
+/* Jede zweite Projektzeile ganz leicht grau, damit man auf breiten Bildschirmen in der Zeile bleibt
+   (deutlich heller als die Bereichszeile). */
+.prow.zebra td, .prow.zebra td.kunde, .prow.zebra td.pname { background: #eff3f3; }
+.prow:hover td, .prow:hover td.kunde, .prow:hover td.pname { background: #e9f4f4; }
 .prow:hover td.cs { filter: brightness(.97); }
 .prow.arch td { color: var(--muted); }
-.grp td { background: #e3ecec; font-weight: 600; padding: 8px; cursor: pointer; position: sticky; top: 35px; z-index: 3; border-bottom: 1px solid var(--line); }
+.grp td { background: #d6e3e3; font-weight: 600; padding: 8px; cursor: pointer; position: sticky; top: 35px; z-index: 3; border-bottom: 1px solid var(--line); }
 .grp td:first-child { left: 0; z-index: 4; }
 .chev { display: inline-block; width: 14px; color: var(--muted); }
 .grid tfoot td { position: sticky; bottom: 0; background: #eef3f3; font-weight: 600; border-top: 1px solid var(--line); border-bottom: 0; z-index: 3; padding: 9px 8px; }
