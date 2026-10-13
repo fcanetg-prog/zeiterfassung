@@ -781,3 +781,12 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .list.pd col.c-titel { width: 58%; } .list.pd col.c-was { width: 17%; } .list.pd col.c-anf { width: 12%; } .list.pd col.c-chk { width: 13%; }
 .list.pd .pd-wsel { min-width: 0; max-width: 100%; }
 .list.pd col.c-titel { width: auto; } .list.pd col.c-was { width: 215px; } .list.pd col.c-anf { width: 12%; } .list.pd col.c-chk { width: 11%; }
+/* Pendenzen: schmale Erledigt-Spalte mit rundem Abhak-Knopf (wie in Asana), rechte Spalten weiter rechts */
+.list.pd col.c-titel { width: auto; } .list.pd col.c-was { width: 215px; } .list.pd col.c-anf { width: 130px; } .list.pd col.c-chk { width: 84px; }
+.list.pd td.pd-chk, .list.pd th.c { text-align: center; padding: 0 14px 0 0; }
+.list.pd td.pd-chk input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #9fb0b2; background: #fff; cursor: pointer; position: relative; vertical-align: middle; margin: 0; transition: background .12s, border-color .12s; }
+.list.pd td.pd-chk input[type=checkbox]::after { content: ''; position: absolute; left: 6px; top: 2.5px; width: 5px; height: 10px; border: solid #9fb0b2; border-width: 0 2px 2px 0; transform: rotate(45deg); opacity: .0; }
+.list.pd td.pd-chk input[type=checkbox]:hover { border-color: #1a8f96; background: #e6f6f6; }
+.list.pd td.pd-chk input[type=checkbox]:hover::after { opacity: .9; border-color: #1a8f96; }
+.list.pd td.pd-chk input[type=checkbox]:checked { background: #1a8f96; border-color: #1a8f96; }
+.list.pd td.pd-chk input[type=checkbox]:checked::after { opacity: 1; border-color: #fff; }

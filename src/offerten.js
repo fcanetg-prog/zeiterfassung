@@ -33,7 +33,7 @@
 
     /* ---------- Listen ---------- */
 
-    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen']];
+    const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Bestätigt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen']];
     // Projekte unter «Offen» sind von Anfang an aufgeklappt, die übrigen zu; «umgekehrt» merkt sich die Ausnahmen.
     const pOffen = (p) => state.off.umgekehrt.has(p.id);   // Einträge starten zugeklappt
 
@@ -46,10 +46,10 @@
           <button class="btn small primary" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">Original öffnen</button>
         </td></tr>`;
       return `<tr class="of-fz">
-        <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
+        <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">bestätigt</span>' : ''}</td>
         <td class="of-kurz num">${esc(O.kurz(v.doc))}</td>
         <td class="r of-akt">
-          ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde zugesagt. Das Projekt wandert zu den zugesagten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> zugesagt</label>` : ''}
+          ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde bestätigt. Das Projekt wandert zu den bestätigten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> bestätigt</label>` : ''}
           <label class="of-haken of-versch${v.verschickt ? ' an' : ''}" title="${v.verschickt ? `Am ${fmtDate(v.verschickt)} als verschickt markiert` : 'Haken setzen, wenn diese Offerte an den Kunden ging'}"><input type="checkbox" data-of="verschickt" data-pid="${p.id}" data-vid="${v.id}"${v.verschickt ? ' checked' : ''}> verschickt</label>
           <button class="btn small" data-of="edit" data-pid="${p.id}" data-vid="${v.id}">${opts.fest ? 'Ansehen' : 'Bearbeiten'}</button>
           <button class="btn small" data-of="pdf" data-pid="${p.id}" data-vid="${v.id}">PDF</button>
@@ -113,7 +113,7 @@
         ${anhangZeile(p)}
         <div class="of-raster"><label for="oa-${p.id}" class="of-lab">Auftraggeber</label><div class="of-stapel">
           <textarea id="oa-${p.id}" rows="3" data-of="p-feld" data-key="auftraggeber" data-pid="${p.id}" placeholder="Firma&#10;Strasse&#10;PLZ Ort">${esc(p.auftraggeber || '')}</textarea>
-          <span class="dim of-hinw">Steht im Vertrag. Bei einer zugesagten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></div></td></tr>`;
+          <span class="dim of-hinw">Steht im Vertrag. Bei einer bestätigten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></div></td></tr>`;
     }
     /** Projekte der Zeiterfassung, die zu den zugewiesenen Kunden (Jahr, Bereich) gehören. */
     const zugehoerige = (p) => state.data.projects.filter((x) => (p.kundeLinks || []).includes(kKey(x)));
@@ -151,7 +151,7 @@
       ps.sort((a, b) => (neuste(a).datum < neuste(b).datum ? 1 : -1));
       return `<div class="fld of-pfld">
         ${ps.map((p) => { const v = neuste(p), n = p.versionen.length; return `<div class="row">
-          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.alt ? 'alte Offerte, ' : ''}${p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
+          <span>${esc(p.name || pTitel(p))}: ${esc(vTitel(v))} <span class="dim">(${p.alt ? 'alte Offerte, ' : ''}${p.status === 'zugesagt' ? 'bestätigt' : p.status}${n > 1 ? `, neuste von ${n}` : ''})</span></span>
           <button class="btn small primary" type="button" data-action="offerte-oeffnen" data-id="${p.id}">Öffnen</button></div>`; }).join('')}</div>`;
     }
     function oeffneAktuelle(id) {
@@ -172,14 +172,14 @@
       const knoepfe = {
         offen: `<button class="btn small" data-of="v-neu" data-pid="${p.id}" title="Die letzte Offerte kopieren und als neue Fassung mit heutigem Datum weiterbearbeiten">Letzte kopieren</button>
           <button class="btn small" data-of="neu" data-pid="${p.id}" title="Eine neue Offerte aus einem PDF oder einer anderen Offerte zu diesem Projekt hinzufügen">Neue hinzufügen</button>
-          ${letzte ? `<button class="btn small" data-of="zusage" data-pid="${p.id}" data-vid="${letzte.id}" title="Die neuste Offerte wurde zugesagt: Der Eintrag wandert zu den zugesagten Offerten">✓ Zugesagt</button>` : ''}
+          ${letzte ? `<button class="btn small" data-of="zusage" data-pid="${p.id}" data-vid="${letzte.id}" title="Die neuste Offerte wurde bestätigt: Der Eintrag wandert zu den bestätigten Offerten">✓ Bestätigt</button>` : ''}
           <button class="btn small" data-of="status" data-status="abgesagt" data-pid="${p.id}" title="Das ganze Projekt mit allen Fassungen zu den abgesagten verschieben">✕ Abgesagt</button>`,
-        zugesagt: `${ohneInhalt ? '' : `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>`}
+        zugesagt: `${ohneInhalt ? '' : `<button class="btn small primary" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, bestätigter Offerte und AGB">Vertrag</button>`}
           <button class="btn small" data-of="status" data-status="abgeschlossen" data-pid="${p.id}">Projekt abgeschlossen</button>
           <button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
         abgesagt: `<button class="btn small" data-of="status" data-status="offen" data-pid="${p.id}">Zurück zu offen</button>`,
-        abgeschlossen: `${ohneInhalt ? '' : `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>`}
-          <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
+        abgeschlossen: `${ohneInhalt ? '' : `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, bestätigter Offerte und AGB">Vertrag</button>`}
+          <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu bestätigt</button>`,
       }[st];
       return `<tr class="of-pz zb ${auf ? 'auf' : ''}">
           <td colspan="3"><div class="of-kopf">
@@ -201,7 +201,7 @@
       const letztes = (p) => p.versionen.reduce((m, v) => (v.datum > m ? v.datum : m), '');
       const ps = liste().filter((p) => p.status === key).sort((a, b) => (letztes(a) < letztes(b) ? 1 : letztes(a) > letztes(b) ? -1 : (b.erstellt || 0) - (a.erstellt || 0)));
       const auf = state.off.auf.has(key);
-      const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
+      const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine bestätigten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
       return `<tbody class="of-ab" data-zebra>
         <tr class="of-abk klapp-kopf" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${ps.length}</span></td></tr>
         ${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText || 'Noch keine alten Offerten.'}</td></tr>`) : ''}
@@ -302,7 +302,7 @@
 
     function viewListe() {
       return `<header class="head"><h1>Offerten</h1>
-          <button class="btn of-drop" data-of="alt-hoch" data-drop="alt" title="Offerten als PDF übernehmen, die es schon vor diesem Programm gab. Mehrere auf einmal wählbar oder aus dem Explorer hierher ziehen; sie landen unter «Zugesagt» und sind als alte Offerten markiert.">Alte Offerten hochladen</button>
+          <button class="btn of-drop" data-of="alt-hoch" data-drop="alt" title="Offerten als PDF übernehmen, die es schon vor diesem Programm gab. Mehrere auf einmal wählbar oder aus dem Explorer hierher ziehen; sie landen unter «Bestätigt» und sind als alte Offerten markiert.">Alte Offerten hochladen</button>
           <button class="btn primary" data-of="neu">Neue Offerte</button></header>
         ${neuForm()}
         <div class="pane of-box"><table class="of-liste">${ABSCHNITTE.map(abschnitt).join('')}</table></div>
@@ -372,7 +372,7 @@
           <button class="btn primary" data-of="e-pdf">PDF</button>
         </div>
         ${o.p ? `<div class="pane of-eanh">${anhangZeile(o.p)}</div>` : ''}
-        ${fest ? `<div class="of-fest">Diese Fassung ist ${o.p.status === 'abgesagt' ? 'abgesagt' : 'zugesagt'}. Änderungen sind weiterhin möglich, für eine neue Runde stellst du das Projekt besser zurück auf offen und legst eine neue Fassung an.</div>` : ''}
+        ${fest ? `<div class="of-fest">Diese Fassung ist ${o.p.status === 'abgesagt' ? 'abgesagt' : 'bestätigt'}. Änderungen sind weiterhin möglich, für eine neue Runde stellst du das Projekt besser zurück auf offen und legst eine neue Fassung an.</div>` : ''}
         ${d.teile.map((t, i) => teilEditor(d, t, i)).join('')}
         <div class="row of-unten"><button class="btn" data-of="t-neu">+ Teil</button></div>
         ${dialogHtml()}`;
@@ -537,7 +537,7 @@
         case 'verschickt': v.verschickt = el.checked ? heute : null; persist(); render(); break;
         case 'zusage': {
           p.status = 'zugesagt'; p.zugesagtId = v.id; delete p.nichtAuto; state.off.auf.add('zugesagt'); const nAdr = adresseUebernehmen(p, true); persist(); render();
-          toast(`${vTitel(v)} ist zugesagt${nAdr ? `, Auftraggeber als Rechnungsadresse in ${nAdr} ${nAdr === 1 ? 'Projekt' : 'Projekte'} übernommen` : ''}`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
+          toast(`${vTitel(v)} ist bestätigt${nAdr ? `, Auftraggeber als Rechnungsadresse in ${nAdr} ${nAdr === 1 ? 'Projekt' : 'Projekte'} übernommen` : ''}`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
         }
         case 'status': {
           const vorher = { status: p.status, zugesagtId: p.zugesagtId, autoAbgeschlossen: p.autoAbgeschlossen, nichtAuto: p.nichtAuto };
@@ -546,7 +546,7 @@
           if (ds.status === 'zugesagt') p.nichtAuto = true; else delete p.nichtAuto;
           if (ds.status === 'offen' || ds.status === 'abgesagt') p.zugesagtId = null;
           persist(); render();
-          toast({ offen: 'Zurück bei den offenen Offerten', abgesagt: 'Projekt mit allen Fassungen abgesagt', zugesagt: 'Zurück bei den zugesagten Offerten', abgeschlossen: 'Projekt abgeschlossen' }[ds.status],
+          toast({ offen: 'Zurück bei den offenen Offerten', abgesagt: 'Projekt mit allen Fassungen abgesagt', zugesagt: 'Zurück bei den bestätigten Offerten', abgeschlossen: 'Projekt abgeschlossen' }[ds.status],
             { actionLabel: 'Rückgängig', action: () => { Object.assign(p, vorher); persist(); render(); } }); break;
         }
         case 'p-del': {
