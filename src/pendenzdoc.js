@@ -13,11 +13,16 @@
 
   const isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
+  /** «Moderation: Stadt Zug / Ermotti» → «Stadt Zug / Ermotti» */
+  const ohneVorsatz = (t) => { const s = String(t || '').trim(); const m = /^[^:]{1,40}:\s*(\S.*)$/.exec(s); return m ? m[1].trim() : s; };
+
   function normalize(p) {
     if (!p || !p.id) return null;
     return {
       id: String(p.id),
-      titel: String(p.titel || ''),
+      // Aus Asana übernommene Titel ohne Vorsatz wie «Moderation:» oder «Admin:» (einmalig, eigene Titel bleiben unangetastet).
+      titel: p.asanaId && !p.ohneVorsatz ? ohneVorsatz(p.titel) : String(p.titel || ''),
+      ...(p.asanaId ? { ohneVorsatz: true } : {}),
       notiz: String(p.notiz || ''),
       faellig: isoOk(p.faellig) ? p.faellig : '',
       // Das frühere Asana-Tag «Admin» heisst jetzt wie der Bereich in den Projekten: «Intern».

@@ -307,8 +307,8 @@
 
   const NAV = [
     ['erfassen', 'Zeiterfassung'],
-    ['pendenzen', 'Pendenzen'],
     ['projekte', 'Projekte'],
+    ['pendenzen', 'Pendenzen'],
     ['offerten', 'Offerten'],
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung'],
@@ -357,7 +357,7 @@
         <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 8.5V16l5 3.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div><strong>Zeiterfassung</strong><span>Fabio Canetg GmbH</span></div></div>
         <div class="navlist">${NAV.map(([k, l]) => `<button class="nav ${state.view === k ? 'on' : ''}" data-action="nav" data-view="${k}">${l}${k === 'rechnungen' && faelligAnzahl() ? `<span class="zahl" title="Rechnungen, die jetzt zu stellen sind">${faelligAnzahl()}</span>` : ''}${k === 'pendenzen' && PD.faelligAnzahl() ? `<span class="zahl" title="Pendenzen, die heute fällig oder überfällig sind">${PD.faelligAnzahl()}</span>` : ''}</button>`).join('')}</div>
-        <label class="yearpick">Jahr
+        <label class="yearpick" ${state.view === 'pendenzen' ? 'hidden' : ''}>Jahr
           <select id="year-select" data-action="year">${years().map((y) => `<option ${y === state.year ? 'selected' : ''}>${y}</option>`).join('')}</select>
         </label>
         ${state.update && !state.updateZu ? `<div class="update-hinweis" role="status">

@@ -13,7 +13,7 @@
     /** Tags zur Auswahl: alle Bereiche aus den Projekten (in deren Reihenfolge), danach die übrigen vorhandenen Tags. */
     function alleTags() {
       const nachJahr = (j) => state.data.projects.filter((x) => x.jahr === j).sort((a, b) => a.sort - b.sort).map((x) => x.bereich);
-      const jahre = [...new Set(state.data.projects.map((x) => x.jahr))].sort((a, b) => Math.abs(a - state.year) - Math.abs(b - state.year));
+      const jahre = [...new Set(state.data.projects.map((x) => x.jahr))].sort((a, b) => b - a);   // unabhängig vom gewählten Jahr: zuerst das neuste
       const bereich = [...new Set(jahre.flatMap(nachJahr).filter(Boolean))];
       const rest = [...new Set(liste().flatMap((p) => p.tags))].filter((t) => !bereich.includes(t)).sort((a, b) => a.localeCompare(b, 'de'));
       return [...bereich, ...rest];
@@ -51,6 +51,17 @@
       </tr>`;
     }
 
+    /** Sonntag der laufenden Kalenderwoche (Montag bis Sonntag). */
+    function sonntag() { const d = new Date(heute + 'T12:00:00'); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.toISOString().slice(0, 10); }
+    /** Offene Pendenzen in zwei Teilen: diese Kalenderwoche (inkl. überfällige) und alles danach. */
+    function wochenTeile(ps) {
+      const so = sonntag();
+      const diese = ps.filter((p) => p.faellig && p.faellig <= so), spaeter = ps.filter((p) => !(p.faellig && p.faellig <= so));
+      const kopf = (cls, text, n) => `<tr class="pd-trenn ${cls}"><td colspan="6"><span>${text}</span><span class="pd-trenn-n">${n}</span></td></tr>`;
+      return `<tbody data-zebra>${kopf('pd-diese', `Diese Woche · bis Sonntag ${fmtDate(so)}`, diese.length)}${diese.map(zeile).join('') || '<tr><td colspan="6" class="pd-leer">Diese Woche ist nichts mehr fällig.</td></tr>'}</tbody>
+        <tbody data-zebra>${kopf('pd-danach', 'Ab nächster Woche', spaeter.length)}${spaeter.map(zeile).join('')}</tbody>`;
+    }
+
     function abschnittHtml([key, titel], gruppen) {
       const ps = gruppen[key] || [];
       const auf = state.pd.auf.has(key) || (state.pd.q.trim() && ps.length);
@@ -59,10 +70,10 @@
       const hinweis = [ueber ? `<span class="pd-rot">${ueber} überfällig</span>` : '', hHeute ? `${hHeute} heute fällig` : ''].filter(Boolean).join(' · ');
       return `<div class="re-ab ${auf ? 'auf' : ''}"><div class="klapp-kopf" data-pd="ab-auf" data-key="${key}" role="button" tabindex="0" aria-expanded="${!!auf}">
         <span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${ps.length}</span>${hinweis ? `<span class="klapp-hinweis">${hinweis}</span>` : ''}</div>
-        ${auf ? `<div class="re-inhalt">${ps.length ? `<div class="table-flat"><table class="list pd" data-zebra>
+        ${auf ? `<div class="re-inhalt">${ps.length ? `<div class="table-flat"><table class="list pd" ${key === 'offen' ? '' : 'data-zebra'}>
           <colgroup><col class="c-dat"><col class="c-titel"><col class="c-was"><col class="c-tags"><col class="c-anf"><col class="c-chk"></colgroup>
           <thead><tr><th>${key === 'erledigt' ? 'Erledigt' : 'Fällig'}</th><th>Aufgabe</th><th>Was tun</th><th>Tags</th><th>Anfrage</th><th class="c">Erledigt</th></tr></thead>
-          <tbody>${ps.map(zeile).join('')}</tbody></table></div>` : '<div class="empty">Keine Pendenzen.</div>'}</div>` : ''}</div>`;
+          ${key === 'offen' ? wochenTeile(ps) : `<tbody>${ps.map(zeile).join('')}</tbody>`}</table></div>` : '<div class="empty">Keine Pendenzen.</div>'}</div>` : ''}</div>`;
     }
 
     function view() {
