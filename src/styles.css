@@ -615,15 +615,25 @@ th.r { text-align: right; }
 .grid tr.dnd-unten td { box-shadow: inset 0 -3px 0 #27b9bf; }
 .of-drop.ueber { outline: 2px dashed #27b9bf; outline-offset: 3px; background: #e9f7f7; border-radius: 8px; }
 
-/* Rechnungen: aufklappbare Abschnitte */
-.re-kopf { cursor: pointer; user-select: none; display: flex; align-items: baseline; gap: 6px; margin: 0; }
-.re-ab.auf .re-kopf { margin-bottom: 12px; }
-.re-kopf:hover { color: var(--teal-dark, #1a8f96); }
-.re-summe { margin-left: auto; font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-
+.re-ab.auf 
 /* Nach Bereich: Totale */
 .bereiche tr.b-summe td { font-weight: 700; border-bottom: 2px solid var(--line); }
 #toast button[data-action="toast-zu"] { margin-left: 8px; }
-.sec.re-ab h2.re-kopf { margin: 0; }
-.sec.re-ab.auf h2.re-kopf { margin-bottom: 12px; }
-.sec.re-ab:not(.auf) { padding-bottom: 18px; padding-top: 18px; }
+
+/* Auf- und zuklappbare Abschnitte: überall derselbe Balken (Projekte, Offerten, Rechnungen) */
+.klapp-kopf, tr.klapp-kopf > td { background: #d6e3e3; color: var(--ink, #1c2b2b); font-size: 14px; font-weight: 600; cursor: pointer; user-select: none; }
+div.klapp-kopf, tr.of-abk.klapp-kopf > td { padding: 10px 14px !important; border-bottom: 1px solid var(--line) !important; }
+div.klapp-kopf { display: flex; align-items: center; }
+.klapp-kopf:hover, tr.klapp-kopf:hover > td { background: #cddcdc; }
+.klapp-chev { display: inline-block; width: 18px; color: var(--muted); font-size: 12px; }
+.klapp-zahl { display: inline-block; background: rgba(255, 255, 255, .7); color: var(--ink, #1c2b2b); font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; margin-left: 8px; line-height: 17px; vertical-align: 1px; }
+.klapp-summe { margin-left: auto; font-variant-numeric: tabular-nums; }
+tr.grp.klapp-kopf > td { font-size: 12px; padding-top: 10px; padding-bottom: 10px; }
+tr.grp.klapp-kopf > td.klapp-titel { font-size: 14px; }
+.klapp-box { padding: 0; overflow: hidden; }
+.klapp-box .re-ab:last-child:not(.auf) .klapp-kopf { border-bottom: 0; }
+.re-inhalt { padding: 14px 18px 18px; border-bottom: 1px solid var(--line); }
+.klapp-box .re-ab:last-child .re-inhalt { border-bottom: 0; }
+/* Trennlinie zwischen den Balken: weiss, überall gleich */
+div.klapp-kopf, tr.klapp-kopf > td, tr.of-abk.klapp-kopf > td, tr.grp.klapp-kopf > td { border-bottom: 1px solid #fff !important; }
+tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }

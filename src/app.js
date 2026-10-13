@@ -96,7 +96,7 @@
     calMonth: heute.slice(0, 7),
     year: +heute.slice(0, 4),
     filter: { q: '', status: 'alle', archiv: false },
-    zu: new Set(),
+    pAuf: new Set(),
     reAuf: new Set(),
     drawer: null,
     combo: { q: '', projectId: null, open: false, idx: 0 },
@@ -675,10 +675,10 @@
     }
     let body = '';
     for (const g of groups) {
-      const zu = state.zu.has(g.name);
+      const zu = !state.filter.q.trim() && !state.pAuf.has(g.name);   // beim Suchen sind die Treffer sichtbar
       const sg = sums(g.items);
-      body += `<tr class="grp" data-action="toggle-group" data-group="${esc(g.name)}" draggable="true" data-dnd="bereich" data-b="${esc(g.name)}" title="Zum Verschieben ziehen">
-        <td colspan="2"><span class="chev">${zu ? '▸' : '▾'}</span> ${esc(g.name || 'Ohne Bereich')} <span class="dim">${g.items.length}</span></td>
+      body += `<tr class="grp klapp-kopf" data-action="toggle-group" data-group="${esc(g.name)}" draggable="true" data-dnd="bereich" data-b="${esc(g.name)}" title="Zum Verschieben ziehen">
+        <td colspan="2" class="klapp-titel"><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${esc(g.name || 'Ohne Bereich')}<span class="klapp-zahl">${g.items.length}</span></td>
         <td colspan="6"></td><td class="r num">${fmtH(sg.eff)}</td>
         <td></td><td class="r num">${C.isNum(sg.lohn) ? fmtCHF(sg.lohn, 0) : ''}</td><td></td><td class="r num">${sg.rech ? fmtCHF(sg.rech) : ''}</td><td colspan="4"></td></tr>`;
       if (zu) continue;
@@ -1029,10 +1029,11 @@
   /** Auf- und zuklappbarer Abschnitt der Rechnungen (beim Start alle zu). */
   function reAbschnitt(key, titel, n, betrag, inhalt) {
     const auf = state.reAuf.has(key);
-    return `<section class="sec re-ab ${auf ? 'auf' : ''}"><h2 class="re-kopf" data-action="re-auf" data-key="${key}" role="button" tabindex="0" aria-expanded="${auf}">
-      <span class="chev">${auf ? '▾' : '▸'}</span> ${titel} <span class="dim">${n}</span>${betrag != null && n ? `<small class="re-summe">${fmtCHF(betrag)}</small>` : ''}</h2>
-      ${auf ? inhalt() : ''}</section>`;
+    return `<div class="re-ab ${auf ? 'auf' : ''}"><div class="klapp-kopf" data-action="re-auf" data-key="${key}" role="button" tabindex="0" aria-expanded="${auf}">
+      <span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${n}</span>${betrag != null && n ? `<span class="klapp-summe">${fmtCHF(betrag)}</span>` : ''}</div>
+      ${auf ? `<div class="re-inhalt">${inhalt()}</div>` : ''}</div>`;
   }
+
 
   function viewRechnungen() {
     const by = { faellig: [], offen: [], geplant: [], gestellt: [], ueberfaellig: [], pruefen: [], bezahlt: [] };
@@ -1091,6 +1092,7 @@
       <div class="tile"><span>Bezahlt</span><b>${fmtCHF(bezahlt.reduce((s, p) => s + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0))}</b><i>${bezahlt.length} Zahlungen</i></div>
     </div>
 
+    <div class="pane klapp-box">
     ${reAbschnitt('stellen', 'Rechnung stellen', zuStellen.length, sum(zuStellen), () => `
       ${zuStellen.length ? '' : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
       ${teil('Jetzt stellen', 'Rechnungsdatum heute oder schon vorbei', jetzt, 'jetzt')}
@@ -1103,7 +1105,8 @@
 
     ${by.pruefen.length ? reAbschnitt('pruefen', 'Zahlung ohne Rechnung prüfen', by.pruefen.length, null, () => table(by.pruefen, ['bezahlt', 'btn-bezahlt'])) : ''}
 
-    ${reAbschnitt('bezahlt', 'Bezahlt', bezahlt.length, bezahlt.reduce((s2, p) => s2 + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0), () => (bezahlt.length ? table(bezahlt, ['geplant', 'gestellt', 'bezahlt']) : '<div class="empty">Noch keine Zahlungen erfasst.</div>'))}`;
+    ${reAbschnitt('bezahlt', 'Bezahlt', bezahlt.length, bezahlt.reduce((s2, p) => s2 + ((p.abrechnung === 'ohne' ? figs(p).netto : figs(p).rechnungsbetrag) || 0), 0), () => (bezahlt.length ? table(bezahlt, ['geplant', 'gestellt', 'bezahlt']) : '<div class="empty">Noch keine Zahlungen erfasst.</div>'))}
+    </div>`;
   }
 
   /* ============ Auswertung ============ */
@@ -1491,7 +1494,7 @@
       case 'toast-action': if (toastAction) { const f = toastAction; toastAction = null; $('#toast').className = ''; f(); } break;
       case 'toast-zu': { const t = $('#toast'); t.className = ''; toastAction = null; break; }
       case 're-auf': if (state.reAuf.has(el.dataset.key)) state.reAuf.delete(el.dataset.key); else state.reAuf.add(el.dataset.key); render(); break;
-      case 'toggle-group': if (state.zu.has(el.dataset.group)) state.zu.delete(el.dataset.group); else state.zu.add(el.dataset.group); render(); break;
+      case 'toggle-group': if (state.pAuf.has(el.dataset.group)) state.pAuf.delete(el.dataset.group); else state.pAuf.add(el.dataset.group); render(); break;
       case 'open-project': openDrawer(projById(el.dataset.id)); break;
       case 'new-project': openDrawer(newProject()); break;
       case 'drawer-close': state.drawer = null; render(); break;

@@ -205,7 +205,7 @@
       const extra = false ? `<tr><td colspan="3" class="of-althoch"><button class="btn small" data-of="alt-hoch">Alte Offerten hochladen</button>
           <span class="dim">Mehrere PDF auf einmal wählbar. Die Originale werden unverändert abgelegt und stehen bei «Neue Offerte» als Vorlage bereit.</span></td></tr>` : '';
       return `<tbody class="of-ab">
-        <tr class="of-abk" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="of-pfeil2">${auf ? '▾' : '▸'}</span> <b>${titel}</b> <span class="of-zahl">${ps.length}</span></td></tr>
+        <tr class="of-abk klapp-kopf" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${ps.length}</span></td></tr>
         ${extra}${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText || 'Noch keine alten Offerten.'}</td></tr>`) : ''}
       </tbody>`;
     }
