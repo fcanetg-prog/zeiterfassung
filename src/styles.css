@@ -764,3 +764,10 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .list.pd td.pd-titel .pd-tag { margin-right: 6px; vertical-align: 1px; }
 .list.pd td.pd-titel b { vertical-align: middle; }
 .list.pd .pd-erldat { padding-left: 6px; }
+/* Pendenzen: Spalten über die ganze Breite verteilt (auch im Breitbild), rechte Spalten näher und breiter */
+.list.pd col.c-dat { width: 150px; } .list.pd col.c-titel { width: 48%; } .list.pd col.c-was { width: 22%; } .list.pd col.c-anf { width: 15%; } .list.pd col.c-chk { width: 15%; }
+.list.pd .pd-wsel { width: auto; max-width: 100%; min-width: 190px; }
+.list.pd td.pd-chk, .list.pd th.c { text-align: left; padding: 0 8px; }
+.list.pd th.c { padding-left: 8px; }
+.list.pd tr.pd-trenn.pd-monat td { background: #eef3f9; color: #2d4f78; border-top: 3px solid #fff; border-bottom: 2px solid #9fb6d3; }
+.list.pd col.c-titel { width: 42%; } .list.pd col.c-was { width: 22%; } .list.pd col.c-anf { width: 17%; } .list.pd col.c-chk { width: 19%; }
