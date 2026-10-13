@@ -741,3 +741,4 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .pd-trenn-n { display: inline-block; margin-left: 8px; background: #fff; border-radius: 9px; padding: 0 7px; font-size: 11px; line-height: 17px; color: var(--ink, #1c2b2b); }
 .list.pd td.pd-leer { padding-left: var(--k-einzug); color: var(--muted); height: 36px; }
 .yearpick[hidden] { display: none; }
+.pd-anfrage.abgesagt { background: #f3f3f3; border-color: #d0d0d0; color: #8a8a8a; text-decoration: line-through; }

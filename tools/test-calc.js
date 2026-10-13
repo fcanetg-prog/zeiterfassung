@@ -228,23 +228,24 @@ console.log('Alle Prüfungen bestanden.');
   const r = P.ausAsanaCsv(csv, (() => { let i = 0; return () => 'pd' + (++i); })());
   assert.strictEqual(r.pendenzen.length, 3); assert.strictEqual(r.erledigt, 1);
   const [a, b, c] = r.pendenzen;
-  assert.deepStrictEqual([a.titel, a.anfrage, a.tags, a.wasTun, a.faellig, a.asanaId], ['Muster AG', 'offen', ['Corporate'], 'rueckmeldung', '2026-10-20', '1']);
-  assert.strictEqual(a.notiz, '19.10. RM hier?\n\n*mit "excuse"');
-  assert.deepStrictEqual([b.titel, b.wasTun, b.anfrage, b.notiz], ['Planung', 'nachfragen', 'bestaetigt', '----\nHISTORY']);
+  assert.deepStrictEqual([a.titel, a.anfrage, a.tags, a.wasTun, a.faellig, a.asanaId], ['Moderation: Muster AG', 'offen', ['Corporate'], 'rueckmeldung', '2026-10-20', '1']);
+  assert.deepStrictEqual([a.todos, a.notiz], ['19.10. RM hier?', '*mit "excuse"']);
+  assert.deepStrictEqual([b.titel, b.wasTun, b.anfrage, b.notiz], ['Admin: Planung', 'nachfragen', 'bestaetigt', '----\nHISTORY']);
   assert.ok(c.notiz.startsWith('Unteraufgabe von: Admin: Planung'));
   assert.strictEqual(P.abschnitt(a), 'offen'); assert.strictEqual(P.abschnitt({ ...b, erledigt: '2026-10-13' }), 'erledigt');
   assert.deepStrictEqual(P.normalize({ id: 'x', tags: ['Admin', 'Corporate', 'Intern'] }).tags, ['Intern', 'Corporate']);
   assert.strictEqual(P.normalize({ id: 'x', wasTun: 'umsetzen' }).wasTun, 'umsetzen');
-  assert.strictEqual(P.naechsterSchritt(a), '19.10. RM hier?'); assert.strictEqual(P.naechsterSchritt(b), '');
   assert.ok(P.ausAsanaCsv('a,b\n1,2').fehler);
   // Zwei Rechner: jüngere Fassung pro Pendenz gewinnt, Löschungen bleiben gelöscht
   const A = Object.assign(C.emptyData(), { pendenzen: [{ ...a, mod: 5 }, { ...b, mod: 5 }] });
   const B = Object.assign(C.emptyData(), { pendenzen: [{ ...a, titel: 'neu', mod: 9 }], geloescht: { [b.id]: 7 } });
   const m = C.mergeData(A, B);
   assert.deepStrictEqual(m.pendenzen.map((x) => x.titel), ['neu']);
-  assert.strictEqual(P.normalize({ id: 'x', asanaId: '9', titel: 'Moderation: Stadt Zug / Ermotti' }).titel, 'Stadt Zug / Ermotti');
-  assert.strictEqual(P.normalize({ id: 'x', asanaId: '9', titel: 'Medienanfragen/-auftritte' }).titel, 'Medienanfragen/-auftritte');
-  assert.strictEqual(P.normalize({ id: 'x', titel: 'Call: eigener Titel' }).titel, 'Call: eigener Titel');
-  assert.strictEqual(P.normalize(P.normalize({ id: 'x', asanaId: '9', titel: 'A: B: C' })).titel, 'B: C');
+  // Titel bleiben unverändert; datierte Zeilen am Anfang der Notizen werden einmalig zu To-Dos; «Was tun» ohne «nichts»; Anfrage auch abgesagt
+  assert.strictEqual(P.normalize({ id: 'x', asanaId: '9', titel: 'Moderation: Stadt Zug' }).titel, 'Moderation: Stadt Zug');
+  const t = P.normalize({ id: 'x', asanaId: '9', notiz: '23.11. bei Marco melden\nxx.xx. Aufnahme\n\n\n----\nHISTORY\n10.08. alt' });
+  assert.deepStrictEqual([t.todos, t.notiz], ['23.11. bei Marco melden\nxx.xx. Aufnahme', '\n----\nHISTORY\n10.08. alt'.replace(/^\n/, '')].map((x) => x));
+  const t2 = P.normalize(t); assert.deepStrictEqual([t2.todos, t2.notiz], [t.todos, t.notiz]);
+  assert.strictEqual(P.normalize({ id: 'x', wasTun: '' }).wasTun, 'umsetzen'); assert.strictEqual(P.normalize({ id: 'x', anfrage: 'abgesagt' }).anfrage, 'abgesagt');
   console.log('Pendenzen bestanden.');
 }

@@ -44,9 +44,9 @@
       return `<tr class="zb pd-z ${p.erledigt ? 'pd-erl' : ''}" data-pd="oeffnen" data-id="${p.id}">
         <td class="pd-dat">${p.erledigt ? `<span class="dim">erledigt ${fmtDate(p.erledigt)}</span>` : `<input type="date" class="inline ${ueber ? 'pd-ueber' : ''}" value="${esc(p.faellig)}" data-pd="faellig" data-id="${p.id}" aria-label="Fällig am">`}</td>
         <td class="pd-titel"><b>${esc(p.titel || 'Ohne Titel')}</b></td>
-        <td class="pd-was"><select class="inline pd-wsel ${p.wasTun ? 'pd-w-' + p.wasTun : ''}" data-pd="wasTun" data-id="${p.id}" aria-label="Was tun">${P.WAS_TUN.map(([k, l]) => `<option value="${k}" ${p.wasTun === k ? 'selected' : ''}>${k ? l : 'Was tun …'}</option>`).join('')}</select></td>
+        <td class="pd-was"><select class="inline pd-wsel ${p.wasTun ? 'pd-w-' + p.wasTun : ''}" data-pd="wasTun" data-id="${p.id}" aria-label="Was tun">${P.WAS_TUN.map(([k, l]) => `<option value="${k}" ${p.wasTun === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
         <td class="pd-tags">${tagChips(p)}</td>
-        <td class="pd-anf"><button class="pd-anfrage ${p.anfrage}" data-pd="anfrage" data-id="${p.id}" title="Klicken zum Wechseln zwischen offen und bestätigt">${p.anfrage === 'offen' ? 'Offen' : 'Bestätigt'}</button></td>
+        <td class="pd-anf"><button class="pd-anfrage ${p.anfrage}" data-pd="anfrage" data-id="${p.id}" title="Klicken zum Wechseln: offen → bestätigt → abgesagt">${({ offen: 'Offen', bestaetigt: 'Bestätigt', abgesagt: 'Abgesagt' })[p.anfrage]}</button></td>
         <td class="pd-chk"><input type="checkbox" data-pd="erledigt" data-id="${p.id}" ${p.erledigt ? 'checked' : ''} title="${p.erledigt ? `Erledigt am ${fmtDate(p.erledigt)} – Haken entfernen, um sie wieder zu öffnen` : 'Als erledigt abhaken'}" aria-label="Erledigt"></td>
       </tr>`;
     }
@@ -102,7 +102,7 @@
     function drawerHtml() {
       const p = finde(state.pd.offen);
       if (!p) return '';
-      const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${p[key] === v ? 'on' : ''}" data-pd="seg" data-key="${key}" data-val="${v}">${v || key !== 'wasTun' ? l : 'Nichts'}</button>`).join('')}</div>`;
+      const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${p[key] === v ? 'on' : ''}" data-pd="seg" data-key="${key}" data-val="${v}">${l}</button>`).join('')}</div>`;
       return `
       <div class="scrim" data-pd="zu"></div>
       <aside class="drawer pd-drawer" role="dialog" aria-label="Pendenz bearbeiten">
@@ -172,11 +172,11 @@
         case 'oeffnen': if (ev.target.closest('input, select, button')) break; state.pd.offen = el.dataset.id; render(); break;
         case 'erledigt': if (p) erledigen(p, el.checked); break;
         case 'erledigt-knopf': if (p) { const an = !p.erledigt; state.pd.offen = null; erledigen(p, an); } break;
-        case 'anfrage': if (p) { p.anfrage = p.anfrage === 'offen' ? 'bestaetigt' : 'offen'; jetztSpeichern(); render(); } break;
+        case 'anfrage': if (p) { p.anfrage = ({ offen: 'bestaetigt', bestaetigt: 'abgesagt', abgesagt: 'offen' })[p.anfrage] || 'offen'; jetztSpeichern(); render(); } break;
         case 'tag-toggle': if (p) { const t = el.dataset.tag; p.tags = p.tags.includes(t) ? p.tags.filter((x) => x !== t) : [...p.tags, t]; jetztSpeichern(); render(); } break;
         case 'tag-filter': ev.stopPropagation(); state.pd.tag = state.pd.tag === el.dataset.tag ? '' : el.dataset.tag; render(); break;
         case 'neu': {
-          const n = P.normalize({ id: uid('pd'), titel: '', faellig: heute, anfrage: 'bestaetigt', erstellt: heute });
+          const n = P.normalize({ id: uid('pd'), titel: '', faellig: heute, anfrage: 'bestaetigt', wasTun: 'umsetzen', erstellt: heute });
           state.pd.auf.add('offen');
           liste().push(n); state.pd.offen = n.id; render();
           const f = document.getElementById('pd-f-titel'); if (f) f.focus();

@@ -6,30 +6,46 @@
   'use strict';
 
   /** «Was tun» ersetzt die Priorität aus Asana: Low → Rückmeldung abwarten, Medium → kurz nachfragen. */
-  const WAS_TUN = [['', '–'], ['rueckmeldung', 'Rückmeldung abwarten'], ['nachfragen', 'Nachfragen'], ['umsetzen', 'Umsetzen']];
+  const WAS_TUN = [['rueckmeldung', 'Rückmeldung abwarten'], ['nachfragen', 'Nachfragen'], ['umsetzen', 'Umsetzen']];
   const WAS_TUN_TEXT = Object.fromEntries(WAS_TUN);
   /** Anfrage: «offen» ist erst eine Anfrage an mich, «bestaetigt» eine richtige Aufgabe. */
-  const ANFRAGE = [['offen', 'Offen'], ['bestaetigt', 'Bestätigt']];
+  const ANFRAGE = [['offen', 'Offen'], ['bestaetigt', 'Bestätigt'], ['abgesagt', 'Abgesagt']];
 
   const isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
-  /** «Moderation: Stadt Zug / Ermotti» → «Stadt Zug / Ermotti» */
-  const ohneVorsatz = (t) => { const s = String(t || '').trim(); const m = /^[^:]{1,40}:\s*(\S.*)$/.exec(s); return m ? m[1].trim() : s; };
+  /**
+   * Einmalig: Die datierten Zeilen am Anfang der Notizen («23.11. bei Marco melden») sind die To-Dos.
+   * Sie wandern ins Feld To-Dos, alles danach bleibt in den Notizen.
+   */
+  const DATUMZEILE = /^\s*(\d{1,2}|xx)\.(\d{1,2}|xx)\.(\d{2,4})?\s/i;
+  function todosAusNotiz(notiz) {
+    const z = String(notiz || '').split('\n');
+    let ende = 0, i = 0;
+    while (i < z.length) {
+      if (DATUMZEILE.test(z[i])) { ende = i + 1; i++; continue; }
+      if (!z[i].trim()) { i++; continue; }
+      break;
+    }
+    if (!ende) return { todos: '', notiz: String(notiz || '') };
+    return { todos: z.slice(0, ende).filter((l) => l.trim()).join('\n'), notiz: z.slice(ende).join('\n').replace(/^\s*\n/, '') };
+  }
+  function todosUndNotiz(p) {
+    if (p.todosVerschoben || String(p.todos || '').trim()) return { todos: String(p.todos || ''), notiz: String(p.notiz || ''), todosVerschoben: true };
+    return { ...todosAusNotiz(p.notiz), todosVerschoben: true };
+  }
 
   function normalize(p) {
     if (!p || !p.id) return null;
     return {
       id: String(p.id),
-      // Aus Asana übernommene Titel ohne Vorsatz wie «Moderation:» oder «Admin:» (einmalig, eigene Titel bleiben unangetastet).
-      titel: p.asanaId && !p.ohneVorsatz ? ohneVorsatz(p.titel) : String(p.titel || ''),
-      ...(p.asanaId ? { ohneVorsatz: true } : {}),
-      notiz: String(p.notiz || ''),
+      titel: String(p.titel || ''),
+      ...todosUndNotiz(p),
       faellig: isoOk(p.faellig) ? p.faellig : '',
       // Das frühere Asana-Tag «Admin» heisst jetzt wie der Bereich in den Projekten: «Intern».
       tags: [...new Set((Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).trim()).filter(Boolean).map((t) => (t === 'Admin' ? 'Intern' : t)))],
-      todos: String(p.todos || ''),
-      wasTun: WAS_TUN_TEXT[p.wasTun] && p.wasTun ? p.wasTun : '',
-      anfrage: p.anfrage === 'offen' ? 'offen' : 'bestaetigt',
+      // «Nichts» gibt es nicht mehr: ohne Angabe heisst es «Umsetzen».
+      wasTun: WAS_TUN_TEXT[p.wasTun] ? p.wasTun : 'umsetzen',
+      anfrage: ['offen', 'abgesagt'].includes(p.anfrage) ? p.anfrage : 'bestaetigt',
       erledigt: isoOk(p.erledigt) ? p.erledigt : null,
       ...(isoOk(p.faelligVorher) ? { faelligVorher: p.faelligVorher } : {}),
       erstellt: p.erstellt || '',
@@ -114,5 +130,5 @@
     return z || '';
   }
 
-  return { WAS_TUN, WAS_TUN_TEXT, ANFRAGE, normalize, csvParse, ausAsanaCsv, abschnitt, naechsterSchritt, addTage };
+  return { WAS_TUN, WAS_TUN_TEXT, ANFRAGE, normalize, todosAusNotiz, csvParse, ausAsanaCsv, abschnitt, naechsterSchritt, addTage };
 });
