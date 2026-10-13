@@ -760,3 +760,7 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .pd-tagwahl .pd-tag.aus { background: #fff; color: inherit; opacity: .7; border-style: dashed; }
 .pd-tagwahl .pd-tag.aus.pd-f-journ { color: #1f4e8c; } .pd-tagwahl .pd-tag.aus.pd-f-intern { color: #136e73; } .pd-tagwahl .pd-tag.aus.pd-f-auftritt { color: #9a4f0a; }
 .pd-tagwahl .pd-tag.aus.pd-f-medien { color: #6b3790; } .pd-tagwahl .pd-tag.aus.pd-f-teaching { color: #1f6b33; } .pd-tagwahl .pd-tag.aus.pd-f-andere { color: #5c5c55; }
+/* Pendenzen: Tags direkt vor dem Aufgabentext */
+.list.pd td.pd-titel .pd-tag { margin-right: 6px; vertical-align: 1px; }
+.list.pd td.pd-titel b { vertical-align: middle; }
+.list.pd .pd-erldat { padding-left: 6px; }

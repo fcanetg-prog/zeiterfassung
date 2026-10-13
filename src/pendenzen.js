@@ -48,10 +48,9 @@
     function zeile(p) {
       const ueber = !p.erledigt && p.faellig && p.faellig < heute;
       return `<tr class="zb pd-z ${p.erledigt ? 'pd-erl' : ''}" data-pd="oeffnen" data-id="${p.id}">
-        <td class="pd-dat">${p.erledigt ? `<span class="dim">erledigt ${fmtDate(p.erledigt)}</span>` : `<input type="date" class="inline ${ueber ? 'pd-ueber' : ''}" value="${esc(p.faellig)}" data-pd="faellig" data-id="${p.id}" aria-label="Fällig am">`}</td>
-        <td class="pd-titel"><b>${esc(p.titel || 'Ohne Titel')}</b></td>
-        <td class="pd-was"><select class="inline pd-wsel ${p.wasTun ? 'pd-w-' + p.wasTun : ''}" data-pd="wasTun" data-id="${p.id}" aria-label="Was tun">${P.WAS_TUN.map(([k, l]) => `<option value="${k}" ${p.wasTun === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
-        <td class="pd-tags">${tagChips(p)}</td>
+        <td class="pd-dat">${p.erledigt ? `<span class="dim pd-erldat">${fmtDate(p.erledigt)}</span>` : `<input type="date" class="inline ${ueber ? 'pd-ueber' : ''}" value="${esc(p.faellig)}" data-pd="faellig" data-id="${p.id}" aria-label="Fällig am">`}</td>
+        <td class="pd-titel">${tagChips(p)}<b>${esc(p.titel || 'Ohne Titel')}</b></td>
+        ${p.erledigt ? '' : `<td class="pd-was"><select class="inline pd-wsel ${p.wasTun ? 'pd-w-' + p.wasTun : ''}" data-pd="wasTun" data-id="${p.id}" aria-label="Was tun">${P.WAS_TUN.map(([k, l]) => `<option value="${k}" ${p.wasTun === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>`}
         <td class="pd-anf"><button class="pd-anfrage ${p.anfrage}" data-pd="anfrage" data-id="${p.id}" title="Klicken zum Wechseln: offen → bestätigt → abgesagt">${({ offen: 'Offen', bestaetigt: 'Bestätigt', abgesagt: 'Abgesagt' })[p.anfrage]}</button></td>
         <td class="pd-chk"><input type="checkbox" data-pd="erledigt" data-id="${p.id}" ${p.erledigt ? 'checked' : ''} title="${p.erledigt ? `Erledigt am ${fmtDate(p.erledigt)} – Haken entfernen, um sie wieder zu öffnen` : 'Als erledigt abhaken'}" aria-label="Erledigt"></td>
       </tr>`;
@@ -70,7 +69,7 @@
         ['pd-diese', `Rest dieser Woche · bis Sonntag ${fmtDate(so)}`, ps.filter((p) => p.faellig > morgen && p.faellig <= so)],
         ['pd-danach', 'Ab nächster Woche', ps.filter((p) => !p.faellig || (p.faellig > so && p.faellig !== morgen))],
       ];
-      const kopf = (cls, text, n) => `<tr class="pd-trenn ${cls}"><td colspan="6"><span>${text}</span><span class="pd-trenn-n">${n}</span></td></tr>`;
+      const kopf = (cls, text, n) => `<tr class="pd-trenn ${cls}"><td colspan="5"><span>${text}</span><span class="pd-trenn-n">${n}</span></td></tr>`;
       return teile.filter(([, , l]) => l.length).map(([cls, text, l]) => `<tbody data-zebra>${kopf(cls, text, l.length)}${l.map(zeile).join('')}</tbody>`).join('');
     }
 
@@ -83,8 +82,8 @@
       return `<div class="re-ab ${auf ? 'auf' : ''}"><div class="klapp-kopf" data-pd="ab-auf" data-key="${key}" role="button" tabindex="0" aria-expanded="${!!auf}">
         <span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${ps.length}</span>${hinweis ? `<span class="klapp-hinweis">${hinweis}</span>` : ''}</div>
         ${auf ? `<div class="re-inhalt">${ps.length ? `<div class="table-flat"><table class="list pd" ${key === 'offen' ? '' : 'data-zebra'}>
-          <colgroup><col class="c-dat"><col class="c-titel"><col class="c-was"><col class="c-tags"><col class="c-anf"><col class="c-chk"></colgroup>
-          <thead><tr><th>${key === 'erledigt' ? 'Erledigt' : 'Fällig'}</th><th>Aufgabe</th><th>Was tun</th><th>Tags</th><th>Anfrage</th><th class="c">Erledigt</th></tr></thead>
+          <colgroup><col class="c-dat"><col class="c-titel">${key === 'erledigt' ? '' : '<col class="c-was">'}<col class="c-anf"><col class="c-chk"></colgroup>
+          <thead><tr><th>${key === 'erledigt' ? 'Erledigt' : 'Fällig'}</th><th>Aufgabe</th>${key === 'erledigt' ? '' : '<th>Was tun</th>'}<th>Anfrage</th><th class="c">Erledigt</th></tr></thead>
           ${key === 'offen' ? wochenTeile(ps) : `<tbody>${ps.map(zeile).join('')}</tbody>`}</table></div>` : '<div class="empty">Keine Pendenzen.</div>'}</div>` : ''}</div>`;
     }
 
