@@ -6,7 +6,7 @@
   'use strict';
 
   /** «Was tun» ersetzt die Priorität aus Asana: Low → Rückmeldung abwarten, Medium → kurz nachfragen. */
-  const WAS_TUN = [['', '–'], ['rueckmeldung', 'Rückmeldung abwarten'], ['nachfragen', 'Kurz nachfragen']];
+  const WAS_TUN = [['', '–'], ['rueckmeldung', 'Rückmeldung abwarten'], ['nachfragen', 'Nachfragen'], ['umsetzen', 'Umsetzen']];
   const WAS_TUN_TEXT = Object.fromEntries(WAS_TUN);
   /** Anfrage: «offen» ist erst eine Anfrage an mich, «bestaetigt» eine richtige Aufgabe. */
   const ANFRAGE = [['offen', 'Offen'], ['bestaetigt', 'Bestätigt']];
@@ -20,10 +20,13 @@
       titel: String(p.titel || ''),
       notiz: String(p.notiz || ''),
       faellig: isoOk(p.faellig) ? p.faellig : '',
-      tags: [...new Set((Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).trim()).filter(Boolean))],
+      // Das frühere Asana-Tag «Admin» heisst jetzt wie der Bereich in den Projekten: «Intern».
+      tags: [...new Set((Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).trim()).filter(Boolean).map((t) => (t === 'Admin' ? 'Intern' : t)))],
+      todos: String(p.todos || ''),
       wasTun: WAS_TUN_TEXT[p.wasTun] && p.wasTun ? p.wasTun : '',
       anfrage: p.anfrage === 'offen' ? 'offen' : 'bestaetigt',
       erledigt: isoOk(p.erledigt) ? p.erledigt : null,
+      ...(isoOk(p.faelligVorher) ? { faelligVorher: p.faelligVorher } : {}),
       erstellt: p.erstellt || '',
       ...(p.asanaId ? { asanaId: String(p.asanaId) } : {}),
       mod: p.mod || 0,
@@ -97,14 +100,8 @@
 
   const addTage = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
-  /** Abschnitt einer Pendenz: Anfragen für sich, die übrigen nach Fälligkeit. */
-  function abschnitt(p, heute) {
-    if (p.erledigt) return 'erledigt';
-    if (p.anfrage === 'offen') return 'anfragen';
-    if (p.faellig && p.faellig <= heute) return 'faellig';
-    if (p.faellig && p.faellig <= addTage(heute, 7)) return 'woche';
-    return 'spaeter';
-  }
+  /** Abschnitt einer Pendenz: offen oder erledigt. */
+  function abschnitt(p) { return p.erledigt ? 'erledigt' : 'offen'; }
 
   /** Nächster Schritt: die erste Zeile der Notizen (in Asana stehen dort die datierten To-dos). */
   function naechsterSchritt(p) {

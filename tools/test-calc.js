@@ -232,9 +232,9 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(a.notiz, '19.10. RM hier?\n\n*mit "excuse"');
   assert.deepStrictEqual([b.titel, b.wasTun, b.anfrage, b.notiz], ['Admin: Planung', 'nachfragen', 'bestaetigt', '----\nHISTORY']);
   assert.ok(c.notiz.startsWith('Unteraufgabe von: Admin: Planung'));
-  assert.strictEqual(P.abschnitt(a, '2026-10-13'), 'anfragen'); assert.strictEqual(P.abschnitt(b, '2026-10-13'), 'faellig');
-  assert.strictEqual(P.abschnitt(c, '2026-10-13'), 'spaeter'); assert.strictEqual(P.abschnitt({ ...b, faellig: '2026-10-18' }, '2026-10-13'), 'woche');
-  assert.strictEqual(P.abschnitt({ ...b, erledigt: '2026-10-13' }, '2026-10-13'), 'erledigt');
+  assert.strictEqual(P.abschnitt(a), 'offen'); assert.strictEqual(P.abschnitt({ ...b, erledigt: '2026-10-13' }), 'erledigt');
+  assert.deepStrictEqual(P.normalize({ id: 'x', tags: ['Admin', 'Corporate', 'Intern'] }).tags, ['Intern', 'Corporate']);
+  assert.strictEqual(P.normalize({ id: 'x', wasTun: 'umsetzen' }).wasTun, 'umsetzen');
   assert.strictEqual(P.naechsterSchritt(a), '19.10. RM hier?'); assert.strictEqual(P.naechsterSchritt(b), '');
   assert.ok(P.ausAsanaCsv('a,b\n1,2').fehler);
   // Zwei Rechner: jüngere Fassung pro Pendenz gewinnt, Löschungen bleiben gelöscht

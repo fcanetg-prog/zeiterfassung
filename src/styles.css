@@ -721,3 +721,16 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .pd-drawer .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .list.pd col.c-was { width: 205px; } .list.pd col.c-akt { width: 124px; } .list.pd col.c-titel { width: 24%; } .list.pd col.c-tags { width: 13%; }
 .list.pd td.pd-akt { overflow: visible; }
+/* Pendenzen: Spalten Fällig | Aufgabe | Was tun | Tags | Anfrage | Erledigt */
+.list.pd col.c-dat { width: 150px; } .list.pd col.c-titel { width: auto; } .list.pd col.c-was { width: 205px; } .list.pd col.c-tags { width: 24%; } .list.pd col.c-anf { width: 110px; } .list.pd col.c-chk { width: 86px; }
+.list.pd td.pd-dat, .list.pd th:first-child { padding-left: var(--k-einzug); }
+.list.pd td.pd-chk, .list.pd th.c { text-align: center; padding: 0 14px 0 0; }
+.list.pd td.pd-tags { white-space: normal; line-height: 22px; }
+.pd-anfrage { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 0 9px; font-size: 12px; line-height: 20px; cursor: pointer; color: var(--muted); }
+.pd-anfrage.offen { background: #fdf0e3; border-color: #f0c79b; color: #9a530c; font-weight: 600; }
+.pd-anfrage:hover { border-color: var(--teal-deep); }
+.pd-tagwahl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pd-tagwahl .pd-tag { font-size: 12.5px; line-height: 24px; padding: 0 10px; }
+.pd-tagwahl input { flex: 1; min-width: 140px; }
+.pd-todos { min-height: 150px; }
+.list.pd .pd-wsel.pd-w-umsetzen { color: #1a7a3a; font-weight: 600; }
