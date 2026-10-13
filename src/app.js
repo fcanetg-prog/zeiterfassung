@@ -984,6 +984,7 @@
       state.data.projects.push(d);
     }
     state.drawer = null;
+    if (d.bereich) state.pAuf.add(d.bereich);   // den Bereich des gespeicherten Projekts aufklappen
     persist(); render();
     toast(verschoben ? `Projekt ins Jahr ${verschoben} verschoben` : dr.id ? 'Projekt gespeichert' : 'Projekt angelegt');
     return d;

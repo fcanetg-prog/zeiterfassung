@@ -202,11 +202,9 @@
       const ps = liste().filter((p) => p.status === key).sort((a, b) => (letztes(a) < letztes(b) ? 1 : letztes(a) > letztes(b) ? -1 : (b.erstellt || 0) - (a.erstellt || 0)));
       const auf = state.off.auf.has(key);
       const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
-      const extra = false ? `<tr><td colspan="3" class="of-althoch"><button class="btn small" data-of="alt-hoch">Alte Offerten hochladen</button>
-          <span class="dim">Mehrere PDF auf einmal wählbar. Die Originale werden unverändert abgelegt und stehen bei «Neue Offerte» als Vorlage bereit.</span></td></tr>` : '';
       return `<tbody class="of-ab">
         <tr class="of-abk klapp-kopf" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${ps.length}</span></td></tr>
-        ${extra}${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText || 'Noch keine alten Offerten.'}</td></tr>`) : ''}
+        ${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText || 'Noch keine alten Offerten.'}</td></tr>`) : ''}
       </tbody>`;
     }
 
@@ -538,12 +536,12 @@
         }
         case 'verschickt': v.verschickt = el.checked ? heute : null; persist(); render(); break;
         case 'zusage': {
-          p.status = 'zugesagt'; p.zugesagtId = v.id; delete p.nichtAuto; const nAdr = adresseUebernehmen(p, true); persist(); render();
+          p.status = 'zugesagt'; p.zugesagtId = v.id; delete p.nichtAuto; state.off.auf.add('zugesagt'); const nAdr = adresseUebernehmen(p, true); persist(); render();
           toast(`${vTitel(v)} ist zugesagt${nAdr ? `, Auftraggeber als Rechnungsadresse in ${nAdr} ${nAdr === 1 ? 'Projekt' : 'Projekte'} übernommen` : ''}`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
         }
         case 'status': {
           const vorher = { status: p.status, zugesagtId: p.zugesagtId, autoAbgeschlossen: p.autoAbgeschlossen, nichtAuto: p.nichtAuto };
-          p.status = ds.status; delete p.autoAbgeschlossen;
+          p.status = ds.status; delete p.autoAbgeschlossen; state.off.auf.add(ds.status);
           // Von Hand zurück zu zugesagt: nicht gleich wieder automatisch abschliessen.
           if (ds.status === 'zugesagt') p.nichtAuto = true; else delete p.nichtAuto;
           if (ds.status === 'offen' || ds.status === 'abgesagt') p.zugesagtId = null;
@@ -657,19 +655,6 @@
         if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
       }
       else if (a === 'verk-neu' && el.value) { const zp = projekt(el.dataset.pid); if (zp) { (zp.kundeLinks || (zp.kundeLinks = [])).push(el.value); const nA = adresseUebernehmen(zp); persist(); render(); if (!nA) toast(`Zugewiesen: ${kLabel(kAusKey(el.value))}`); } }
-      else if (a === 'n-aus' && el.value && state.off.neu) {
-        const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
-        if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
-      }
-      else if (a === 'verk-kunde') { const zp = projekt(el.dataset.pid); if (zp) { zp.kundeLink = el.value; persist(); toast(el.value ? `Dem Kunden ${el.value} zugewiesen` : 'Zuweisung entfernt'); } }
-      else if (a === 'n-aus' && el.value && state.off.neu) {
-        const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
-        if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
-      }
-      else if (a === 'verk-neu') {
-        const x = state.data.projects.find((q) => q.id === el.value);
-        if (x) { x.offerteId = el.dataset.pid; persist(); render(); toast(`Verknüpft mit ${zLabel(x)}`); }
-      }
     });
 
     /**
