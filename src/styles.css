@@ -610,3 +610,4 @@ th.r { text-align: right; }
 .grid tr.dnd-quelle td { opacity: .45; }
 .grid tr.dnd-oben td { box-shadow: inset 0 3px 0 #27b9bf; }
 .grid tr.dnd-unten td { box-shadow: inset 0 -3px 0 #27b9bf; }
+.of-drop.ueber { outline: 2px dashed #27b9bf; outline-offset: 3px; background: #e9f7f7; border-radius: 8px; }

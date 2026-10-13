@@ -422,6 +422,7 @@ function createWindow() {
     else if (k === '0' || input.code === 'Numpad0') { zoomSetzen(0); ev.preventDefault(); }
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());   // hineingezogene Dateien nie im Fenster öffnen
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:|^mailto:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -546,6 +547,12 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('offerte:alteWaehlen', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'Alte Offerten wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
       if (r.canceled || !r.filePaths.length) return { canceled: true };
+      return alteAblegen(r.filePaths);
+    });
+    ipcMain.handle('offerte:alteAblegen', (_e, pfade) => alteAblegen(nurPdf(pfade)));
+    async function alteAblegen(filePaths) {
+      if (!filePaths.length) return { fehler: 'Bitte PDF-Dateien hineinziehen.' };
+      const r = { filePaths };
       try {
         const dir = path.join(dataDir(), 'Offerten', 'Alt');
         fs.mkdirSync(dir, { recursive: true });
@@ -564,11 +571,21 @@ if (!app.requestSingleInstanceLock()) {
         }
         return { dateien };
       } catch (err) { return { fehler: `Die Dateien konnten nicht übernommen werden: ${err.message}` }; }
-    });
+    }
     // Beilagen zu Offerten (E-Mail-Austausch usw.): unverändert unter «Offerten/Beilagen» ablegen.
     ipcMain.handle('offerte:anhangWaehlen', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'Beilagen wählen', filters: [{ name: 'PDF', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
       if (r.canceled || !r.filePaths.length) return { canceled: true };
+      return anhaengeAblegen(r.filePaths);
+    });
+    ipcMain.handle('offerte:anhangAblegen', (_e, pfade) => anhaengeAblegen(nurPdf(pfade)));
+    /** Aus dem Explorer hineingezogene Dateien: nur bestehende PDF. */
+    function nurPdf(pfade) {
+      return (Array.isArray(pfade) ? pfade : []).map(String).filter((f) => /\.pdf$/i.test(f) && fs.existsSync(f) && fs.statSync(f).isFile());
+    }
+    function anhaengeAblegen(filePaths) {
+      if (!filePaths.length) return { fehler: 'Bitte PDF-Dateien hineinziehen.' };
+      const r = { filePaths };
       try {
         const dir = path.join(dataDir(), 'Offerten', 'Beilagen');
         fs.mkdirSync(dir, { recursive: true });
@@ -583,7 +600,7 @@ if (!app.requestSingleInstanceLock()) {
         }
         return { dateien };
       } catch (err) { return { fehler: `Die Dateien konnten nicht übernommen werden: ${err.message}` }; }
-    });
+    }
     // Hochgeladene PDF löschen: Sie wandern nach «Offerten/Gelöscht» (Rückgängig holt sie zurück).
     ipcMain.handle('offerte:dateiWeg', (_e, art, datei, zurueck) => {
       try {

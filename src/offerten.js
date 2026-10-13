@@ -49,8 +49,8 @@
         <td class="of-art">${esc(vTitelP(p, v))}${opts.zugesagt ? ' <span class="pill s-bezahlt">zugesagt</span>' : ''}</td>
         <td class="of-kurz num">${esc(O.kurz(v.doc))}</td>
         <td class="r of-akt">
-          <label class="of-haken of-versch${v.verschickt ? ' an' : ''}" title="${v.verschickt ? `Am ${fmtDate(v.verschickt)} als verschickt markiert` : 'Haken setzen, wenn diese Offerte an den Kunden ging'}"><input type="checkbox" data-of="verschickt" data-pid="${p.id}" data-vid="${v.id}"${v.verschickt ? ' checked' : ''}> verschickt</label>
           ${opts.haken ? `<label class="of-haken" title="Diese Fassung wurde zugesagt. Das Projekt wandert zu den zugesagten Offerten."><input type="checkbox" data-of="zusage" data-pid="${p.id}" data-vid="${v.id}"> zugesagt</label>` : ''}
+          <label class="of-haken of-versch${v.verschickt ? ' an' : ''}" title="${v.verschickt ? `Am ${fmtDate(v.verschickt)} als verschickt markiert` : 'Haken setzen, wenn diese Offerte an den Kunden ging'}"><input type="checkbox" data-of="verschickt" data-pid="${p.id}" data-vid="${v.id}"${v.verschickt ? ' checked' : ''}> verschickt</label>
           <button class="btn small" data-of="edit" data-pid="${p.id}" data-vid="${v.id}">${opts.fest ? 'Ansehen' : 'Bearbeiten'}</button>
           <button class="btn small" data-of="pdf" data-pid="${p.id}" data-vid="${v.id}">PDF</button>
           ${opts.loeschbar ? `<button class="btn small ghost" data-of="v-del" data-pid="${p.id}" data-vid="${v.id}" title="Diese Fassung löschen">×</button>` : ''}
@@ -69,17 +69,29 @@
     const kAusKey = (key) => { const [jahr, bereich, ...rest] = key.split('\t'); return { key, jahr: +jahr, bereich, kunde: rest.join(' ') }; };
     const kunden = () => [...new Set(state.data.projects.filter((x) => x.abrechnung !== 'intern' && x.kunde).map((x) => x.kunde))].sort((a, b) => a.localeCompare(b, 'de'));
     /** Beilagen zu einer Offerte (z. B. E-Mail-Austausch als PDF): anzeigen, öffnen, hinzufügen, entfernen. */
+    /** Datum am Anfang eines Dateinamens: 20261011…, 2026-10-11…, 2026_10_11… oder 11.10.2026… */
+    function dateiDatum(name) {
+      const n = String(name || '');
+      let m = /^(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})(?!\d)/.exec(n);
+      if (m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31) return `${m[1]}-${m[2]}-${m[3]}`;
+      m = /^(\d{1,2})\.(\d{1,2})\.(20\d{2})(?!\d)/.exec(n);
+      if (m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      return '';
+    }
     function anhangZeile(p) {
       const an = p.anhaenge || [];
       // Bei alten Offerten steht das hochgeladene Original zuoberst; das Datum lässt sich daneben korrigieren.
       const originale = fassungen(p).filter((v) => v.original);
-      return `<div class="of-raster"><span class="of-lab">Beilagen</span><div class="of-stapel">
+      // Beilagen mit Datum am Anfang des Dateinamens: die neusten zuoberst, die übrigen danach in der Reihenfolge des Hochladens.
+      const sortiert = an.map((a, i) => ({ a, i, d: dateiDatum(a.name) }))
+        .sort((x, y) => (x.d && y.d ? (x.d < y.d ? 1 : x.d > y.d ? -1 : x.i - y.i) : x.d ? -1 : y.d ? 1 : x.i - y.i));
+      return `<div class="of-raster of-drop" data-drop="beilage" data-pid="${p.id}"><span class="of-lab">Beilagen</span><div class="of-stapel">
         ${originale.map((v) => `<span class="of-chip of-datei of-orig"><button class="of-dlink" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">${esc(vTitel(v))}</button><input type="date" class="inline of-vdat" value="${esc(v.datum)}" data-of="alt-datum" data-pid="${p.id}" data-vid="${v.id}" title="Datum der Offerte ändern" aria-label="Datum der Offerte"><button data-of="orig-weg" data-pid="${p.id}" data-vid="${v.id}" title="Dieses PDF löschen" aria-label="PDF löschen">×</button></span>`).join('')}
-        ${an.map((a, i) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Diese Beilage löschen" aria-label="Beilage löschen">×</button></span>`).join('')}
-        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden">+ PDF hinzufügen</button></div></div>`;
+        ${sortiert.map(({ a, i }) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Diese Beilage löschen" aria-label="Beilage löschen">×</button></span>`).join('')}
+        <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden. Du kannst sie auch aus dem Explorer hierher ziehen.">+ PDF hinzufügen</button></div></div>`;
     }
-    async function anhangHinzu(p) {
-      const r = api.offertAnhangWaehlen ? await api.offertAnhangWaehlen() : { fehler: 'Nur in der Desktop-App.' };
+    async function anhangHinzu(p, pfade) {
+      const r = pfade ? await api.offertAnhangAblegen(pfade) : api.offertAnhangWaehlen ? await api.offertAnhangWaehlen() : { fehler: 'Nur in der Desktop-App.' };
       if (!r || r.canceled) return;
       if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
       const an = p.anhaenge || (p.anhaenge = []);
@@ -238,8 +250,8 @@
       if (!r.ok) toast('Das Original lässt sich nicht öffnen: ' + r.error, { fehler: true });
     }
     /** Mehrere alte Offerten als PDF übernehmen: Original ablegen, Inhalt als Vorlage einlesen. */
-    async function alteHochladen() {
-      const r = api.offertAlteWaehlen ? await api.offertAlteWaehlen() : { fehler: 'Nur in der Desktop-App.' };
+    async function alteHochladen(pfade) {
+      const r = pfade ? await api.offertAlteAblegen(pfade) : api.offertAlteWaehlen ? await api.offertAlteWaehlen() : { fehler: 'Nur in der Desktop-App.' };
       if (!r || r.canceled) return;
       if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
       let gelesen = 0, nur = 0, schonDa = 0;
@@ -292,7 +304,7 @@
 
     function viewListe() {
       return `<header class="head"><h1>Offerten</h1>
-          <button class="btn" data-of="alt-hoch" title="Offerten als PDF übernehmen, die es schon vor diesem Programm gab. Mehrere auf einmal wählbar; sie landen unter «Zugesagt» und sind als alte Offerten markiert.">Alte Offerten hochladen</button>
+          <button class="btn of-drop" data-of="alt-hoch" data-drop="alt" title="Offerten als PDF übernehmen, die es schon vor diesem Programm gab. Mehrere auf einmal wählbar oder aus dem Explorer hierher ziehen; sie landen unter «Zugesagt» und sind als alte Offerten markiert.">Alte Offerten hochladen</button>
           <button class="btn primary" data-of="neu">Neue Offerte</button></header>
         ${neuForm()}
         <div class="pane of-box"><table class="of-liste">${ABSCHNITTE.map(abschnitt).join('')}</table></div>
@@ -465,6 +477,31 @@
       if (ev.target.dataset && ev.target.dataset.ofForm === 'neu') { ev.preventDefault(); anlegen(); }
     });
 
+    /* PDF aus dem Explorer hineinziehen: auf die Beilagen eines Eintrags oder auf «Alte Offerten hochladen». */
+    const mitDateien = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+    const dropZiel = (e) => (state.view === 'offerten' && e.target.closest ? e.target.closest('.of-drop') : null);
+    const dropWeg = () => { for (const z of document.querySelectorAll('.of-drop.ueber')) z.classList.remove('ueber'); };
+    document.addEventListener('dragover', (e) => {
+      if (!mitDateien(e)) return;
+      e.preventDefault();   // sonst öffnet das Fenster die Datei
+      const z = dropZiel(e);
+      dropWeg();
+      if (z) { z.classList.add('ueber'); e.dataTransfer.dropEffect = 'copy'; } else e.dataTransfer.dropEffect = 'none';
+    });
+    document.addEventListener('dragleave', (e) => { if (mitDateien(e) && !e.relatedTarget) dropWeg(); });
+    document.addEventListener('drop', (e) => {
+      if (!mitDateien(e)) return;
+      e.preventDefault();
+      const z = dropZiel(e); dropWeg();
+      if (!z) return;
+      const pfade = [...e.dataTransfer.files].map((f) => (api.pfadVon ? api.pfadVon(f) : '')).filter(Boolean);
+      const pdfs = pfade.filter((f) => /\.pdf$/i.test(f));
+      if (!pdfs.length) { toast('Bitte PDF-Dateien hineinziehen.', { fehler: true }); return; }
+      if (pdfs.length < pfade.length) toast(`${pfade.length - pdfs.length} Datei(en) übersprungen: nur PDF möglich.`);
+      if (z.dataset.drop === 'alt') alteHochladen(pdfs);
+      else { const p = projekt(z.dataset.pid); if (p) anhangHinzu(p, pdfs); }
+    });
+
     document.addEventListener('click', (ev) => {
       const el = ev.target.closest('[data-of]');
       if (!el || !state.data || state.view !== 'offerten') return;
@@ -498,12 +535,14 @@
         }
         case 'verschickt': v.verschickt = el.checked ? heute : null; persist(); render(); break;
         case 'zusage': {
-          p.status = 'zugesagt'; p.zugesagtId = v.id; const nAdr = adresseUebernehmen(p, true); persist(); render();
+          p.status = 'zugesagt'; p.zugesagtId = v.id; delete p.nichtAuto; const nAdr = adresseUebernehmen(p, true); persist(); render();
           toast(`${vTitel(v)} ist zugesagt${nAdr ? `, Auftraggeber als Rechnungsadresse in ${nAdr} ${nAdr === 1 ? 'Projekt' : 'Projekte'} übernommen` : ''}`, { actionLabel: 'Rückgängig', action: () => { p.status = 'offen'; p.zugesagtId = null; persist(); render(); } }); break;
         }
         case 'status': {
-          const vorher = { status: p.status, zugesagtId: p.zugesagtId };
-          p.status = ds.status;
+          const vorher = { status: p.status, zugesagtId: p.zugesagtId, autoAbgeschlossen: p.autoAbgeschlossen, nichtAuto: p.nichtAuto };
+          p.status = ds.status; delete p.autoAbgeschlossen;
+          // Von Hand zurück zu zugesagt: nicht gleich wieder automatisch abschliessen.
+          if (ds.status === 'zugesagt') p.nichtAuto = true; else delete p.nichtAuto;
           if (ds.status === 'offen' || ds.status === 'abgesagt') p.zugesagtId = null;
           persist(); render();
           toast({ offen: 'Zurück bei den offenen Offerten', abgesagt: 'Projekt mit allen Fassungen abgesagt', zugesagt: 'Zurück bei den zugesagten Offerten', abgeschlossen: 'Projekt abgeschlossen' }[ds.status],
@@ -630,6 +669,25 @@
       }
     });
 
-    return { view, beginneMit, projektZeile, oeffneAktuelle, zeige };
+    /**
+     * Zugesagte Offerten wandern zu «Abgeschlossen», sobald alle Projekte (mit Rechnung) der zugewiesenen
+     * Kunden bezahlt sind – und erst dann. Fällt eine Zahlung wieder weg, kommt die Offerte zurück.
+     * Gibt die Offerten zurück, die eben abgeschlossen wurden.
+     */
+    function autoAbschluss() {
+      const neu = [];
+      for (const p of liste()) {
+        const auto = p.status === 'abgeschlossen' && p.autoAbgeschlossen;
+        if (!(p.status === 'zugesagt' && !p.nichtAuto) && !auto) continue;
+        const links = p.kundeLinks || [];
+        const ps = links.length ? state.data.projects.filter((x) => x.abrechnung === 'rechnung' && links.includes(kKey(x))) : [];
+        const bezahlt = ps.length > 0 && ps.every((x) => x.zahlungsdatum);
+        if (!auto && bezahlt) { p.status = 'abgeschlossen'; p.autoAbgeschlossen = true; neu.push(p); }
+        else if (auto && !bezahlt) { p.status = 'zugesagt'; delete p.autoAbgeschlossen; }
+      }
+      return neu;
+    }
+
+    return { view, beginneMit, autoAbschluss, pTitel, projektZeile, oeffneAktuelle, zeige };
   };
 })();

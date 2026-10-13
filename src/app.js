@@ -146,6 +146,7 @@
   }
 
   async function persist(opts) {
+    offertenAbschliessen();
     stempeln();
     recompute();
     const r = await api.save(state.data, opts);
@@ -1627,6 +1628,15 @@
 
   /* ============ Start ============ */
 
+  /** Bezahlte Projekte: zugehörige zugesagte Offerten automatisch abschliessen. */
+  function offertenAbschliessen() {
+    if (!state.data || !state.data.offerten) return 0;
+    let neu = [];
+    try { neu = OFF.autoAbschluss(); } catch (_) { return 0; }
+    if (neu.length) setTimeout(() => toast(neu.length === 1 ? `Offerte «${OFF.pTitel(neu[0])}» ist bezahlt und steht jetzt unter «Abgeschlossen».` : `${neu.length} Offerten sind bezahlt und stehen jetzt unter «Abgeschlossen».`, { dauer: 8000 }), 300);
+    return neu.length;
+  }
+
   async function start() {
     render();
     try {
@@ -1638,6 +1648,7 @@
       if (r.wiederhergestellt) setTimeout(() => toast(`Die Buchhaltung fehlte in der Datendatei und wurde aus den Sicherungen zurückgeholt (${r.wiederhergestellt} Buchungen). Bitte kontrolliere die letzten Buchungen.`, { dauer: 15000 }), 600);
       if (r.eingearbeitet) setTimeout(() => toast('Änderungen von einem anderen Rechner wurden eingearbeitet.'), 400);
       if (api.onChanged) api.onChanged(holeAenderungen);
+      if (state.data && !state.veraltet) { const vorher = JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])); offertenAbschliessen(); if (JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])) !== vorher) persist(); }
     } catch (e) {
       state.fehler = 'Die Daten konnten nicht geladen werden: ' + e.message;
     }
@@ -1661,6 +1672,6 @@
 
   const BH = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid });
   const OFF = window.Offerten({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
-  window.__zeit = { state, render };
+  window.__zeit = { state, render, persist };
   start();
 })();

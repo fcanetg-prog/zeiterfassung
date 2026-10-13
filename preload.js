@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   load: () => ipcRenderer.invoke('data:load'),
@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('api', {
   offertAlteWaehlen: () => ipcRenderer.invoke('offerte:alteWaehlen'),
   offertAnhangWaehlen: () => ipcRenderer.invoke('offerte:anhangWaehlen'),
   offertAnhangOeffnen: (datei) => ipcRenderer.invoke('offerte:anhangOeffnen', datei),
+  offertAlteAblegen: (pfade) => ipcRenderer.invoke('offerte:alteAblegen', pfade),
+  offertAnhangAblegen: (pfade) => ipcRenderer.invoke('offerte:anhangAblegen', pfade),
+  pfadVon: (file) => { try { return webUtils.getPathForFile(file); } catch { return ''; } },
   offertDateiWeg: (art, datei, zurueck) => ipcRenderer.invoke('offerte:dateiWeg', art, datei, !!zurueck),
   offertOriginalLesen: (datei) => ipcRenderer.invoke('offerte:originalLesen', datei),
   offertOriginal: (datei) => ipcRenderer.invoke('offerte:original', datei),
