@@ -74,8 +74,8 @@
       // Bei alten Offerten steht das hochgeladene Original zuoberst; das Datum lässt sich daneben korrigieren.
       const originale = fassungen(p).filter((v) => v.original);
       return `<div class="of-raster"><span class="of-lab">Beilagen</span><div class="of-stapel">
-        ${originale.map((v) => `<span class="of-chip of-datei of-orig"><button class="of-dlink" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">${esc(vTitel(v))}</button><input type="date" class="inline of-vdat" value="${esc(v.datum)}" data-of="alt-datum" data-pid="${p.id}" data-vid="${v.id}" title="Datum der Offerte ändern" aria-label="Datum der Offerte"></span>`).join('')}
-        ${an.map((a, i) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Beilage entfernen" aria-label="Beilage entfernen">×</button></span>`).join('')}
+        ${originale.map((v) => `<span class="of-chip of-datei of-orig"><button class="of-dlink" data-of="original" data-pid="${p.id}" data-vid="${v.id}" title="Die ursprüngliche PDF-Datei öffnen">${esc(vTitel(v))}</button><input type="date" class="inline of-vdat" value="${esc(v.datum)}" data-of="alt-datum" data-pid="${p.id}" data-vid="${v.id}" title="Datum der Offerte ändern" aria-label="Datum der Offerte"><button data-of="orig-weg" data-pid="${p.id}" data-vid="${v.id}" title="Dieses PDF löschen" aria-label="PDF löschen">×</button></span>`).join('')}
+        ${an.map((a, i) => `<span class="of-chip of-datei"><button class="of-dlink" data-of="anh-auf" data-pid="${p.id}" data-i="${i}" title="PDF öffnen">${esc(a.name)}</button><button data-of="anh-weg" data-pid="${p.id}" data-i="${i}" title="Diese Beilage löschen" aria-label="Beilage löschen">×</button></span>`).join('')}
         <button class="btn small" data-of="anh-neu" data-pid="${p.id}" title="PDF-Dateien zu dieser Offerte ablegen, zum Beispiel den E-Mail-Austausch mit dem Kunden">+ PDF hinzufügen</button></div></div>`;
     }
     async function anhangHinzu(p) {
@@ -217,6 +217,21 @@
         persist(); render();
       } finally { liestNeu = false; }
     }
+
+    /** Wird eine Datei noch von einem anderen Eintrag gebraucht? Dann bleibt sie liegen. */
+    function dateiGebraucht(art, datei) {
+      return liste().some((x) => (art === 'alt' ? x.versionen.some((v) => v.original === datei) : (x.anhaenge || []).some((a) => a.datei === datei)));
+    }
+    /** Dateien nach «Offerten/Gelöscht» verschieben (zurueck: wieder an ihren Platz). */
+    async function dateienWeg(liste2, zurueck) {
+      if (!api.offertDateiWeg) return;
+      for (const [art, datei] of liste2) {
+        if (!zurueck && dateiGebraucht(art, datei)) continue;
+        const r = await api.offertDateiWeg(art, datei, zurueck);
+        if (r && !r.ok) toast('Die Datei liess sich nicht verschieben: ' + r.error, { fehler: true });
+      }
+    }
+    const dateienVon = (p) => [...p.versionen.filter((v) => v.original).map((v) => ['alt', v.original]), ...(p.anhaenge || []).map((a) => ['beilage', a.datei])];
 
     async function originalOeffnen(v) {
       const r = api.offertOriginal ? await api.offertOriginal(v.original) : { ok: false, error: 'Nur in der Desktop-App.' };
@@ -496,8 +511,8 @@
         }
         case 'p-del': {
           if (!confirm(`«${pTitel(p)}» mit ${p.versionen.length} ${p.versionen.length === 1 ? 'Fassung' : 'Fassungen'} löschen?`)) break;
-          const i = liste().indexOf(p); liste().splice(i, 1); persist(); render();
-          toast('Projekt gelöscht', { actionLabel: 'Rückgängig', action: () => { liste().splice(i, 0, p); persist(); render(); } }); break;
+          const i = liste().indexOf(p); liste().splice(i, 1); persist(); render(); dateienWeg(dateienVon(p));
+          toast('Projekt gelöscht', { actionLabel: 'Rückgängig', action: () => { liste().splice(i, 0, p); persist(); render(); dateienWeg(dateienVon(p), true); } }); break;
         }
 
         // Editor: Aufbau ändern
@@ -528,8 +543,25 @@
         case 'alt-hoch': alteHochladen(); break;
         case 'anh-neu': anhangHinzu(p); break;
         case 'anh-auf': { const a = (p.anhaenge || [])[+ds.i]; if (a) api.offertAnhangOeffnen(a.datei).then((r) => { if (!r.ok) toast('Die Beilage lässt sich nicht öffnen: ' + r.error, { fehler: true }); }); break; }
-        case 'anh-weg': { const [weg] = p.anhaenge.splice(+ds.i, 1); persist(); render();
-          toast('Beilage entfernt. Die Datei bleibt im Ordner «Offerten/Beilagen».', { actionLabel: 'Rückgängig', action: () => { p.anhaenge.splice(+ds.i, 0, weg); persist(); render(); } }); break; }
+        case 'anh-weg': { const a2 = (p.anhaenge || [])[+ds.i]; if (!a2) break;
+          if (!confirm(`Beilage «${a2.name}» löschen?`)) break;
+          const i = +ds.i; p.anhaenge.splice(i, 1); persist(); render(); dateienWeg([['beilage', a2.datei]]);
+          toast('Beilage gelöscht', { actionLabel: 'Rückgängig', action: () => { p.anhaenge.splice(i, 0, a2); persist(); render(); dateienWeg([['beilage', a2.datei]], true); } }); break; }
+        case 'orig-weg': {
+          const ganz = p.versionen.length === 1 && !(p.anhaenge || []).length;
+          if (!confirm(ganz ? `«${pTitel(p)}» mit dem hochgeladenen PDF löschen?` : `Das PDF «${vTitel(v)}» löschen?`)) break;
+          if (ganz) {
+            const i = liste().indexOf(p); liste().splice(i, 1); persist(); render(); dateienWeg(dateienVon(p));
+            toast('Alte Offerte gelöscht', { actionLabel: 'Rückgängig', action: () => { liste().splice(i, 0, p); persist(); render(); dateienWeg(dateienVon(p), true); } }); break;
+          }
+          const i = p.versionen.indexOf(v), zuVorher = p.zugesagtId;
+          p.versionen.splice(i, 1);
+          if (p.zugesagtId === v.id) { const r2 = fassungen(p).pop(); p.zugesagtId = r2 ? r2.id : null; }
+          if (!p.versionen.length) { const j = liste().indexOf(p); liste().splice(j, 1); persist(); render(); dateienWeg([['alt', v.original]]);
+            toast('PDF gelöscht', { actionLabel: 'Rückgängig', action: () => { p.versionen.splice(i, 0, v); p.zugesagtId = zuVorher; liste().splice(j, 0, p); persist(); render(); dateienWeg([['alt', v.original]], true); } }); break; }
+          persist(); render(); dateienWeg([['alt', v.original]]);
+          toast('PDF gelöscht', { actionLabel: 'Rückgängig', action: () => { p.versionen.splice(i, 0, v); p.zugesagtId = zuVorher; persist(); render(); dateienWeg([['alt', v.original]], true); } }); break;
+        }
         case 'original': originalOeffnen(v); break;
         case 'z-del': o.doc.teile[+ds.t].bloecke[+ds.b].zeilen.splice(+ds.z, 1); persist(); render(); break;
 

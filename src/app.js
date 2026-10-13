@@ -670,7 +670,7 @@
     for (const g of groups) {
       const zu = state.zu.has(g.name);
       const sg = sums(g.items);
-      body += `<tr class="grp" data-action="toggle-group" data-group="${esc(g.name)}">
+      body += `<tr class="grp" data-action="toggle-group" data-group="${esc(g.name)}" draggable="true" data-dnd="bereich" data-b="${esc(g.name)}" title="Zum Verschieben ziehen">
         <td colspan="2"><span class="chev">${zu ? '▸' : '▾'}</span> ${esc(g.name || 'Ohne Bereich')} <span class="dim">${g.items.length}</span></td>
         <td colspan="6"></td><td class="r num">${fmtH(sg.eff)}</td>
         <td></td><td class="r num">${C.isNum(sg.lohn) ? fmtCHF(sg.lohn, 0) : ''}</td><td></td><td class="r num">${sg.rech ? fmtCHF(sg.rech) : ''}</td><td colspan="4"></td></tr>`;
@@ -680,8 +680,8 @@
         const f = figs(p);
         const neuKunde = p.kunde !== lastKunde; lastKunde = p.kunde;
         const over = C.isNum(p.stundenZiel) && f.stundenEff > p.stundenZiel;
-        body += `<tr class="prow ${neuKunde ? 'first' : ''} ${p.archiviert ? 'arch' : ''}" data-action="open-project" data-id="${p.id}" tabindex="0">
-          <td class="kunde">${neuKunde ? esc(p.kunde) : ''}</td>
+        body += `<tr class="prow ${neuKunde ? 'first' : ''} ${p.archiviert ? 'arch' : ''}" data-action="open-project" data-id="${p.id}" tabindex="0" draggable="true" data-dnd="projekt" data-b="${esc(p.bereich)}" data-k="${esc(p.kunde)}">
+          <td class="kunde"${neuKunde ? ' title="Am Kundennamen ziehen, um alle Projekte dieses Kunden zu verschieben"' : ''}>${neuKunde ? esc(p.kunde) : ''}</td>
           <td class="pname">${esc(p.name)}${p.notiz ? ' <span class="note-dot" title="' + esc(p.notiz) + '">Notiz</span>' : ''}</td>
           <td>${effortDots(p.effort)}</td>
           <td class="r num">${fmtCHF(f.netto)}</td>
@@ -726,6 +726,90 @@
         <td class="r num">${C.isNum(st.lohn) ? fmtCHF(st.lohn, 0) : ''}</td><td></td><td class="r num">${fmtCHF(st.rech)}</td><td colspan="4"></td></tr></tfoot>
     </table></div>` : `<div class="empty">${yearProjects().length ? 'Kein Projekt passt zu diesem Filter.' : `Für ${state.year} gibt es noch keine Projekte. Lege das erste mit «Neues Projekt» an.`}</div>`}`;
   }
+
+  /* ---------- Reihenfolge per Drag-and-drop: Bereiche, Kunden innerhalb eines Bereichs, Projekte innerhalb eines Kunden ---------- */
+
+  let dnd = null, dndDown = null;
+  /** Einheiten einer Ebene in der angezeigten Reihenfolge (alle Projekte des Jahres, auch ausgefilterte). */
+  function dndEinheiten(ebene, b, k) {
+    const m = new Map();
+    for (const p of yearProjects()) {
+      if (ebene !== 'bereich' && p.bereich !== b) continue;
+      if (ebene === 'projekt' && p.kunde !== k) continue;
+      const key = ebene === 'bereich' ? p.bereich : ebene === 'kunde' ? p.kunde : p.id;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(p);
+    }
+    return [...m.entries()];
+  }
+  function dndKey(tr) {
+    if (!dnd || !tr || !tr.dataset.dnd) return null;
+    if (dnd.ebene === 'bereich') return tr.dataset.b;
+    if (tr.dataset.dnd !== 'projekt' || tr.dataset.b !== dnd.b) return null;
+    if (dnd.ebene === 'kunde') return tr.dataset.k;
+    return tr.dataset.k === dnd.k ? tr.dataset.id : null;
+  }
+  function dndZeilen(ebene, key) {
+    const alle = [...document.querySelectorAll('.main tr[data-dnd]')];
+    if (ebene === 'bereich') return alle.filter((r) => r.dataset.b === key);
+    if (ebene === 'kunde') return alle.filter((r) => r.dataset.dnd === 'projekt' && r.dataset.b === dnd.b && r.dataset.k === key);
+    return alle.filter((r) => r.dataset.id === key);
+  }
+  function dndAufraeumen() { for (const r of document.querySelectorAll('.dnd-oben, .dnd-unten, .dnd-quelle')) r.classList.remove('dnd-oben', 'dnd-unten', 'dnd-quelle'); }
+  function verschiebe(ebene, b, k, von, zu, nach) {
+    let einh = dndEinheiten(ebene, b, k);
+    const scope = einh.flatMap(([, ps]) => ps);
+    let werte = scope.map((p) => p.sort).sort((x, y) => x - y);
+    if (new Set(werte).size !== werte.length) {
+      // Doppelte Sortierwerte: einmal das ganze Jahr sauber durchnummerieren.
+      yearProjects().forEach((p, i) => { p.sort = i + 1; });
+      einh = dndEinheiten(ebene, b, k);
+      werte = einh.flatMap(([, ps]) => ps).map((p) => p.sort).sort((x, y) => x - y);
+    }
+    const i = einh.findIndex(([key]) => key === von);
+    if (i < 0) return false;
+    const [weg] = einh.splice(i, 1);
+    let j = einh.findIndex(([key]) => key === zu);
+    if (j < 0) return false;
+    einh.splice(j + (nach ? 1 : 0), 0, weg);
+    einh.flatMap(([, ps]) => ps).forEach((p, n) => { if (p.sort !== werte[n]) p.sort = werte[n]; });
+    return true;
+  }
+  document.addEventListener('mousedown', (e) => { dndDown = e.target; }, true);
+  document.addEventListener('dragstart', (e) => {
+    const tr = e.target.closest && e.target.closest('tr[data-dnd]');
+    if (!tr || state.view !== 'projekte') return;
+    if (dndDown && dndDown.closest && dndDown.closest('input, select, button, textarea')) { e.preventDefault(); return; }
+    let ebene = tr.dataset.dnd;
+    const kz = dndDown && dndDown.closest && dndDown.closest('td.kunde');
+    if (ebene === 'projekt' && kz && kz.textContent.trim()) ebene = 'kunde';
+    dnd = { ebene, b: tr.dataset.b, k: tr.dataset.k, id: tr.dataset.id };
+    dnd.von = ebene === 'bereich' ? dnd.b : ebene === 'kunde' ? dnd.k : dnd.id;
+    dnd.reihe = dndEinheiten(ebene, dnd.b, dnd.k).map(([key]) => key);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dnd.von); } catch (_) { /* egal */ }
+    setTimeout(() => { for (const r of dndZeilen(ebene, dnd.von)) r.classList.add('dnd-quelle'); }, 0);
+  });
+  document.addEventListener('dragover', (e) => {
+    if (!dnd) return;
+    const tr = e.target.closest && e.target.closest('tr[data-dnd]');
+    const key = dndKey(tr);
+    for (const r of document.querySelectorAll('.dnd-oben, .dnd-unten')) r.classList.remove('dnd-oben', 'dnd-unten');
+    if (key == null || key === dnd.von) { dnd.ziel = null; return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const nach = dnd.reihe.indexOf(key) > dnd.reihe.indexOf(dnd.von);
+    dnd.ziel = { key, nach };
+    const zeilen = dndZeilen(dnd.ebene, key);
+    if (zeilen.length) (nach ? zeilen[zeilen.length - 1] : zeilen[0]).classList.add(nach ? 'dnd-unten' : 'dnd-oben');
+  });
+  document.addEventListener('drop', (e) => {
+    if (!dnd) return;
+    e.preventDefault();
+    const d = dnd; dnd = null; dndAufraeumen();
+    if (!d.ziel) return;
+    if (verschiebe(d.ebene, d.b, d.k, d.von, d.ziel.key, d.ziel.nach)) { persist(); render(); }
+  });
+  document.addEventListener('dragend', () => { dnd = null; dndAufraeumen(); });
 
   function projectsCsv() {
     const head = ['Bereich', 'Unterbereich', 'Kunde', 'Projekt', 'Effort', 'MwSt.', 'Ansatz', 'Kosten', 'Mein Teil', 'Stunden Offerte', 'Stunden Ziel', 'Stunden effektiv', 'CHF/h Ziel', 'CHF/h effektiv', 'Rechnungsbetrag', 'Rechnungsdatum', 'Rechnung gestellt', 'Zahlung erhalten', 'Status', 'Gemeinsame Rechnung mit', 'Notiz'];

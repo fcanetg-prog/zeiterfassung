@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   offertAlteWaehlen: () => ipcRenderer.invoke('offerte:alteWaehlen'),
   offertAnhangWaehlen: () => ipcRenderer.invoke('offerte:anhangWaehlen'),
   offertAnhangOeffnen: (datei) => ipcRenderer.invoke('offerte:anhangOeffnen', datei),
+  offertDateiWeg: (art, datei, zurueck) => ipcRenderer.invoke('offerte:dateiWeg', art, datei, !!zurueck),
   offertOriginalLesen: (datei) => ipcRenderer.invoke('offerte:originalLesen', datei),
   offertOriginal: (datei) => ipcRenderer.invoke('offerte:original', datei),
   offertAgb: () => ipcRenderer.invoke('offerte:agb'),

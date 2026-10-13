@@ -584,6 +584,19 @@ if (!app.requestSingleInstanceLock()) {
         return { dateien };
       } catch (err) { return { fehler: `Die Dateien konnten nicht übernommen werden: ${err.message}` }; }
     });
+    // Hochgeladene PDF löschen: Sie wandern nach «Offerten/Gelöscht» (Rückgängig holt sie zurück).
+    ipcMain.handle('offerte:dateiWeg', (_e, art, datei, zurueck) => {
+      try {
+        const ordner = path.join(dataDir(), 'Offerten', art === 'alt' ? 'Alt' : 'Beilagen');
+        const papier = path.join(dataDir(), 'Offerten', 'Gelöscht');
+        const name = path.basename(String(datei));
+        const von = path.join(zurueck ? papier : ordner, name), nach = path.join(zurueck ? ordner : papier, name);
+        if (!fs.existsSync(von)) return { ok: true, fehlte: true };
+        fs.mkdirSync(path.dirname(nach), { recursive: true });
+        try { fs.renameSync(von, nach); } catch { fs.copyFileSync(von, nach); fs.unlinkSync(von); }
+        return { ok: true };
+      } catch (err) { return { ok: false, error: err.message }; }
+    });
     ipcMain.handle('offerte:anhangOeffnen', async (_e, datei) => {
       const f = path.join(dataDir(), 'Offerten', 'Beilagen', path.basename(String(datei)));
       if (!fs.existsSync(f)) return { ok: false, error: 'Die Datei fehlt im Ordner «Offerten/Beilagen».' };
