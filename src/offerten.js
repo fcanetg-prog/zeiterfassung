@@ -35,7 +35,7 @@
 
     const ABSCHNITTE = [['offen', 'Offen'], ['zugesagt', 'Zugesagt'], ['abgesagt', 'Abgesagt'], ['abgeschlossen', 'Abgeschlossen']];
     // Projekte unter «Offen» sind von Anfang an aufgeklappt, die übrigen zu; «umgekehrt» merkt sich die Ausnahmen.
-    const pOffen = (p) => (p.status === 'offen') !== state.off.umgekehrt.has(p.id);
+    const pOffen = (p) => state.off.umgekehrt.has(p.id);   // Einträge starten zugeklappt
 
     function fassungZeile(p, v, opts) {
       // Alte Offerten: Das Original-PDF bleibt unverändert; der eingelesene Inhalt dient nur als Vorlage.
@@ -181,7 +181,7 @@
         abgeschlossen: `${ohneInhalt ? '' : `<button class="btn small" data-of="ab-pdf" data-pid="${p.id}" title="Ein PDF mit Vertrag, zugesagter Offerte und AGB">Vertrag</button>`}
           <button class="btn small" data-of="status" data-status="zugesagt" data-pid="${p.id}">Zurück zu zugesagt</button>`,
       }[st];
-      return `<tr class="of-pz ${auf ? 'auf' : ''}">
+      return `<tr class="of-pz zb ${auf ? 'auf' : ''}">
           <td colspan="3"><div class="of-kopf">
             <button class="of-pfeil" data-of="p-auf" data-pid="${p.id}" aria-expanded="${auf}" title="${auf ? 'Fassungen ausblenden' : 'Fassungen zeigen'}">${auf ? '▾' : '▸'}</button>
             ${p.alt ? '<span class="pill of-altpill" title="Als PDF hochgeladen; diese Offerte gab es schon vor diesem Programm">alte Offerte</span>' : ''}
@@ -202,7 +202,7 @@
       const ps = liste().filter((p) => p.status === key).sort((a, b) => (letztes(a) < letztes(b) ? 1 : letztes(a) > letztes(b) ? -1 : (b.erstellt || 0) - (a.erstellt || 0)));
       const auf = state.off.auf.has(key);
       const leerText = { offen: 'Keine offenen Offerten.', zugesagt: 'Noch keine zugesagten Offerten.', abgesagt: 'Keine abgesagten Offerten.', abgeschlossen: 'Noch keine Offerten aus abgeschlossenen Projekten.' }[key];
-      return `<tbody class="of-ab">
+      return `<tbody class="of-ab" data-zebra>
         <tr class="of-abk klapp-kopf" data-of="ab-auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${auf}"><td colspan="3"><span class="klapp-chev">${auf ? '▾' : '▸'}</span>${titel}<span class="klapp-zahl">${ps.length}</span></td></tr>
         ${auf ? (ps.length ? ps.map(projektZeilen).join('') : `<tr><td colspan="3" class="of-leer">${leerText || 'Noch keine alten Offerten.'}</td></tr>`) : ''}
       </tbody>`;

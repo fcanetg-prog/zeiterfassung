@@ -370,6 +370,7 @@
       </nav>
       <main class="main view-${state.view}">${views[state.view]()}</main>`;
 
+    zebra();
     $('#drawer-root').innerHTML = state.drawer ? drawerHtml() : '';
     const m2 = $('.main'); if (m2) m2.scrollTop = scroll;
     const db2 = $('.dbody'); if (db2) db2.scrollTop = dscroll;
@@ -377,6 +378,14 @@
     if (keep) {
       const el = document.getElementById(keep.id);
       if (el) { el.focus(); try { if (keep.a != null) el.setSelectionRange(keep.a, keep.b); } catch (_) { /* nicht jedes Feld kann das */ } }
+    }
+  }
+
+  /** Abwechselnd hinterlegte Zeilen in allen aufklappbaren Listen (Rechnungen, Offerten): je Tabelle neu gezählt. */
+  function zebra() {
+    for (const t of document.querySelectorAll('[data-zebra]')) {
+      let i = 0;
+      for (const r of t.querySelectorAll('tr.zb')) { if (r.classList.contains('rgm')) { r.classList.toggle('zebra', false); continue; } r.classList.toggle('zebra', i++ % 2 === 1); }
     }
   }
 
@@ -1052,7 +1061,7 @@
           ${cols.includes('btn-bezahlt') ? `<button class="btn small" data-action="p-today" data-key="zahlungsdatum" data-id="${p.id}" title="Zahlung heute eingegangen">Bezahlt</button>` : ''}`;
     const row = (p, cols, inGruppe) => {
       const f = figs(p);
-      return `<tr class="${inGruppe ? 'rgm' : ''}">
+      return `<tr class="zb ${inGruppe ? 'rgm' : ''}">
         <td class="k" title="${esc(p.kunde)}"><button class="link" data-action="open-project" data-id="${p.id}"><b>${esc(p.kunde)}</b></button></td>
         <td class="pj" title="${esc(p.name)}"><button class="link" data-action="open-project" data-id="${p.id}">${esc(p.name)}</button></td>
         <td class="r num">${fmtH(f.stundenEff)}</td>
@@ -1071,7 +1080,7 @@
       if (g.length === 1) return `<tbody>${row(p, cols, false)}</tbody>`;
       const m = C.invoiceModelGroup(g, S(), heute);
       const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
-      return `<tbody class="sammel-block"><tr class="rg"><td colspan="3"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
+      return `<tbody class="sammel-block"><tr class="rg zb"><td colspan="3"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
         <td colspan="4" class="st">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
     }).join('');
     const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
@@ -1081,7 +1090,7 @@
     const teil = (titel, hinweis, list, cls) => (list.length ? `<div class="teil ${cls}"><h3>${titel} <span class="dim">${list.length}</span><small>${hinweis}, total ${fmtCHF(sum(list))}</small></h3>
       ${table(list, ['geplant', 'gestellt', 'btn-gestellt'])}</div>` : '');
     // Alle Listen dieser Seite haben dieselben Spalten in derselben festen Breite, damit sie untereinander fluchten.
-    const table = (list, cols) => `<div class="table-flat"><table class="list re">
+    const table = (list, cols) => `<div class="table-flat"><table class="list re" data-zebra>
       <colgroup><col class="c-k"><col class="c-pj"><col class="c-std"><col class="c-chf"><col class="c-dt"><col class="c-dt"><col class="c-dt"><col class="c-st"><col class="c-btn"></colgroup>
       <thead><tr><th>Kunde</th><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th><th>Rechnungsdatum</th><th>Gestellt am</th><th>Bezahlt am</th><th>Status</th><th></th></tr></thead>${zeilen(list, cols)}</table></div>`;
 

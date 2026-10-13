@@ -638,3 +638,44 @@ tr.grp.klapp-kopf > td.klapp-titel { font-size: 14px; }
 /* Trennlinie zwischen den Balken: weiss, überall gleich */
 div.klapp-kopf, tr.klapp-kopf > td, tr.of-abk.klapp-kopf > td, tr.grp.klapp-kopf > td { border-bottom: 1px solid #fff !important; }
 tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
+
+/* ===== Aus einem Guss: Inhalt unter den Klapp-Balken (Projekte, Offerten, Rechnungen) =====
+   gleiche Zeilenhöhe, Schrift, Einzug, abwechselnde Hinterlegung und Hover */
+:root { --k-zeile: 36px; --k-einzug: 32px; --k-schrift: 13px; --k-zebra: #eff3f3; --k-hover: #e6f2f2; --k-kopf: #eef3f3; }
+
+/* Projekte */
+.grid tr.prow > td { font-size: var(--k-schrift); height: var(--k-zeile); padding-top: 0; padding-bottom: 0; }
+.grid tr.grp.klapp-kopf > td { font-size: var(--k-schrift); }
+.grid th:nth-child(1), .grid td.kunde { padding-left: var(--k-einzug); min-width: 180px; max-width: 180px; }
+.grid th:nth-child(2), .grid td.pname { left: 180px; }
+.prow.zebra td, .prow.zebra td.kunde, .prow.zebra td.pname { background: var(--k-zebra); }
+.prow:hover td, .prow:hover td.kunde, .prow:hover td.pname { background: var(--k-hover); }
+
+/* Rechnungen */
+.re-inhalt { padding: 0 0 6px; }
+.list.re { font-size: var(--k-schrift); }
+.list.re td { height: var(--k-zeile); padding-top: 0; padding-bottom: 0; }
+.list.re th { background: var(--k-kopf); font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 9px; padding-bottom: 9px; }
+.list.re td:first-child, .list.re th:first-child { padding-left: var(--k-einzug); }
+.list.re td:last-child, .list.re th:last-child { padding-right: 14px; }
+.list.re tr.zb.zebra > td { background: var(--k-zebra); }
+.list.re tr.zb:hover > td { background: var(--k-hover); }
+.re-inhalt .teil { margin-top: 0; }
+.re-inhalt .teil h3 { margin: 0; padding: 14px 14px 7px var(--k-einzug); border-bottom-width: 2px; }
+.re-inhalt .teil .list thead th { padding-top: 9px; }
+.re-inhalt .empty, .re-inhalt > .link.more, .re-inhalt .table-flat + .link.more { padding-left: var(--k-einzug); }
+.re-inhalt > .link.more { display: block; margin: 10px 0 4px; }
+
+/* Offerten */
+.of-box .of-liste tr.of-pz > td { height: var(--k-zeile); }
+.of-pz .of-kopf { padding: 0 12px 0 8px; min-height: var(--k-zeile); gap: 6px; }
+.of-pz .of-pfeil { width: 18px; }
+.of-box .of-liste tr.of-pz.zebra > td { background: var(--k-zebra); }
+.of-box .of-liste tr.of-pz:hover > td { background: var(--k-hover); }
+.of-box .of-liste tr.of-pz.auf > td { background: var(--k-hover); }
+.of-kopf .of-kunde, .of-kopf .of-name { font-size: var(--k-schrift); }
+.of-box .of-leer { padding: 10px 14px 10px var(--k-einzug) !important; font-size: var(--k-schrift); }
+.of-pz .of-kopf { flex-wrap: nowrap; padding-left: 2px; }
+.of-pz .of-kopf .of-kunde { flex: 0 0 170px; } .of-pz .of-kopf .of-name { flex: 0 0 250px; }
+.of-pz .of-kopf .of-anz { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.of-pz .of-kopf .btn { flex: none; }
