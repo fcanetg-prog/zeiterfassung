@@ -5,11 +5,19 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  /** «Was tun» ersetzt die Priorität aus Asana: Low → Rückmeldung abwarten, Medium → kurz nachfragen. */
-  const WAS_TUN = [['rueckmeldung', 'Rückmeldung abwarten'], ['nachfragen', 'Nachfragen'], ['umsetzen', 'Umsetzen']];
+  /** «Was tun» ersetzt die Priorität aus Asana: Low → Rückmeldung überwachen, Medium → kurz nachfragen. */
+  const WAS_TUN = [['rueckmeldung', 'Rückmeldung überwachen'], ['nachfragen', 'Nachfragen'], ['umsetzen', 'Umsetzen']];
   const WAS_TUN_TEXT = Object.fromEntries(WAS_TUN);
   /** Anfrage: «offen» ist erst eine Anfrage an mich, «bestaetigt» eine richtige Aufgabe. */
   const ANFRAGE = [['offen', 'Offen'], ['bestaetigt', 'Bestätigt'], ['abgesagt', 'Abgesagt']];
+
+  /** Feste Tags zur Auswahl (in dieser Reihenfolge); dazu kommen die übrigen, die auf Pendenzen vorkommen. */
+  const TAGS = ['Intern', 'Texte', 'Podcasts', 'Moderationen', 'Referate', 'Panels', 'Expertenauftritte', 'Medienauftritte', 'Teaching'];
+  /** Frühere Tags → heutige: Admin → Intern, die vier Podcasts → Podcasts, der kombinierte Auftritte-Tag → Moderationen. */
+  const TAG_NEU = {
+    Admin: 'Intern', Geldcast: 'Podcasts', 'Schweizer Wirtschaft Daily': 'Podcasts', 'Börsenstrasse Fünfzehn': 'Podcasts', 'Angebot und Nachgefragt': 'Podcasts',
+    'Moderationen | Referate | Panel': 'Moderationen', 'Moderationen | Referate | Panels': 'Moderationen',
+  };
 
   const isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
@@ -42,7 +50,7 @@
       ...todosUndNotiz(p),
       faellig: isoOk(p.faellig) ? p.faellig : '',
       // Das frühere Asana-Tag «Admin» heisst jetzt wie der Bereich in den Projekten: «Intern».
-      tags: [...new Set((Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).trim()).filter(Boolean).map((t) => (t === 'Admin' ? 'Intern' : t)))],
+      tags: [...new Set((Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).trim()).filter(Boolean).map((t) => TAG_NEU[t] || t))],
       // «Nichts» gibt es nicht mehr: ohne Angabe heisst es «Umsetzen».
       wasTun: WAS_TUN_TEXT[p.wasTun] ? p.wasTun : 'umsetzen',
       anfrage: ['offen', 'abgesagt'].includes(p.anfrage) ? p.anfrage : 'bestaetigt',
@@ -130,5 +138,5 @@
     return z || '';
   }
 
-  return { WAS_TUN, WAS_TUN_TEXT, ANFRAGE, normalize, todosAusNotiz, csvParse, ausAsanaCsv, abschnitt, naechsterSchritt, addTage };
+  return { WAS_TUN, WAS_TUN_TEXT, ANFRAGE, TAGS, TAG_NEU, normalize, todosAusNotiz, csvParse, ausAsanaCsv, abschnitt, naechsterSchritt, addTage };
 });

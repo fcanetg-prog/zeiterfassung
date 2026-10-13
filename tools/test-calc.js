@@ -247,5 +247,7 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual([t.todos, t.notiz], ['23.11. bei Marco melden\nxx.xx. Aufnahme', '\n----\nHISTORY\n10.08. alt'.replace(/^\n/, '')].map((x) => x));
   const t2 = P.normalize(t); assert.deepStrictEqual([t2.todos, t2.notiz], [t.todos, t.notiz]);
   assert.strictEqual(P.normalize({ id: 'x', wasTun: '' }).wasTun, 'umsetzen'); assert.strictEqual(P.normalize({ id: 'x', anfrage: 'abgesagt' }).anfrage, 'abgesagt');
+  assert.deepStrictEqual(P.normalize({ id: 'x', tags: ['Geldcast', 'Angebot und Nachgefragt', 'Moderationen | Referate | Panel', 'Texte'] }).tags, ['Podcasts', 'Moderationen', 'Texte']);
+  assert.strictEqual(P.WAS_TUN_TEXT.rueckmeldung, 'Rückmeldung überwachen');
   console.log('Pendenzen bestanden.');
 }

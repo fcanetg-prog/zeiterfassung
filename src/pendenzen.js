@@ -12,11 +12,8 @@
     const finde = (id) => liste().find((p) => p.id === id);
     /** Tags zur Auswahl: alle Bereiche aus den Projekten (in deren Reihenfolge), danach die übrigen vorhandenen Tags. */
     function alleTags() {
-      const nachJahr = (j) => state.data.projects.filter((x) => x.jahr === j).sort((a, b) => a.sort - b.sort).map((x) => x.bereich);
-      const jahre = [...new Set(state.data.projects.map((x) => x.jahr))].sort((a, b) => b - a);   // unabhängig vom gewählten Jahr: zuerst das neuste
-      const bereich = [...new Set(jahre.flatMap(nachJahr).filter(Boolean))];
-      const rest = [...new Set(liste().flatMap((p) => p.tags))].filter((t) => !bereich.includes(t)).sort((a, b) => a.localeCompare(b, 'de'));
-      return [...bereich, ...rest];
+      const rest = [...new Set(liste().flatMap((p) => p.tags))].filter((t) => !P.TAGS.includes(t)).sort((a, b) => a.localeCompare(b, 'de'));
+      return [...P.TAGS, ...rest];
     }
 
     const ABSCHNITTE = [['offen', 'Offene Pendenzen'], ['erledigt', 'Erledigte Pendenzen']];
@@ -39,8 +36,9 @@
 
     /** Farbgruppen der Tags: Journalismus-Bereiche, Intern, Auftritte, Medien, Teaching; übrige neutral. */
     const FARBEN = {
-      Texte: 'journ', Geldcast: 'journ', 'Börsenstrasse Fünfzehn': 'journ', 'Schweizer Wirtschaft Daily': 'journ', 'Angebot und Nachgefragt': 'journ',
-      Intern: 'intern', 'Moderationen | Referate | Panel': 'auftritt', Expertenauftritte: 'auftritt', Medienauftritte: 'medien', Teaching: 'teaching',
+      Texte: 'journ', Podcasts: 'journ', Intern: 'intern',
+      Moderationen: 'auftritt', Referate: 'auftritt', Panels: 'auftritt', Expertenauftritte: 'auftritt',
+      Medienauftritte: 'medien', Teaching: 'teaching',
     };
     const farbe = (t) => 'pd-f-' + (FARBEN[t] || 'andere');
     const tagChips = (p) => p.tags.map((t) => `<button class="pd-tag ${farbe(t)} ${state.pd.tag === t ? 'filter' : ''}" data-pd="tag-filter" data-tag="${esc(t)}" title="Nur Pendenzen mit diesem Tag zeigen">${esc(t)}</button>`).join('');
