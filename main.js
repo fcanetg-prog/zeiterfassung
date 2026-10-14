@@ -551,7 +551,7 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.handle('offerte:bildWaehlen', async (_e, art) => {
       const basis = art === 'logo' ? 'offerte-logo' : 'offerte-titel';
-      const r = await dialog.showOpenDialog(win, { title: art === 'logo' ? 'Logo für das Kopfband wählen' : 'Titelbild wählen (16:9)', filters: [{ name: 'Bild', extensions: ['png', 'jpg', 'jpeg'] }], properties: ['openFile'] });
+      const r = await dialog.showOpenDialog(win, { title: art === 'logo' ? 'Logo für das Kopfband wählen' : 'Titelbild wählen (am besten im Format A4 quer)', filters: [{ name: 'Bild', extensions: ['png', 'jpg', 'jpeg'] }], properties: ['openFile'] });
       if (r.canceled || !r.filePaths[0]) return { canceled: true };
       try {
         const roh = fs.readFileSync(r.filePaths[0]);

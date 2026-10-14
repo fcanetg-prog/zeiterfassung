@@ -101,8 +101,9 @@
   /** *kursiv* im Fliesstext */
   const mitKursiv = (s) => esc(s).replace(/\*([^*\n]+)\*/g, '<i>$1</i>');
 
-  // Folienformat 16:9. Alles steht auf einer Zeile: Die Schriftgrösse richtet sich nach dem längsten Eintrag und der Zeilenzahl.
-  const SEITE = { b: 338.67, h: 190.5, rand: 13, kopf: 27, fuss: 12 };
+  // Format A4 quer (297 × 210 mm), damit das PDF beim normalen Drucken randlos passt.
+  // Alles steht auf einer Zeile: Die Schriftgrösse richtet sich nach dem längsten Eintrag und der Zeilenzahl.
+  const SEITE = { b: 297, h: 210, rand: 13, kopf: 27, fuss: 12 };
   const PT = 0.3528;          // mm pro Punkt
   const SCHRIFT = 10.5;       // Standardgrösse der Tabellen in Punkt
   const ZEICHEN = 0.54;       // mittlere Zeichenbreite in em (vorsichtig geschätzt)
@@ -183,8 +184,8 @@
     .folie { position: relative; width: ${SEITE.b}mm; height: ${SEITE.h}mm; overflow: hidden; break-after: page; background: #fff; }
     .folie:last-child { break-after: auto; }
     /* Titelfolie */
-    .titel { background: ${NAVY} __OFFERTE_TITELBILD__ center / cover no-repeat; color: #fff; }
-    .titel .block { position: absolute; left: 6.4mm; top: 84mm; width: 74mm; }
+    .titel { background: ${NAVY} __OFFERTE_TITELBILD__ left center / cover no-repeat; color: #fff; }
+    .titel .block { position: absolute; left: 6.4mm; top: ${(SEITE.h * 0.44).toFixed(1)}mm; width: 74mm; }
     .titel .art { font-size: 17pt; font-weight: 700; letter-spacing: .02em; margin: 0 0 3mm; }
     .titel .strich { width: 16mm; height: .9mm; background: ${TEAL}; margin: 0 0 4mm; }
     .titel .kunde { font-size: 11.5pt; font-weight: 700; margin: 0 0 1.2mm; }
