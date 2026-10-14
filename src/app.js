@@ -1090,12 +1090,11 @@
     const jetzt = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant <= heute).sort(nachDatum);
     const spaeter = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant > heute).sort(nachDatum);
     const ohneDatum = zuStellen.filter((p) => !p.rechnungGeplant);
-    /** Eine Tabelle mit Trennbalken (wie bei den Pendenzen): Jetzt stellen (hervorgehoben), später, ohne Datum. Leere Gruppen entfallen. */
+    /** Eine Tabelle ohne Zwischenzeilen; die Gruppen unterscheiden sich nur farblich: jetzt stellen (orange), später (normal), ohne Datum (hell türkis). */
     const gruppenTabelle = (gruppen, cols) => `<div class="table-flat"><table class="list re" data-zebra>
       <colgroup><col class="c-k"><col class="c-pj"><col class="c-std"><col class="c-chf"><col class="c-dt"><col class="c-dt"><col class="c-dt"><col class="c-st"><col class="c-btn"></colgroup>
       <thead><tr><th>Kunde</th><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th><th>Rechnungsdatum</th><th>Gestellt am</th><th>Bezahlt am</th><th>Status</th><th></th></tr></thead>
-      ${gruppen.filter(([, , , l]) => l.length).map(([cls, titel, hinweis, l]) => `<tbody><tr class="re-trenn ${cls}"><td colspan="9"><span>${titel}</span><span class="pd-trenn-n">${l.length}</span><small>${hinweis} · total ${fmtCHF(sum(l))}</small></td></tr></tbody>`
-        + (cls === 'jetzt' ? zeilen(l, cols).replace(/<tbody( class="([^"]*)")?>/g, (m, a, c) => `<tbody class="${c || ''} re-jetzt">`) : zeilen(l, cols))).join('')}</table></div>`;
+      ${gruppen.filter(([, , , l]) => l.length).map(([cls, titel, hinweis, l]) => zeilen(l, cols).replace(/<tbody( class="([^"]*)")?>/g, (m, a, c) => `<tbody class="${c || ''} re-g-${cls}" title="${titel}: ${hinweis}">`)).join('')}</table></div>`;
     // Alle Listen dieser Seite haben dieselben Spalten in derselben festen Breite, damit sie untereinander fluchten.
     const table = (list, cols) => `<div class="table-flat"><table class="list re" data-zebra>
       <colgroup><col class="c-k"><col class="c-pj"><col class="c-std"><col class="c-chf"><col class="c-dt"><col class="c-dt"><col class="c-dt"><col class="c-st"><col class="c-btn"></colgroup>

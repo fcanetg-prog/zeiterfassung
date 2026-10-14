@@ -799,3 +799,10 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .list.re tbody.re-jetzt tr.zb.zebra > td { background: #fdf3e2; }
 .list.re tbody.re-jetzt tr.zb:hover > td { background: #fbeacc; }
 .list.re th { overflow: visible; text-overflow: clip; }
+/* Rechnung stellen: nur Farben, keine Zwischenzeilen */
+.list.re tbody.re-g-jetzt tr.zb > td { background: #fdf0dc; }
+.list.re tbody.re-g-jetzt tr.zb.zebra > td { background: #fbe7c8; }
+.list.re tbody.re-g-jetzt tr.zb:hover > td { background: #f8dcae; }
+.list.re tbody.re-g-ohne tr.zb > td { background: #eaf6f4; }
+.list.re tbody.re-g-ohne tr.zb.zebra > td { background: #dff0ed; }
+.list.re tbody.re-g-ohne tr.zb:hover > td { background: #d2e9e5; }
