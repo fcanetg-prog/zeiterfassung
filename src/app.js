@@ -307,9 +307,9 @@
 
   const NAV = [
     ['erfassen', 'Zeiterfassung'],
-    ['projekte', 'Projekte'],
-    ['pendenzen', 'Pendenzen'],
     ['offerten', 'Offerten'],
+    ['pendenzen', 'Pendenzen'],
+    ['projekte', 'Projekte'],
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung'],
     ['einstellungen', 'Einstellungen'],
@@ -1090,8 +1090,12 @@
     const jetzt = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant <= heute).sort(nachDatum);
     const spaeter = zuStellen.filter((p) => p.rechnungGeplant && p.rechnungGeplant > heute).sort(nachDatum);
     const ohneDatum = zuStellen.filter((p) => !p.rechnungGeplant);
-    const teil = (titel, hinweis, list, cls) => (list.length ? `<div class="teil ${cls}"><h3>${titel} <span class="dim">${list.length}</span><small>${hinweis}, total ${fmtCHF(sum(list))}</small></h3>
-      ${table(list, ['geplant', 'gestellt', 'btn-gestellt'])}</div>` : '');
+    /** Eine Tabelle mit Trennbalken (wie bei den Pendenzen): Jetzt stellen (hervorgehoben), später, ohne Datum. Leere Gruppen entfallen. */
+    const gruppenTabelle = (gruppen, cols) => `<div class="table-flat"><table class="list re" data-zebra>
+      <colgroup><col class="c-k"><col class="c-pj"><col class="c-std"><col class="c-chf"><col class="c-dt"><col class="c-dt"><col class="c-dt"><col class="c-st"><col class="c-btn"></colgroup>
+      <thead><tr><th>Kunde</th><th>Projekt</th><th class="r">Stunden</th><th class="r">Betrag</th><th>Rechnungsdatum</th><th>Gestellt am</th><th>Bezahlt am</th><th>Status</th><th></th></tr></thead>
+      ${gruppen.filter(([, , , l]) => l.length).map(([cls, titel, hinweis, l]) => `<tbody><tr class="re-trenn ${cls}"><td colspan="9"><span>${titel}</span><span class="pd-trenn-n">${l.length}</span><small>${hinweis} · total ${fmtCHF(sum(l))}</small></td></tr></tbody>`
+        + (cls === 'jetzt' ? zeilen(l, cols).replace(/<tbody( class="([^"]*)")?>/g, (m, a, c) => `<tbody class="${c || ''} re-jetzt">`) : zeilen(l, cols))).join('')}</table></div>`;
     // Alle Listen dieser Seite haben dieselben Spalten in derselben festen Breite, damit sie untereinander fluchten.
     const table = (list, cols) => `<div class="table-flat"><table class="list re" data-zebra>
       <colgroup><col class="c-k"><col class="c-pj"><col class="c-std"><col class="c-chf"><col class="c-dt"><col class="c-dt"><col class="c-dt"><col class="c-st"><col class="c-btn"></colgroup>
@@ -1108,9 +1112,11 @@
     <div class="pane klapp-box">
     ${reAbschnitt('stellen', 'Rechnung stellen', zuStellen.length, sum(zuStellen), () => `
       ${zuStellen.length ? '' : '<div class="empty">Alles verrechnet, wofür Stunden erfasst sind.</div>'}
-      ${teil('Jetzt stellen', 'Rechnungsdatum heute oder schon vorbei', jetzt, 'jetzt')}
-      ${teil('Später stellen', 'Rechnungsdatum liegt in der Zukunft', spaeter, '')}
-      ${teil('Noch ohne Rechnungsdatum', 'Stunden erfasst, aber noch kein Datum gesetzt', ohneDatum, '')}
+      ${zuStellen.length ? gruppenTabelle([
+        ['jetzt', 'Jetzt stellen', 'Rechnungsdatum heute oder vorbei', jetzt],
+        ['spaeter', 'Später stellen', 'Rechnungsdatum in der Zukunft', spaeter],
+        ['ohne', 'Noch ohne Rechnungsdatum', 'Stunden erfasst, kein Datum gesetzt', ohneDatum],
+      ], ['geplant', 'gestellt', 'btn-gestellt']) : ''}
       ${by.geplant.length ? `<button class="link more" data-action="toggle-leere">${state.zeigeLeere ? 'Ausblenden' : `${by.geplant.length} weitere Projekte ohne erfasste Stunden zeigen`}</button>
         ${state.zeigeLeere ? table(by.geplant, ['geplant', 'gestellt']) : ''}` : ''}`)}
 
@@ -1165,7 +1171,6 @@
     const y = state.year, s = S();
     const mo = C.monthly(state.data, y, heute);
     const tot = mo.reduce((a, m) => ({ eff: a.eff + m.effektiv, ist: a.ist + m.ist, soll: a.soll + (m.zukunft ? 0 : m.soll) }), { eff: 0, ist: 0, soll: 0 });
-    const letzte = mo.filter((m) => !m.zukunft).pop();
     // Aktuelles Pensum: Schnitt der letzten 7 abgeschlossenen Tage (bis gestern), auf 5 Arbeitstage hochgerechnet, mit Zuschlag, gemessen an 100%.
     let pensum = null;
     if (y === +heute.slice(0, 4) && s.stundenProTag > 0) {
@@ -1219,19 +1224,18 @@
     return `
     <header class="head aus-kopf"><h1>Auswertung ${y}</h1>
       ${pensum == null ? '' : `<div class="bignum" title="Schnitt der letzten 7 Tage bis gestern, hochgerechnet auf 5 Arbeitstage, mit Zuschlag ${s.stundenZuschlag}, im Verhältnis zu ${s.stundenProTag} Stunden pro Tag"><b>${Math.round(pensum)}%</b><span>Aktuelles Pensum</span></div>`}
-      <div class="bignum"><b class="${letzte && letzte.ueberzeit < 0 ? 'neg' : ''}">${letzte ? (letzte.ueberzeit > 0 ? '+' : '') + fmtH1(letzte.ueberzeit) : '–'}</b><span>Überzeit kumuliert</span></div>
+
     </header>
     <div class="aus">
       <section class="sec">
         <h2>Monate</h2>
         <table class="list months">
-          <thead><tr><th>Monat</th><th class="r">Erfasst</th><th class="r" title="Erfasste Stunden × ${s.stundenZuschlag}">Ist mit Zuschlag</th><th class="r">Soll</th><th class="r">Differenz</th><th class="r">Überzeit kumuliert</th></tr></thead>
+          <thead><tr><th>Monat</th><th class="r">Erfasst</th><th class="r" title="Erfasste Stunden × ${s.stundenZuschlag}">Ist mit Zuschlag</th><th class="r">Soll</th><th class="r">Differenz</th></tr></thead>
           <tbody>${mo.map((m) => `<tr class="${m.zukunft ? 'future' : ''}">
             <td>${MONATE[m.monat]}${m.laufend ? ' <span class="dim">laufend</span>' : ''}</td>
             <td class="r num">${fmtH(m.effektiv)}</td><td class="r num">${fmtH1(m.ist)}</td><td class="r num">${fmtH1(m.soll)}</td>
-            <td class="r num ${m.zukunft ? '' : m.diff < 0 ? 'neg' : 'pos'}">${m.zukunft ? '' : (m.diff > 0 ? '+' : '') + fmtH1(m.diff)}</td>
-            <td class="r num ${m.ueberzeit == null ? '' : m.ueberzeit < 0 ? 'neg' : 'pos'}">${m.ueberzeit == null ? '' : (m.ueberzeit > 0 ? '+' : '') + fmtH1(m.ueberzeit)}</td></tr>`).join('')}</tbody>
-          <tfoot><tr><td>Total</td><td class="r num">${fmtH(tot.eff)}</td><td class="r num">${fmtH1(tot.ist)}</td><td class="r num">${fmtH1(tot.soll)}</td><td class="r num">${(tot.ist - tot.soll > 0 ? '+' : '') + fmtH1(tot.ist - tot.soll)}</td><td></td></tr></tfoot>
+            <td class="r num ${m.zukunft ? '' : m.diff < 0 ? 'neg' : 'pos'}">${m.zukunft ? '' : (m.diff > 0 ? '+' : '') + fmtH1(m.diff)}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><td>Total</td><td class="r num">${fmtH(tot.eff)}</td><td class="r num">${fmtH1(tot.ist)}</td><td class="r num">${fmtH1(tot.soll)}</td><td class="r num">${(tot.ist - tot.soll > 0 ? '+' : '') + fmtH1(tot.ist - tot.soll)}</td></tr></tfoot>
         </table>
         <p class="hint">Soll pro Monat: (365 − 104 Wochenendtage − ${s.ferientage} Ferientage) ÷ 12 × ${s.stundenProTag} h × ${s.pensum}%. Der laufende Monat zählt mit dem vollen Soll.</p>
       </section>

@@ -102,13 +102,11 @@
       const nachDatum = (a, b) => ((a.faellig || '9999') < (b.faellig || '9999') ? -1 : (a.faellig || '9999') > (b.faellig || '9999') ? 1 : (tagRang(a) - tagRang(b)) || a.titel.localeCompare(b.titel, 'de'));
       for (const [k, l] of Object.entries(gruppen)) l.sort(k === 'erledigt' ? (a, b) => (a.erledigt < b.erledigt ? 1 : -1) : nachDatum);
       const tags = alleTags();
-      const ohneAsana = !liste().some((p) => p.asanaId);
       return `
       <header class="head"><h1>Pendenzen</h1>
         <div class="tools">
           <input id="pd-suche" type="search" placeholder="Suchen" value="${esc(state.pd.q)}" data-pd="suche">
           <select id="pd-tag" data-pd="tag-wahl" aria-label="Nach Tag filtern"><option value="">Alle Tags</option>${tags.map((t) => `<option ${state.pd.tag === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
-          <button class="btn" data-pd="asana" title="Offene Aufgaben aus einem Asana-Export (CSV) übernehmen. Bereits übernommene werden übersprungen.">${ohneAsana ? 'Aus Asana übernehmen' : 'Asana-Export nachladen'}</button>
           <button class="btn primary" data-pd="neu">Neue Pendenz</button>
         </div>
       </header>

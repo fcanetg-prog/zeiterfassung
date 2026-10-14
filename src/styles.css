@@ -790,3 +790,12 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .list.pd td.pd-chk input[type=checkbox]:hover::after { opacity: .9; border-color: #1a8f96; }
 .list.pd td.pd-chk input[type=checkbox]:checked { background: #1a8f96; border-color: #1a8f96; }
 .list.pd td.pd-chk input[type=checkbox]:checked::after { opacity: 1; border-color: #fff; }
+/* Rechnungen: Trennbalken in «Rechnung stellen», «Jetzt stellen» hervorgehoben */
+.list.re tr.re-trenn td { height: 30px; padding: 0 14px 0 var(--k-einzug); font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; overflow: visible; }
+.list.re tr.re-trenn td small { float: right; text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 12px; }
+.list.re tr.re-trenn.jetzt td { background: #fdf0dc; color: #8a5a0c; border-bottom: 2px solid #e8b35c; }
+.list.re tr.re-trenn.spaeter td, .list.re tr.re-trenn.ohne td { background: #f3f5f5; color: var(--muted); border-top: 3px solid #fff; border-bottom: 1px solid var(--line); }
+.list.re tbody.re-jetzt tr.zb > td { background: #fffaf1; }
+.list.re tbody.re-jetzt tr.zb.zebra > td { background: #fdf3e2; }
+.list.re tbody.re-jetzt tr.zb:hover > td { background: #fbeacc; }
+.list.re th { overflow: visible; text-overflow: clip; }
