@@ -48,6 +48,8 @@
       id: String(p.id),
       titel: String(p.titel || ''),
       ...todosUndNotiz(p),
+      // Notizen und To-Dos mit Formatierung (fett, kursiv) sind als bereinigtes HTML gespeichert.
+      ...(p.notizHtml ? { notizHtml: true } : {}), ...(p.todosHtml ? { todosHtml: true } : {}),
       faellig: isoOk(p.faellig) ? p.faellig : '',
       // Das frühere Asana-Tag «Admin» heisst jetzt wie der Bereich in den Projekten: «Intern».
       tags: [...new Set((Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).trim()).filter(Boolean).map((t) => TAG_NEU[t] || t))],

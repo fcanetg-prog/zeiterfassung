@@ -249,5 +249,6 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(P.normalize({ id: 'x', wasTun: '' }).wasTun, 'umsetzen'); assert.strictEqual(P.normalize({ id: 'x', anfrage: 'abgesagt' }).anfrage, 'abgesagt');
   assert.deepStrictEqual(P.normalize({ id: 'x', tags: ['Geldcast', 'Angebot und Nachgefragt', 'Moderationen | Referate | Panel', 'Texte'] }).tags, ['Podcasts', 'Moderationen', 'Texte']);
   assert.strictEqual(P.WAS_TUN_TEXT.rueckmeldung, 'Rückmeldung überwachen'); assert.strictEqual(P.WAS_TUN_TEXT.nachfragen, 'Kurzes E-Mail schreiben');
+  assert.strictEqual(P.normalize({ id: 'x', notiz: '<b>a</b>', notizHtml: true, todosVerschoben: true }).notizHtml, true);
   console.log('Pendenzen bestanden.');
 }

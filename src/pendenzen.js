@@ -25,7 +25,7 @@
     function passt(p) {
       if (state.pd.tag && !p.tags.includes(state.pd.tag)) return false;
       const q = state.pd.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-      if (q.length) { const t = `${p.titel} ${p.notiz} ${p.tags.join(' ')}`.toLowerCase(); if (!q.every((w) => t.includes(w))) return false; }
+      if (q.length) { const t = `${p.titel} ${nurText(p, 'notiz')} ${nurText(p, 'todos')} ${p.tags.join(' ')}`.toLowerCase(); if (!q.every((w) => t.includes(w))) return false; }
       return true;
     }
 
@@ -117,6 +117,34 @@
 
     const istOffen = () => !!(state.pd.offen && finde(state.pd.offen));
 
+    /* ---------- Notizen und To-Dos mit Formatierung ---------- */
+
+    const ERLAUBT = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'DIV', 'P', 'UL', 'OL', 'LI']);
+    /** Nur einfache Auszeichnungen behalten (fett, kursiv, unterstrichen, Absätze, Listen); alles andere wird zu reinem Text. */
+    function bereinigen(html) {
+      const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+      const lauf = (n) => {
+        for (const k of [...n.childNodes]) {
+          if (k.nodeType === 1) {
+            lauf(k);
+            if (!ERLAUBT.has(k.tagName)) { k.replaceWith(...k.childNodes); continue; }
+            for (const a of [...k.attributes]) k.removeAttribute(a.name);
+          } else if (k.nodeType !== 3) k.remove();
+        }
+      };
+      const wurzel = doc.body.firstChild; lauf(wurzel);
+      return wurzel.innerHTML;
+    }
+    /** Anzeige: altes Feld (reiner Text mit Zeilenumbrüchen) oder bereinigtes HTML. */
+    const richHtml = (p, key) => (p[key + 'Html'] ? bereinigen(p[key]) : esc(p[key]).replace(/\n/g, '<br>'));
+    /** Reiner Text (für die Suche). */
+    const nurText = (p, key) => (p[key + 'Html'] ? String(p[key]).replace(/<br\s*\/?>|<\/(div|p|li)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') : String(p[key] || ''));
+    function richFeld(p, key, label, cls) {
+      return `<div class="fld"><div class="pd-rich-kopf"><label for="pd-f-${key}">${label}</label>
+          <span class="pd-rich-knoepfe"><button type="button" class="pd-fmt" data-pd="fmt" data-cmd="bold" title="Fett (Strg+B)"><b>F</b></button><button type="button" class="pd-fmt" data-pd="fmt" data-cmd="italic" title="Kursiv (Strg+I)"><i>K</i></button></span></div>
+        <div id="pd-f-${key}" class="pd-notiz pd-rich ${cls}" contenteditable="true" spellcheck="true" data-pd="rich" data-key="${key}">${richHtml(p, key)}</div></div>`;
+    }
+
     function drawerHtml() {
       const p = finde(state.pd.offen);
       if (!p) return '';
@@ -135,8 +163,8 @@
           <div class="fld"><label>Tags</label><div class="pd-tagwahl">
             ${[...new Set([...alleTags(), ...p.tags])].map((t) => `<button type="button" class="pd-tag ${farbe(t)} ${p.tags.includes(t) ? '' : 'aus'}" data-pd="tag-toggle" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
             <input id="pd-f-tag" type="text" placeholder="Neues Tag …" data-pd="tag-neu" autocomplete="off"></div></div>
-          <div class="fld"><label for="pd-f-todos">To-Dos</label><textarea id="pd-f-todos" class="pd-notiz pd-todos" rows="8" data-pd="feld" data-key="todos" spellcheck="true">${esc(p.todos)}</textarea></div>
-          <div class="fld"><label for="pd-f-notiz">Notizen</label><textarea id="pd-f-notiz" class="pd-notiz" rows="16" data-pd="feld" data-key="notiz" spellcheck="true">${esc(p.notiz)}</textarea></div>
+          ${richFeld(p, 'todos', 'To-Dos', 'pd-todos')}
+          ${richFeld(p, 'notiz', 'Notizen', '')}
           <p class="hint">${p.erstellt ? `Erstellt am ${fmtDate(p.erstellt)}.` : ''}${p.asanaId ? ' Aus Asana übernommen.' : ''}${p.erledigt ? ` Erledigt am ${fmtDate(p.erledigt)}.` : ''}</p>
         </div>
         <footer>
@@ -217,6 +245,11 @@
       const el = ev.target, a = el.dataset && el.dataset.pd;
       if (!a || !state.data) return;
       if (a === 'suche') { state.pd.q = el.value; render(); return; }
+      if (a === 'rich') {
+        const p = finde(state.pd.offen); if (!p) return;
+        p[el.dataset.key] = bereinigen(el.innerHTML); p[el.dataset.key + 'Html'] = true;
+        spaeterSpeichern(); return;
+      }
       if (a === 'feld') {
         const p = finde(state.pd.offen); if (!p) return;
         p[el.dataset.key] = el.value;
@@ -245,6 +278,17 @@
       jetztSpeichern(); render();
       const f = document.getElementById('pd-f-tag'); if (f) f.focus();
     }
+
+    // Knöpfe F/K: Auswahl im Textfeld behalten und fett/kursiv umschalten.
+    document.addEventListener('mousedown', (ev) => {
+      const b = ev.target.closest && ev.target.closest('[data-pd="fmt"]');
+      if (!b) return;
+      ev.preventDefault();
+      const feld = b.closest('.fld').querySelector('.pd-rich');
+      if (document.activeElement !== feld) feld.focus();
+      document.execCommand(b.dataset.cmd);
+      feld.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 
     document.addEventListener('keydown', (ev) => {
       const el = ev.target;
