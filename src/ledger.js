@@ -225,8 +225,10 @@
     const nimm = (o, liste) => { o.weg = true; for (const f of liste) f.weg = true; paare.push({ zeile: o.z, buchungen: liste.map((f) => f.b) }); };
 
     // 1. Schon einmal eingelesen (gleicher Schlüssel)
-    const nachSchluessel = new Map(frei.filter((f) => f.b.bankSchluessel).map((f) => [f.b.bankSchluessel, f]));
-    for (const o of offen) { const f = nachSchluessel.get(o.z.schluessel); if (f && !f.weg) nimm(o, [f]); }
+    // (eine aufgeteilte Bankbewegung, z. B. eine Sammelzahlung, hat mehrere Buchungen mit demselben Schlüssel)
+    const nachSchluessel = new Map();
+    for (const f of frei) if (f.b.bankSchluessel) (nachSchluessel.get(f.b.bankSchluessel) || nachSchluessel.set(f.b.bankSchluessel, []).get(f.b.bankSchluessel)).push(f);
+    for (const o of offen) { const fs = (nachSchluessel.get(o.z.schluessel) || []).filter((f) => !f.weg); if (fs.length) nimm(o, fs); }
     // 2. Gleicher Betrag, Datum gleich oder wenige Tage daneben (nächstes zuerst)
     for (const fenster of [0, 2, 6]) {
       for (const o of offen) {
@@ -272,6 +274,15 @@
     }
     const basis = { datum: zeile.datum, betrag: Math.abs(zeile.betrag), bankText: zeile.text, bankSchluessel: zeile.schluessel, bankDatum: zeile.datum, bankNr: zeile.nr };
     const fertig = (text, gegen, sicher) => Object.assign(basis, { text, soll: zeile.betrag > 0 ? konto : gegen, haben: zeile.betrag > 0 ? gegen : konto, sicher });
+    // Feste Regel: TWINT-Eingänge sind immer Jahresbeiträge für «Schweizer Wirtschaft Daily» (Gegenkonto wie bisher verbucht, sonst 3413).
+    if (/twint/i.test(zeile.text) && zeile.betrag > 0) {
+      const text = 'Jahresbeiträge «Schweizer Wirtschaft Daily»';
+      const frueher = paare.flatMap((p) => p.buchungen).filter((b) => b.text === text && b.soll === konto).map((b) => b.haben);
+      const haeufig = [...new Set(frueher)].sort((a, b) => frueher.filter((x) => x === b).length - frueher.filter((x) => x === a).length)[0];
+      return fertig(text, haeufig || '3413', true);
+    }
+    // Sammelzahlungen werden immer einzeln verbucht: kein Vorschlag als Ganzes.
+    if (/^sammel(zahlung|auftrag)/i.test(zeile.text.trim())) return Object.assign(fertig('Sammelzahlung', '', false), { sammel: true });
     if (!bsp.length) return fertig(zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '').slice(0, 90), '', false);
     // Gleicher Betrag wie früher schlägt alles; sonst die häufigste Kombination, bei Gleichstand die jüngste.
     const gleich = bsp.filter((x) => x.betrag === zeile.betrag).sort((a, b) => (a.datum < b.datum ? 1 : -1))[0];

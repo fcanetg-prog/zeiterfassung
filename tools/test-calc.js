@@ -151,6 +151,17 @@ console.log('Alle Prüfungen bestanden.');
     { id: 'm3', datum: '2026-03-04', soll: '6600', haben: '1010', betrag: 5, pos: 3 }, { id: 'm4', datum: '2026-03-02', soll: '6600', haben: '2000', betrag: 99, pos: 4 }];
   const pl = L.bankPlaetze(bzB, bb, '1010');
   assert.deepStrictEqual(L.bankSortiert(bb, pl).map((x) => x.id), ['m2', 'm1', 'm3', 'm4']);   // m3 steht am Bankdatum 02.03., m4 ohne Bankbewegung danach
+  {
+    const L2 = require('../src/ledger.js');
+    const tw = L2.bankVorschlag({ datum: '2026-10-13', text: 'Gutschrift TWINT Acquiring AG', betrag: 88.35, schluessel: 't1', nr: 1 }, [], '1010');
+    assert.deepStrictEqual([tw.text, tw.soll, tw.haben, tw.sicher], ['Jahresbeiträge «Schweizer Wirtschaft Daily»', '1010', '3413', true]);
+    const sa = L2.bankVorschlag({ datum: '2026-10-12', text: 'Sammelzahlung', betrag: -1250.4, schluessel: 's1', nr: 2 }, [], '1010');
+    assert.deepStrictEqual([sa.text, sa.soll, sa.haben, sa.sicher], ['Sammelzahlung', '', '1010', false]);
+    // Zwei Teile mit demselben Bank-Schlüssel decken die eine Bankbewegung
+    const ab = L2.bankAbgleich([{ datum: '2026-10-12', text: 'Sammelzahlung', betrag: -1250.4, schluessel: 's1' }],
+      [{ datum: '2026-10-12', soll: '5000', haben: '1010', betrag: 1000, bankSchluessel: 's1' }, { datum: '2026-10-12', soll: '6500', haben: '1010', betrag: 250.4, bankSchluessel: 's1' }], '1010', []);
+    assert.strictEqual(ab.paare.length, 1); assert.strictEqual(ab.paare[0].buchungen.length, 2);
+  }
   console.log('Bankabgleich bestanden.');
 }
 

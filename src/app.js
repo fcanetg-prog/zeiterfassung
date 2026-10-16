@@ -257,6 +257,8 @@
       id: b.id || uid('b'), jahr: +b.jahr || +b.datum.slice(0, 4), datum: b.datum, beleg: String(b.beleg == null ? '' : b.beleg), text: b.text || '',
       soll: String(b.soll == null ? '' : b.soll), haben: String(b.haben == null ? '' : b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
       vorschlag: !!b.vorschlag, sicher: !!b.sicher, bankText: b.bankText || '', bankSchluessel: b.bankSchluessel || '', bankDatum: b.bankDatum || null, bankNr: Number.isFinite(b.bankNr) ? b.bankNr : null,
+      // Aufgeteilte Bankbewegung (z. B. Sammelzahlung): Teile verweisen auf den Hauptteil, der das Bank-Total kennt.
+      ...(b.teilVon ? { teilVon: String(b.teilVon) } : {}), ...(C.isNum(b.bankTotal) ? { bankTotal: b.bankTotal } : {}),
     }));
     const OD = window.OffertDoc;
     // Frühere Fassungen kannten die Zuweisung zu einem einzelnen Projekt oder nur zum Kundennamen.

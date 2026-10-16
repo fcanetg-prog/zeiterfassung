@@ -109,8 +109,8 @@
         <td>${feld('datum', 'type="date"')}</td>
         <td>${feld('beleg', 'type="text"')}</td>
         <td>${feld('text', 'type="text" list="bh-texte" placeholder="Beschreibung"')}</td>
-        <td>${feld('soll', 'type="text" data-konto="1" autocomplete="off" placeholder="Soll" inputmode="numeric"')}</td>
-        <td>${feld('haben', 'type="text" data-konto="1" autocomplete="off" placeholder="Haben" inputmode="numeric"')}</td>
+        <td>${feld('soll', 'type="text" data-kontowahl="1" autocomplete="off" placeholder="Soll" inputmode="numeric"')}</td>
+        <td>${feld('haben', 'type="text" data-kontowahl="1" autocomplete="off" placeholder="Haben" inputmode="numeric"')}</td>
         <td>${feld('betrag', 'type="text" class="num r" placeholder="0.00" inputmode="decimal"')}</td>`;
     }
 
@@ -130,7 +130,7 @@
       return `
       <datalist id="bh-texte">${texte.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       <div class="bh-wrap"><table class="bh-tab">
-        <colgroup><col style="width:120px"><col style="width:62px"><col><col style="width:68px"><col style="width:68px"><col style="width:104px"><col style="width:${state.bh.edit ? 272 : 196}px"></colgroup>
+        <colgroup><col style="width:120px"><col style="width:62px"><col><col style="width:68px"><col style="width:68px"><col style="width:104px"><col style="width:${state.bh.edit ? 272 : vorschlaege().length ? 236 : 196}px"></colgroup>
         <thead><tr><th>Datum</th><th>Beleg</th><th>Beschreibung</th><th>Soll</th><th>Haben</th><th class="r">Betrag CHF</th>
           <th class="r"><input type="search" id="bh-q" placeholder="Suchen" value="${esc(state.bh.q)}" data-bh="suche"></th></tr></thead>
         <tbody>
@@ -143,10 +143,30 @@
     }
 
     function vHinweis(v) {
+      if (istSammel(v) && !v.teilVon && !teile(v).length) return 'Sammelzahlung: bitte aufteilen';
       const gegen = v.soll === BANK ? v.haben : v.soll;
       if (!gegen) return 'Gegenkonto fehlt';
       const name = kontoName(gegen) || 'Konto unbekannt';
       return v.sicher ? name : `${name}, bitte prüfen`;
+    }
+
+    /* Aufteilen einer Bankbewegung (Sammelzahlung): Der Hauptteil kennt das Bank-Total und erhält jeweils den Rest. */
+    const istSammel = (v) => /^sammel(zahlung|auftrag)/i.test(String(v.bankText || '').trim());
+    // Alle Teile, auch schon bestätigte: Sie gehören weiterhin zur selben Bankbewegung.
+    const teile = (h) => state.data.buchungen.filter((x) => x.teilVon === h.id);
+    const hauptVon = (v) => (v.teilVon ? state.data.buchungen.find((x) => x.id === v.teilVon) : v);
+    function restRechnen(h) {
+      if (!h || !h.vorschlag || !C.isNum(h.bankTotal)) return;
+      h.betrag = L.round2(h.bankTotal - teile(h).reduce((s, t) => s + (t.betrag || 0), 0));
+    }
+    function aufteilen(v) {
+      const h = hauptVon(v);
+      if (!C.isNum(h.bankTotal)) h.bankTotal = h.betrag;
+      const ausgang = h.haben === BANK;
+      const t = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), jahr: h.jahr, datum: h.datum, beleg: '', text: '', soll: ausgang ? '' : BANK, haben: ausgang ? BANK : '', betrag: 0,
+        vorschlag: true, sicher: false, bankText: h.bankText, bankSchluessel: h.bankSchluessel, bankDatum: h.bankDatum, bankNr: h.bankNr, teilVon: h.id, pos: h.pos };
+      state.data.buchungen.push(t);
+      return t;
     }
 
     /** Buchungsvorschläge aus dem Bankabgleich: farbig, direkt änderbar, zählen erst nach dem Bestätigen. */
@@ -166,18 +186,21 @@
       const feld = (v, key, extra) => `<input id="bv-${v.id}-${key}" data-bh="vfeld" data-id="${v.id}" data-key="${key}" value="${esc(v[key])}" ${extra || ''}>`;
       return kopf + vs.map((v) => {
         const gegen = v.soll === BANK ? v.haben : v.soll;
-        return `<tr class="bh-vor ${gegen && v.sicher ? '' : 'unsicher'}" data-id="${v.id}">
+        const h = hauptVon(v), nTeile = h ? teile(h).length : 0, hauptMitTeilen = !v.teilVon && nTeile > 0;
+        return `<tr class="bh-vor ${gegen && v.sicher ? '' : 'unsicher'} ${v.teilVon || hauptMitTeilen ? 'bh-teil' : ''}" data-id="${v.id}">
           <td class="num">${feld(v, 'datum', 'type="date" class="bh-vdat"')}</td><td></td>
           <td>${feld(v, 'text', 'type="text" list="bh-texte"')}<div class="bh-banktext" title="${esc(v.bankText)}">${esc(v.bankText)}</div></td>
-          <td>${feld(v, 'soll', 'type="text" data-konto="1" autocomplete="off" placeholder="Soll"')}</td>
-          <td>${feld(v, 'haben', 'type="text" data-konto="1" autocomplete="off" placeholder="Haben"')}</td>
-          <td class="num r"><input id="bv-${v.id}-betrag" data-bh="vfeld" data-id="${v.id}" data-key="betrag" type="text" class="num r bh-vbetrag" inputmode="decimal" value="${esc(Number(v.betrag).toFixed(2))}"></td>
-          <td class="r"><button class="btn small primary" data-bh="v-ok" data-id="${v.id}">Bestätigen</button> <button class="btn small" data-bh="v-weg" data-id="${v.id}" title="Nicht verbuchen und bei künftigen Importen nicht mehr vorschlagen">Verwerfen</button>
-            <div class="bh-vhin">${esc(vHinweis(v))}</div></td></tr>`;
+          <td>${feld(v, 'soll', 'type="text" data-kontowahl="1" autocomplete="off" placeholder="Soll"')}</td>
+          <td>${feld(v, 'haben', 'type="text" data-kontowahl="1" autocomplete="off" placeholder="Haben"')}</td>
+          <td class="num r">${hauptMitTeilen ? `<span class="bh-rest" title="Rest der Bankbewegung von ${chf(h.bankTotal)}">${chf(v.betrag)}</span>` : `<input id="bv-${v.id}-betrag" data-bh="vfeld" data-id="${v.id}" data-key="betrag" type="text" class="num r bh-vbetrag" inputmode="decimal" value="${esc(Number(v.betrag).toFixed(2))}">`}</td>
+          <td class="r"><button class="btn small primary" data-bh="v-ok" data-id="${v.id}">Bestätigen</button> ${v.teilVon ? `<button class="btn small" data-bh="v-teil-weg" data-id="${v.id}" title="Diesen Teil entfernen; der Betrag geht zurück zum ersten Teil">×</button>` : `<button class="btn small" data-bh="v-weg" data-id="${v.id}" title="Nicht verbuchen und bei künftigen Importen nicht mehr vorschlagen">Verwerfen</button>`}
+            <div class="bh-vhin"><button class="link bh-teilen" data-bh="v-teilen" data-id="${v.id}" title="Die Bankbewegung auf mehrere Buchungen aufteilen (z. B. Sammelzahlung)">Aufteilen</button> · ${v.teilVon ? 'Teil · ' : hauptMitTeilen ? `Rest von ${chf(h.bankTotal)} · ` : ''}<span class="bh-vhin-t">${esc(vHinweis(v))}</span></div></td></tr>`;
       }).join('');
     }
 
     function bestaetige(v) {
+      if (istSammel(v) && !v.teilVon && !teile(v).length) return 'Sammelzahlungen bitte mit «Aufteilen» einzeln verbuchen.';
+      if (!v.teilVon && teile(v).length && !(v.betrag > 0)) return 'Die Teile ergeben schon das ganze Total: Entferne einen Teil oder passe die Beträge an.';
       const p = pruefe({ datum: v.datum, beleg: '', text: v.text, soll: v.soll, haben: v.haben, betrag: String(v.betrag) });
       if (p.fehler) return p.fehler;
       Object.assign(v, p.buchung, { beleg: L.naechsterBeleg(buchungen()), vorschlag: false });
@@ -353,16 +376,21 @@
 
     function viewKonten() {
       const a = L.auswertung(plan(), buchungen());
+      const q = String(state.bh.kq || '').trim().toLowerCase();
       const sichtbar = plan().filter((z) => {
         if (state.bh.alleKonten || !z.konto) return true;
         return a.konto.has(z.konto);
       });
       // Gruppen ohne sichtbares Konto und ohne Saldo ausblenden, wenn nur bewegte Konten gezeigt werden.
-      const zeilen = sichtbar.filter((z) => state.bh.alleKonten || !z.gruppe || Math.abs(a.saldoVon(z)) > 0.004);
+      // Beim Suchen: alle Konten und Gruppen, deren Nummer oder Beschreibung passt (auch ohne Bewegung).
+      const zeilen = q
+        ? plan().filter((z) => (z.konto || z.gruppe) && q.split(/\s+/).every((w) => `${z.konto || ''} ${z.gruppe || ''} ${z.text || ''}`.toLowerCase().includes(w)))
+        : sichtbar.filter((z) => state.bh.alleKonten || !z.gruppe || Math.abs(a.saldoVon(z)) > 0.004);
       const gruppen = (plan() || []).filter((z) => z.gruppe);
       const k = state.bh.kEdit;
       return `
       <div class="bh-bar2">
+        <input id="bh-ksuche" type="search" placeholder="Konto suchen (Nummer oder Name)" value="${esc(state.bh.kq || '')}" data-bh="ksuche" class="bh-ksuche">
         <label class="check"><input type="checkbox" data-bh="alle-konten" ${state.bh.alleKonten ? 'checked' : ''}> Auch Konten ohne Bewegung zeigen</label>
         <span class="grow"></span>
         <button class="btn" data-bh="konto-neu">Konto hinzufügen</button>
@@ -384,7 +412,7 @@
           if (z.gruppe) return `<tr class="k-grp ${/^(1|2|00|E\d|10|14|20|24|2A|28)$/.test(z.gruppe) ? 'gross' : ''}"><td></td><td>${esc(z.gruppe)}</td><td></td><td>${esc(z.text)}</td><td></td><td>${esc(z.summe_in)}</td><td class="num r">${chf(s, true)}</td><td></td></tr>`;
           return `<tr class="k-kto"><td></td><td></td><td class="num">${esc(z.konto)}</td><td>${esc(z.text)}</td><td>${esc(z.bklasse)}</td><td>${esc(z.summe_in)}</td><td class="num r">${chf(s, true)}</td>
             <td class="r"><button class="link" data-bh="auszug" data-konto="${esc(z.konto)}">Auszug</button> <button class="link" data-bh="konto-edit" data-konto="${esc(z.konto)}">Ändern</button></td></tr>`;
-        }).join('')}</tbody>
+        }).join('') || `<tr><td colspan="8" class="dim">Kein Konto passt zu «${esc(state.bh.kq)}».</td></tr>`}</tbody>
       </table></div>`;
     }
 
@@ -573,6 +601,14 @@
         const [e] = state.bh.zahl.fast.splice(+el.dataset.i, 1);
         setzeBezahlt(e); state.bh.zahl.gesetzt.push(e); persist(); render();
       }
+      else if (a === 'v-teilen') {
+        const v = state.data.buchungen.find((x) => x.id === el.dataset.id); if (!v) return;
+        const t = aufteilen(v); persist(); render();
+        const f = document.getElementById(`bv-${t.id}-betrag`); if (f) { f.focus(); f.select(); }
+      } else if (a === 'v-teil-weg') {
+        const i = state.data.buchungen.findIndex((x) => x.id === el.dataset.id); if (i < 0) return;
+        const [weg] = state.data.buchungen.splice(i, 1); restRechnen(hauptVon(weg)); persist(); render();
+      }
       else if (a === 'v-ok') {
         const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
         const f = bestaetige(v);
@@ -581,6 +617,8 @@
       } else if (a === 'v-weg') {
         const i = state.data.buchungen.findIndex((x) => x.id === el.dataset.id);
         const [weg] = state.data.buchungen.splice(i, 1);
+        // Verwerfen gilt für die ganze Bankbewegung: auch ihre Teile entfernen.
+        for (let k = state.data.buchungen.length - 1; k >= 0; k--) if (state.data.buchungen[k].vorschlag && state.data.buchungen[k].teilVon === weg.id) state.data.buchungen.splice(k, 1);
         const ign = state.data.settings.bankIgnoriert || (state.data.settings.bankIgnoriert = []);
         if (weg.bankSchluessel) ign.push(weg.bankSchluessel);
         persist(); render();
@@ -635,11 +673,12 @@
       } else if (a === 'vfeld') {
         const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
         const key = el.dataset.key;
-        if (key === 'betrag') { const b = C.parseAmount(el.value); if (b == null || b <= 0) return; v.betrag = Math.round(b * 100) / 100; }
+        if (key === 'betrag') { const b = C.parseAmount(el.value); if (b == null || b <= 0) return; v.betrag = Math.round(b * 100) / 100; if (v.teilVon) restRechnen(hauptVon(v)); }
         else if (key === 'datum') { if (!/^\d{4}-\d{2}-\d{2}$/.test(el.value)) return; v.datum = el.value; }
         else v[key] = key === 'text' ? el.value : el.value.trim().split(/\s/)[0];
         v.sicher = true;   // von Hand angefasst gilt als geprüft
       } else if (a === 'suche') { state.bh.q = el.value; render(); }
+      else if (a === 'ksuche') { state.bh.kq = el.value; render(); }
       else if (a === 'kfeld') state.bh.kEdit[el.dataset.key] = el.value;
     });
 
@@ -657,7 +696,7 @@
         if (v && tr) {
           const gegen = v.soll === BANK ? v.haben : v.soll;
           tr.classList.toggle('unsicher', !(gegen && v.sicher));
-          const h = tr.querySelector('.bh-vhin'); if (h) h.textContent = vHinweis(v);
+          const h = tr.querySelector('.bh-vhin-t'); if (h) h.textContent = vHinweis(v);
         }
         persist();
         // Datum und Betrag verschieben Reihenfolge und Bank-Saldo: neu zeichnen (der Fokus bleibt über die id erhalten).
@@ -690,10 +729,10 @@
       const input = kw.input; input.value = kw.treffer[i].konto; kwSchliessen();
       input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    document.addEventListener('focusin', (ev) => { if (ev.target.dataset && ev.target.dataset.konto && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
+    document.addEventListener('focusin', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
     document.addEventListener('focusout', (ev) => { if (kw && ev.target === kw.input) setTimeout(() => { if (kw && document.activeElement !== kw.input) kwSchliessen(); }, 0); });
-    document.addEventListener('input', (ev) => { if (ev.target.dataset && ev.target.dataset.konto && ev.isTrusted && state.view === 'buchhaltung') kwZeigen(ev.target, false); });
-    document.addEventListener('click', (ev) => { if (ev.target.dataset && ev.target.dataset.konto && !kw && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
+    document.addEventListener('input', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && ev.isTrusted && state.view === 'buchhaltung') kwZeigen(ev.target, false); });
+    document.addEventListener('click', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && !kw && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
     document.addEventListener('mousedown', (ev) => {
       const z = ev.target.closest && ev.target.closest('.bh-kwahl');
       if (!z) return;

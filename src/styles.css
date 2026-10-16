@@ -828,3 +828,6 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .bh-vor input.bh-vdat { width: 128px; font-size: 12.5px; }
 .bh-vor input.bh-vbetrag { width: 96px; text-align: right; }
 .bh-kwahl { max-width: 440px; }
+.bh-ksuche { width: 260px; margin-right: 14px; }
+.bh-vhin .bh-teilen { font-size: inherit; padding: 0; }
+.bh-vor .bh-vhin { text-align: right; }
