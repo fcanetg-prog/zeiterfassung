@@ -102,7 +102,6 @@
       </div>`;
     }
 
-    const kontoListe = () => `<datalist id="bh-konten">${konten().map((z) => `<option value="${esc(z.konto)}">${esc(z.text)}</option>`).join('')}</datalist>`;
 
     function formZeile(f, pre, aktion) {
       const feld = (key, extra) => `<input id="${pre}-${key}" data-bh="feld" data-form="${aktion}" data-key="${key}" value="${esc(f[key])}" ${extra || ''}>`;
@@ -110,8 +109,8 @@
         <td>${feld('datum', 'type="date"')}</td>
         <td>${feld('beleg', 'type="text"')}</td>
         <td>${feld('text', 'type="text" list="bh-texte" placeholder="Beschreibung"')}</td>
-        <td>${feld('soll', 'type="text" list="bh-konten" placeholder="Soll" inputmode="numeric"')}</td>
-        <td>${feld('haben', 'type="text" list="bh-konten" placeholder="Haben" inputmode="numeric"')}</td>
+        <td>${feld('soll', 'type="text" data-konto="1" autocomplete="off" placeholder="Soll" inputmode="numeric"')}</td>
+        <td>${feld('haben', 'type="text" data-konto="1" autocomplete="off" placeholder="Haben" inputmode="numeric"')}</td>
         <td>${feld('betrag', 'type="text" class="num r" placeholder="0.00" inputmode="decimal"')}</td>`;
     }
 
@@ -129,7 +128,7 @@
             <td class="num" title="${esc(kontoName(b.soll))}">${esc(b.soll)}</td><td class="num" title="${esc(kontoName(b.haben))}">${esc(b.haben)}</td>
             <td class="num r">${chf(b.betrag)}</td><td></td></tr>`);
       return `
-      ${kontoListe()}<datalist id="bh-texte">${texte.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
+      <datalist id="bh-texte">${texte.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       <div class="bh-wrap"><table class="bh-tab">
         <colgroup><col style="width:120px"><col style="width:62px"><col><col style="width:68px"><col style="width:68px"><col style="width:104px"><col style="width:${state.bh.edit ? 272 : 196}px"></colgroup>
         <thead><tr><th>Datum</th><th>Beleg</th><th>Beschreibung</th><th>Soll</th><th>Haben</th><th class="r">Betrag CHF</th>
@@ -168,11 +167,11 @@
       return kopf + vs.map((v) => {
         const gegen = v.soll === BANK ? v.haben : v.soll;
         return `<tr class="bh-vor ${gegen && v.sicher ? '' : 'unsicher'}" data-id="${v.id}">
-          <td class="num">${fmtDate(v.datum)}</td><td></td>
+          <td class="num">${feld(v, 'datum', 'type="date" class="bh-vdat"')}</td><td></td>
           <td>${feld(v, 'text', 'type="text" list="bh-texte"')}<div class="bh-banktext" title="${esc(v.bankText)}">${esc(v.bankText)}</div></td>
-          <td>${feld(v, 'soll', 'type="text" list="bh-konten" placeholder="Soll"')}</td>
-          <td>${feld(v, 'haben', 'type="text" list="bh-konten" placeholder="Haben"')}</td>
-          <td class="num r">${chf(v.betrag)}</td>
+          <td>${feld(v, 'soll', 'type="text" data-konto="1" autocomplete="off" placeholder="Soll"')}</td>
+          <td>${feld(v, 'haben', 'type="text" data-konto="1" autocomplete="off" placeholder="Haben"')}</td>
+          <td class="num r"><input id="bv-${v.id}-betrag" data-bh="vfeld" data-id="${v.id}" data-key="betrag" type="text" class="num r bh-vbetrag" inputmode="decimal" value="${esc(Number(v.betrag).toFixed(2))}"></td>
           <td class="r"><button class="btn small primary" data-bh="v-ok" data-id="${v.id}">Bestätigen</button> <button class="btn small" data-bh="v-weg" data-id="${v.id}" title="Nicht verbuchen und bei künftigen Importen nicht mehr vorschlagen">Verwerfen</button>
             <div class="bh-vhin">${esc(vHinweis(v))}</div></td></tr>`;
       }).join('');
@@ -635,7 +634,10 @@
         if (el.dataset.form === 'neu') { const h = $('#bh-hinweis'); if (h) h.textContent = hinweisNeu(); }
       } else if (a === 'vfeld') {
         const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
-        v[el.dataset.key] = el.dataset.key === 'text' ? el.value : el.value.trim().split(/\s/)[0];
+        const key = el.dataset.key;
+        if (key === 'betrag') { const b = C.parseAmount(el.value); if (b == null || b <= 0) return; v.betrag = Math.round(b * 100) / 100; }
+        else if (key === 'datum') { if (!/^\d{4}-\d{2}-\d{2}$/.test(el.value)) return; v.datum = el.value; }
+        else v[key] = key === 'text' ? el.value : el.value.trim().split(/\s/)[0];
         v.sicher = true;   // von Hand angefasst gilt als geprüft
       } else if (a === 'suche') { state.bh.q = el.value; render(); }
       else if (a === 'kfeld') state.bh.kEdit[el.dataset.key] = el.value;
@@ -658,10 +660,61 @@
           const h = tr.querySelector('.bh-vhin'); if (h) h.textContent = vHinweis(v);
         }
         persist();
+        // Datum und Betrag verschieben Reihenfolge und Bank-Saldo: neu zeichnen (der Fokus bleibt über die id erhalten).
+        if (el.dataset.key === 'datum' || el.dataset.key === 'betrag') render();
       }
       else if (a === 'alle-konten') { state.bh.alleKonten = el.checked; render(); }
       else if (a === 'konto-wahl') { state.bh.konto = el.value; render(); }
     });
+
+    /* ---------- Kontoauswahl: eigene, scrollbare Liste statt der Vorschlagsliste des Browsers ---------- */
+
+    let kw = null;   // { input, box, treffer, i }
+    function kwSchliessen() { if (kw) { kw.box.remove(); kw = null; } }
+    function kwZeigen(input, alle) {
+      const q = alle ? '' : input.value.trim().toLowerCase();
+      const liste = konten().filter((z) => !q || z.konto.startsWith(q) || String(z.text).toLowerCase().includes(q));
+      if (!kw || kw.input !== input) { kwSchliessen(); const box = document.createElement('div'); box.className = 'bh-kwahl'; document.body.appendChild(box); kw = { input, box }; }
+      kw.treffer = liste;
+      kw.i = Math.max(0, liste.findIndex((z) => z.konto === input.value.trim().split(/\s/)[0]));
+      kw.box.innerHTML = liste.length ? liste.map((z, i) => `<div class="bh-kw-z ${i === kw.i ? 'on' : ''}" data-i="${i}"><b>${esc(z.konto)}</b><span>${esc(z.text)}</span></div>`).join('') : '<div class="bh-kw-leer">Kein passendes Konto</div>';
+      const r = input.getBoundingClientRect(), hoehe = Math.min(320, window.innerHeight - r.bottom - 12);
+      Object.assign(kw.box.style, { left: `${r.left}px`, minWidth: `${Math.max(r.width, 280)}px`, ...(hoehe >= 160 ? { top: `${r.bottom + 2}px`, maxHeight: `${hoehe}px`, bottom: '' } : { top: '', bottom: `${window.innerHeight - r.top + 2}px`, maxHeight: `${Math.min(320, r.top - 12)}px` }) });
+      // Nicht über den rechten Fensterrand hinaus
+      const breite = kw.box.offsetWidth;
+      if (r.left + breite > window.innerWidth - 12) kw.box.style.left = `${Math.max(12, window.innerWidth - 12 - breite)}px`;
+      const on = kw.box.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+    }
+    function kwWaehlen(i) {
+      if (!kw || !kw.treffer[i]) return;
+      const input = kw.input; input.value = kw.treffer[i].konto; kwSchliessen();
+      input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    document.addEventListener('focusin', (ev) => { if (ev.target.dataset && ev.target.dataset.konto && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
+    document.addEventListener('focusout', (ev) => { if (kw && ev.target === kw.input) setTimeout(() => { if (kw && document.activeElement !== kw.input) kwSchliessen(); }, 0); });
+    document.addEventListener('input', (ev) => { if (ev.target.dataset && ev.target.dataset.konto && ev.isTrusted && state.view === 'buchhaltung') kwZeigen(ev.target, false); });
+    document.addEventListener('click', (ev) => { if (ev.target.dataset && ev.target.dataset.konto && !kw && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
+    document.addEventListener('mousedown', (ev) => {
+      const z = ev.target.closest && ev.target.closest('.bh-kwahl');
+      if (!z) return;
+      ev.preventDefault();   // Fokus im Feld lassen
+      const zeile = ev.target.closest('.bh-kw-z'); if (zeile) kwWaehlen(+zeile.dataset.i);
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (!kw || ev.target !== kw.input) return;
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault(); ev.stopImmediatePropagation();
+        kw.i = Math.max(0, Math.min(kw.treffer.length - 1, kw.i + (ev.key === 'ArrowDown' ? 1 : -1)));
+        kw.box.querySelectorAll('.bh-kw-z').forEach((n, i) => n.classList.toggle('on', i === kw.i));
+        const on = kw.box.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+      } else if ((ev.key === 'Enter' || ev.key === 'Tab') && kw.treffer.length && kw.input.value.trim() !== kw.treffer[kw.i].konto) {
+        if (ev.key === 'Enter') { ev.preventDefault(); ev.stopImmediatePropagation(); }
+        kwWaehlen(kw.i);
+      } else if (ev.key === 'Escape') { ev.stopImmediatePropagation(); kwSchliessen(); }
+      else if (ev.key === 'Enter' || ev.key === 'Tab') kwSchliessen();
+    }, true);
+    window.addEventListener('resize', kwSchliessen);
+    document.addEventListener('scroll', (ev) => { if (kw && !kw.box.contains(ev.target)) kwSchliessen(); }, true);
 
     document.addEventListener('keydown', (ev) => {
       const el = ev.target;

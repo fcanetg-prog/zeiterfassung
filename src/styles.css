@@ -816,3 +816,15 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .pd-rich-knoepfe { display: inline-flex; gap: 4px; }
 .pd-fmt { border: 1px solid var(--line); background: #fff; border-radius: 4px; width: 28px; height: 24px; cursor: pointer; font-size: 13px; color: var(--ink, #1c2b2b); }
 .pd-fmt:hover { border-color: var(--teal-deep); background: #eef7f7; }
+/* Buchhaltung: eigene Kontoauswahl (scrollbar) */
+.bh-kwahl { position: fixed; z-index: 60; background: #fff; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(15, 52, 56, .18); overflow-y: auto; font-size: 13px; padding: 4px 0; }
+.bh-kw-z { display: flex; gap: 10px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.bh-kw-z b { width: 44px; flex: none; font-variant-numeric: tabular-nums; }
+.bh-kw-z span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.bh-kw-z:hover, .bh-kw-z.on { background: #e6f2f2; }
+.bh-kw-z.on span { color: var(--ink, #1c2b2b); }
+.bh-kw-leer { padding: 6px 12px; color: var(--muted); }
+/* Buchungsvorschläge: Datum und Betrag bearbeitbar */
+.bh-vor input.bh-vdat { width: 128px; font-size: 12.5px; }
+.bh-vor input.bh-vbetrag { width: 96px; text-align: right; }
+.bh-kwahl { max-width: 440px; }
