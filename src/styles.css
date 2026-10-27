@@ -904,7 +904,8 @@ tr.bu-nicht td { color: var(--muted); }
 .bu-zn { font-size: 11px; margin-left: 4px; }
 tr.bu-weg td { color: var(--muted); text-decoration: line-through; }
 tr.bu-weg td input { text-decoration: line-through; }
-tr.bu-add td { height: 26px; padding-left: calc(var(--k-einzug) + 14px); }
+.list.bu tr.bu-add td { height: 26px; padding-left: calc(var(--k-einzug) + 21px); }
+.list.bu tr.bu-add.bu-add-g td { padding-left: 38px; }
 tr.bu-add .link { font-size: 12px; color: var(--muted); }
 tr.bu-add .link:hover { color: var(--teal-deep); }
 tr.bu-sum td { font-weight: 600; border-top: 1px solid var(--line); background: var(--surface); font-variant-numeric: tabular-nums; }
@@ -953,3 +954,32 @@ tr.bu-spiel.neg td:nth-child(2) { color: var(--red); }
 select.bu-kwahl { width: 150px; }
 select.bu-kwahl.gesetzt { opacity: .55; }
 .list.bu td.num.r .bu-fest { padding-right: 0; }
+
+/* Budget: Info zu den Spalten der Einnahmen */
+.bu-info { position: relative; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--muted); background: #fff; color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 700; line-height: 15px; padding: 0; cursor: pointer; vertical-align: middle; }
+.bu-info:hover, .bu-info:focus { color: var(--teal-deep); border-color: var(--teal-deep); outline: none; }
+.bu-info:hover::after, .bu-info:focus::after { content: attr(data-tip); position: absolute; left: 24px; top: 50%; transform: translateY(-50%); width: 260px; background: #1c2b2b; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.4; text-align: left; padding: 7px 10px; border-radius: 6px; z-index: 20; white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.list.bu tr.klapp-kopf > td:last-child { overflow: visible; }
+
+/* Budget: private Ausgaben bisher */
+.bv-legende { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px 4px var(--k-einzug); font-size: 12px; color: var(--muted); }
+.bv-legende i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.bv-legende i.gut { background: #4a9d8f; } .bv-legende i.vor { background: #d39a2c; } .bv-legende i.ueber { background: #c0392b; }
+.bv-legende i.linie { width: 2px; height: 12px; background: #1c2b2b; vertical-align: -2px; }
+.bv-liste { padding: 6px 16px 14px var(--k-einzug); display: grid; grid-template-columns: minmax(160px, 260px) 190px 52px 1fr; column-gap: 14px; align-items: center; }
+.bv-z { display: contents; }
+.bv-z > div { padding: 5px 0; font-size: var(--k-schrift); }
+.bv-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bv-zahl { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bv-zahl .dim { font-size: 11px; }
+.bv-pc { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+.bv-pc.vor { color: #a8740f; font-weight: 600; } .bv-pc.ueber { color: #c0392b; font-weight: 600; }
+.bv-g { grid-column: 1 / -1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 12px 0 2px; border-bottom: 1px solid var(--line-soft); margin-bottom: 2px; }
+.bv-z.bv-total > div { font-weight: 600; padding: 8px 0 10px; }
+.bv-bar { position: relative; height: 10px; background: #e8eeee; border-radius: 5px; }
+.bv-bar.gross { height: 14px; border-radius: 7px; }
+.bv-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; }
+.bv-fill.gut { background: #4a9d8f; } .bv-fill.vor { background: #d39a2c; } .bv-fill.ueber { background: #c0392b; }
+.bv-zeit { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #1c2b2b; border-radius: 1px; }
+.bv-mehr { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); font-size: 9px; color: #c0392b; }
+.bv-leer { font-size: 11px; color: var(--muted); }

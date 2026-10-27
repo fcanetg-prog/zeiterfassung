@@ -1288,12 +1288,14 @@
   /** MWST-Satz und Saldosteuersatz pro Jahr (für den Reiter Budget). */
   function mwstJahreHtml() {
     const m = S().mwstJahre || {};
-    const jahre = [...new Set([...Object.keys(m).map(Number), ...(state.data.budgetPosten || []).map((b) => b.jahr), +heute.slice(0, 4)])].sort((a, b) => a - b);
+    // Erfasste Jahre, Jahre mit Budget und die nächsten fünf Jahre
+    const h = +heute.slice(0, 4), kuenftig = [0, 1, 2, 3, 4, 5].map((k) => h + k);
+    const jahre = [...new Set([...Object.keys(m).map(Number), ...(state.data.budgetPosten || []).map((b) => b.jahr), ...kuenftig])].sort((a, b) => a - b);
     const feld = (j, k) => { const v = m[j] && m[j][k]; return `<input id="mj-${j}-${k}" type="text" inputmode="decimal" class="num r" value="${v == null ? '' : esc(String(v))}" placeholder="${esc(String(window.BudgetDoc.saetzeFuer(S(), j)[k]))}" data-action="mwst-jahr" data-jahr="${j}" data-key="${k}" aria-label="${k === 'mwst' ? 'MWST-Satz' : 'Saldosteuersatz'} ${j}">`; };
     return `<section class="sec"><h2>Mehrwertsteuer im Budget</h2>
       <table class="mj-tab"><thead><tr><th>Jahr</th><th class="r">MWST-Satz in %</th><th class="r">Saldosteuersatz in %</th></tr></thead>
         <tbody>${jahre.map((j) => `<tr><td>${j}</td><td>${feld(j, 'mwst')}</td><td>${feld(j, 'saldo')}</td></tr>`).join('')}</tbody></table>
-      <p class="hint">Der MWST-Satz kommt im Budget auf die Einnahmen (Spalte «inkl. MWST»), der Saldosteuersatz rechnet die Mehrwertsteuer bei den Ausgaben vom Umsatz. Leere Felder übernehmen das Jahr davor. Weitere Jahre erscheinen, sobald es dafür ein Budget gibt.</p>
+      <p class="hint">Der MWST-Satz kommt im Budget auf die Einnahmen (Spalte «inkl. MWST»), der Saldosteuersatz rechnet die Mehrwertsteuer bei den Ausgaben vom Umsatz. Ein leeres Feld übernimmt den Satz des Jahres davor: Was du für ein Jahr einträgst, gilt also auch für alle folgenden, bis du einen anderen Satz einträgst.</p>
     </section>`;
   }
 

@@ -84,11 +84,6 @@
       const tag = Math.floor((h - new Date(j, 0, 1)) / 864e5) + 1, tage = (j % 4 === 0 && (j % 100 !== 0 || j % 400 === 0)) ? 366 : 365;
       return Math.round(ist * tage / tag);
     }
-    function istZelle(budget, ist, mitTitel) {
-      if (ist == null) return '<span class="dim" title="Kein Konto in der Buchhaltung privat verknüpft">–</span>';
-      const hr = hochrechnung(ist), ueber = ist > budget + 0.004, knapp = !ueber && hr != null && hr > budget + 0.004;
-      return `<span class="bu-ist ${ueber ? 'ueber' : knapp ? 'knapp' : ''}" title="${mitTitel !== false ? `${budget ? Math.round(ist / budget * 100) + ' % des Budgetrahmens' : ''}${hr != null ? `${budget ? ' · ' : ''}Hochrechnung aufs Jahr: ${fr(hr)}` : ''}` : ''}">${fr(ist)}</span>`;
-    }
     function kontoWahl(p) {
       const k = kontoVon(p), ks = aufwandKonten();
       if (!ks.length) return '';
@@ -97,7 +92,7 @@
     }
 
     /** Bereiche mit nur einem Betrag (Ausgaben, Lohneinnahmen) zeigen ihn in der rechten Spalte, bündig mit «inkl. MWST». */
-    const EINSPALTIG = new Set(['ausgaben', 'lohn']);
+    const EINSPALTIG = new Set(['ausgaben', 'lohn', 'privat']);
     const zwei = (bereich, a, b, klA, klB) => (EINSPALTIG.has(bereich)
       ? `<td></td><td class="${klA || 'num r'}">${a}</td>`
       : `<td class="${klA || 'num r'}">${a}</td><td class="${klB || 'num r'}">${b}</td>`);
@@ -109,14 +104,14 @@
       const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) von ${fr(z.wert && S.saldo ? z.wert * 100 / S.saldo : 0)}` : o ? 'Betrag aus der verknüpften Offerte' : '';
       const betrag = fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
       const notizAuf = state.bu.notiz.has(p.id);
-      const priv = p.bereich === 'privat', ist = priv ? istVon(kontoVon(p)) : null;
+      const priv = p.bereich === 'privat';
       const akt = `${priv ? kontoWahl(p) : ''}${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
         ${ein && p.satz == null && !o ? `<label class="bu-om ${p.ohneMwst ? 'an' : ''}" title="Ohne MWST: nicht mehrwertsteuerpflichtig (z. B. Abo-Beiträge). Zählt zum Umsatz, aber ohne MWST-Zuschlag."><input type="checkbox" data-bu="ohneMwst" data-id="${p.id}"${p.ohneMwst ? ' checked' : ''}>o. MWST</label>` : ''}
         <button class="bu-nz ${p.notiz ? 'hat' : ''} ${notizAuf ? 'auf' : ''}" data-bu="notiz" data-id="${p.id}" title="${p.notiz ? esc(p.notiz) : 'Notiz hinzufügen'}" aria-label="Notiz" aria-expanded="${notizAuf}">${p.notiz ? 'Notiz' : '+ Notiz'}</button>
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
       return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''}" data-id="${p.id}">
         <td class="bu-po">${textFeld(p)}</td>
-        ${zwei(p.bereich, betrag, ein ? fr(z.inkl) : priv ? istZelle(z.wert, ist) : '', 'bu-wert', 'num r bu-inkl')}
+        ${zwei(p.bereich, betrag, ein ? fr(z.inkl) : '', 'bu-wert', 'num r bu-inkl')}
         <td class="r bu-akt">${akt}</td></tr>
         ${notizAuf ? `<tr class="bu-nzz"><td colspan="4"><input id="bu-${p.id}-notiz" class="inline bu-notiz" type="text" value="${esc(p.notiz)}" placeholder="Notiz zu diesem Posten" data-bu="feld" data-id="${p.id}" data-key="notiz"></td></tr>` : ''}`;
     }
@@ -147,8 +142,7 @@
           html += `<tr class="bu-add"><td colspan="4"><button class="link" data-bu="neu" data-bereich="${bereich}" data-gruppe="">+ Posten</button></td></tr>`;
           continue;
         }
-        const istG = bereich === 'privat' ? g.zeilen.reduce((s, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? s : (s || 0) + i; }, null) : null;
-        html += gruppeKopf(bereich, g.name, g.summe, bereich === 'privat' ? istZelle(g.summe, istG) : g.inkl, g.zeilen.length);
+        html += gruppeKopf(bereich, g.name, g.summe, g.inkl, g.zeilen.length);
         if (!gOffen(bereich, g.name)) continue;
         for (const z of g.zeilen) html += postenZeilen(z);
         html += `<tr class="bu-add"><td colspan="4"><button class="link" data-bu="neu" data-bereich="${bereich}" data-gruppe="${esc(g.name)}">+ Posten${g.name ? ' in ' + esc(g.name) : ''}</button></td></tr>`;
@@ -161,12 +155,8 @@
     function bereich([key, titel], r) {
       const S = r.saetze;
       const zu = state.bu.zu.has(key);
-      const istP = key === 'privat' ? r.gruppen.privat.reduce((s, g) => g.zeilen.reduce((t, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? t : (t || 0) + i; }, s), null) : null;
-      const kopfSumme = { ausgaben: [r.ausgaben, null], einnahmen: [r.umsatz, r.einnahmen], lohn: [r.lohnTotal, null], privat: [r.privat, istZelle(r.privat, istP)] }[key];
+      const kopfSumme = { ausgaben: [r.ausgaben, null], einnahmen: [r.umsatz, r.einnahmen], lohn: [r.lohnTotal, null], privat: [r.privat, null] }[key];
       let inhalt = '';
-      if (EINSPALTIG.has(key)) inhalt += `<tr class="bu-sub"><td></td><td></td><td class="r">Betrag</td><td></td></tr>`;
-      if (key === 'einnahmen') inhalt += `<tr class="bu-sub"><td></td><td class="r">Betrag ohne MWST</td><td class="r" title="Plus ${S.mwst} % MWST (Satz ${jahr()} in den Einstellungen)">inkl. MWST ${S.mwst} %</td><td class="r"><span class="bu-saetze">${S.erfasst ? '' : 'Sätze für ' + jahr() + ' noch nicht erfasst · '}<button class="link" data-action="nav" data-view="einstellungen">MWST-Sätze</button></span></td></tr>`;
-      if (key === 'privat') inhalt += `<tr class="bu-sub"><td>Budgetrahmen, den du dir selber gibst</td><td class="r">Budgetrahmen</td><td class="r" title="Saldo der Konten in der Buchhaltung privat ${jahr()}">Ist bisher</td><td></td></tr>`;
       if (key === 'lohn') inhalt += `<tr class="zb bu-z bu-auto"><td class="bu-po"><span class="bu-gname-fix" title="Total Einnahmen inkl. MWST minus Total Ausgaben der GmbH">Fabio Canetg GmbH</span> <span class="dim bu-zn">Einnahmen minus Ausgaben</span></td><td></td><td class="num r"><span class="bu-fest">${fr(r.gmbhLohn)}</span></td><td></td></tr>`;
       inhalt += gruppenZeilen(key, r);
       if (key === 'einnahmen' && r.auto.length) {
@@ -177,7 +167,8 @@
             <td class="num r"><span class="bu-fest">${fr(z.wert)}</span></td><td class="num r bu-inkl">${fr(z.inkl)}</td><td></td></tr>`;
         }
       }
-      inhalt += `<tr class="bu-add"><td colspan="4"><button class="link" data-bu="neu-gruppe" data-bereich="${key}">+ Gruppe</button></td></tr>`;
+      // Einnahmen und Lohneinnahmen haben keine Untergruppen
+      if (key === 'ausgaben' || key === 'privat') inhalt += `<tr class="bu-add bu-add-g"><td colspan="4"><button class="link" data-bu="neu-gruppe" data-bereich="${key}">+ Gruppe</button></td></tr>`;
       if (key === 'ausgaben') inhalt += summeZeile(key, 'Total Ausgaben', r.ausgaben, null, 'bu-total');
       if (key === 'einnahmen') {
         inhalt += summeZeile(key, 'Total Einnahmen', r.umsatz, r.einnahmen, 'bu-total');
@@ -185,13 +176,57 @@
       }
       if (key === 'lohn') inhalt += summeZeile(key, 'Total Lohneinnahmen', r.lohnTotal, null, 'bu-total');
       if (key === 'privat') {
-        inhalt += `<tr class="bu-sum bu-total"><td>Total private Ausgaben</td><td class="num r">${fr(r.privat)}</td><td class="num r">${istZelle(r.privat, istP)}</td><td></td></tr>`;
+        inhalt += summeZeile(key, 'Total private Ausgaben', r.privat, null, 'bu-total');
         inhalt += summeZeile(key, 'Total Lohneinnahmen (oben)', r.lohnTotal, null, 'bu-mwst');
-        inhalt += `<tr class="bu-sum bu-total bu-spiel ${r.spielraum < 0 ? 'neg' : 'pos'}"><td title="Lohneinnahmen minus private Ausgaben gemäss Budgetrahmen">${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum (Sparen)'}</td><td class="num r">${fr(r.spielraum)}</td><td></td><td></td></tr>`;
+        inhalt += `<tr class="bu-sum bu-total bu-spiel ${r.spielraum < 0 ? 'neg' : 'pos'}"><td title="Lohneinnahmen minus private Ausgaben gemäss Budgetrahmen">${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum (Sparen)'}</td><td></td><td class="num r">${fr(r.spielraum)}</td><td></td></tr>`;
       }
       return `<tbody class="bu-ab" data-zebra>
-        <tr class="klapp-kopf" data-bu="auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${!zu}"><td><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${titel}</td>${zwei(key, fr(kopfSumme[0]), zahl(kopfSumme[1]))}<td></td></tr>
+        <tr class="klapp-kopf" data-bu="auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${!zu}"><td><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${titel}</td>${zwei(key, fr(kopfSumme[0]), zahl(kopfSumme[1]))}<td>${key === 'einnahmen' ? `<button class="bu-info" data-action="nav" data-view="einstellungen" aria-label="Erklärung der beiden Beträge" data-tip="Links ohne MWST, rechts inkl. ${S.mwst} % MWST (Satz ${jahr()}${S.erfasst ? '' : ', noch nicht erfasst'}). Klick: MWST-Sätze in den Einstellungen.">i</button>` : ''}</td></tr>
         ${zu ? '' : inhalt}</tbody>`;
+    }
+
+    /**
+     * Budgetrahmen gegen die bisherigen Ausgaben (Buchhaltung privat): pro Posten ein Balken mit dem ausgegebenen Anteil
+     * und einer senkrechten Linie für den Anteil des Jahres, der schon vergangen ist.
+     */
+    function verlauf(r) {
+      const posten = r.gruppen.privat.flatMap((g) => g.zeilen.map((z) => ({ g: g.name, p: z.posten, budget: z.wert, bisher: istVon(kontoVon(z.posten)) })));
+      if (!posten.length) return '';
+      const j = jahr(), h = new Date(), jetzt = h.getFullYear();
+      const tage = (j % 4 === 0 && (j % 100 !== 0 || j % 400 === 0)) ? 366 : 365;
+      const zeit = j < jetzt ? 1 : j > jetzt ? 0 : (Math.floor((h - new Date(j, 0, 1)) / 864e5) + 1) / tage;
+      const zu = state.bu.zu.has('verlauf');
+      const mitKonto = posten.filter((x) => x.bisher != null);
+      const tot = { budget: posten.reduce((s, x) => s + x.budget, 0), bisher: mitKonto.reduce((s, x) => s + x.bisher, 0) };
+      const pc = (x) => `${Math.round(x * 100)} %`;
+      const balken = (budget, bisher, gross) => {
+        if (bisher == null) return `<div class="bv-leer">kein Konto verknüpft</div>`;
+        const anteil = budget > 0 ? bisher / budget : bisher > 0 ? 1.5 : 0;
+        const kl = anteil > 1.0001 ? 'ueber' : anteil > zeit + 0.05 ? 'vor' : 'gut';
+        const breite = Math.min(anteil, 1) * 100;
+        return `<div class="bv-bar ${gross ? 'gross' : ''}" title="${fr(bisher)} von ${fr(budget)} ausgegeben (${pc(anteil)}); ${pc(zeit)} des Jahres vergangen${hochrechnung(bisher) != null ? `; Hochrechnung aufs Jahr: ${fr(hochrechnung(bisher))}` : ''}">
+          <div class="bv-fill ${kl}" style="width:${breite.toFixed(1)}%"></div>
+          <div class="bv-zeit" style="left:${(zeit * 100).toFixed(1)}%"></div>
+          ${anteil > 1.0001 ? '<div class="bv-mehr" aria-hidden="true">▶</div>' : ''}</div>`;
+      };
+      const zeile = (name, budget, bisher, kl) => {
+        const anteil = bisher == null ? null : budget > 0 ? bisher / budget : null;
+        return `<div class="bv-z ${kl || ''}"><div class="bv-name" title="${esc(name)}">${esc(name)}</div>
+          <div class="bv-zahl">${bisher == null ? '–' : fr(bisher)} <span class="dim">von ${fr(budget)}</span></div>
+          <div class="bv-pc ${anteil != null && anteil > 1.0001 ? 'ueber' : anteil != null && anteil > zeit + 0.05 ? 'vor' : ''}">${anteil == null ? '' : pc(anteil)}</div>
+          ${balken(budget, bisher, kl === 'bv-total')}</div>`;
+      };
+      let html = zeile('Total private Ausgaben', tot.budget, mitKonto.length ? tot.bisher : null, 'bv-total');
+      let gAlt = null;
+      for (const x of posten) {
+        if (x.g !== gAlt) { html += `<div class="bv-g">${esc(x.g || 'Ohne Gruppe')}</div>`; gAlt = x.g; }
+        html += zeile(x.p.text || 'Ohne Namen', x.budget, x.bisher);
+      }
+      return `<section class="pane klapp-box bu-box bv">
+        <div class="klapp-kopf" data-bu="auf" data-key="verlauf" tabindex="0" role="button" aria-expanded="${!zu}"><span class="klapp-chev">${zu ? '▸' : '▾'}</span>Private Ausgaben bisher<span class="bu-kh">${j === jetzt ? `Stand ${h.getDate()}.${h.getMonth() + 1}.${j}: ${pc(zeit)} des Jahres vergangen` : j < jetzt ? `${j} ist abgeschlossen` : `${j} hat noch nicht begonnen`}</span></div>
+        ${zu ? '' : `<div class="bv-legende"><span><i class="gut"></i>im Rahmen der Zeit</span><span><i class="vor"></i>schneller als die Zeit</span><span><i class="ueber"></i>über dem Budget</span><span><i class="linie"></i>vergangene Zeit</span><span class="dim">Bisher = Saldo der Konten in der Buchhaltung privat ${j}, nur bestätigte Buchungen.</span></div>
+        <div class="bv-liste">${html}</div>`}
+      </section>`;
     }
 
     /** Die Rechnung des Jahres auf einen Blick: GmbH → Lohn → privates Budget → Spielraum. */
@@ -223,7 +258,8 @@
           <colgroup><col class="c-po"><col class="c-be"><col class="c-in"><col class="c-ak"></colgroup>
           ${BD.BEREICHE.map((b) => bereich(b, r)).join('')}
         </table>
-      </section>`;
+      </section>
+      ${verlauf(r)}`;
     }
 
     /* ---------- Bearbeiten ---------- */
