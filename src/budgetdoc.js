@@ -51,6 +51,7 @@
     if (String(p.offeriertFormel || '').trim()) { o.offeriertFormel = String(p.offeriertFormel); o.offeriert = formelWert(p.offeriertFormel) || 0; }
     if (p.offerteId) o.offerteId = String(p.offerteId);
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
+    if (p.jahresausgabe) o.jahresausgabe = true;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
     return o;
   }
 
@@ -213,5 +214,13 @@
     });
   }
 
-  return { BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
+  /** Private Budgetposten, die einmalig oder einmal im Jahr fällig sind. */
+  const JAHRESAUSGABEN = /^(gönner|sbb|auto|zeitschriften|multimedia|reisen|gurten|ausserordentliches|krankenkasse|arztkosten|linsen|steuern)/i;
+  function jahresausgabenMarkieren(posten) {
+    let n = 0;
+    for (const p of posten) if (p.bereich === 'privat' && !p.jahresausgabe && JAHRESAUSGABEN.test(String(p.text).trim())) { p.jahresausgabe = true; n++; }
+    return n > 0;
+  }
+
+  return { jahresausgabenMarkieren, BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
 });

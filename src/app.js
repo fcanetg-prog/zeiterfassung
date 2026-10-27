@@ -1791,6 +1791,8 @@
     const vorher = JSON.stringify(m);
     if (!m.budget2) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st); m.budget2 = true; }
     // budget3: Ausgaben-Gruppen Subcontracts und Übrige Ausgaben, Einnahmen und Lohneinnahmen ohne Untergruppen, Texte SWI
+    // budget4: private Jahresausgaben (Gönner, SBB, Auto, … Steuern) markieren
+    if (!m.budget4) { window.BudgetDoc.jahresausgabenMarkieren(state.data.budgetPosten || []); m.budget4 = true; }
     if (!m.budget3) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st, () => uid('bu')); m.budget3 = true; }
     if (!m.bebu2710) {
       const pl = (state.data.privatKontenplaene || {})['2026'];

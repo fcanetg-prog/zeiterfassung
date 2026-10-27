@@ -6,7 +6,8 @@
   window.Budget = function (ctx) {
     const { state, esc, persist, render, toast, uid, zeigeOfferte } = ctx;
 
-    state.bu = { zu: new Set(), gAuf: new Set(), notiz: new Set() };   // Gruppen starten zugeklappt
+    // Beim Öffnen ist alles zugeklappt: Abschnitte und Gruppen
+    state.bu = { zu: new Set(['uebersicht', 'ausgaben', 'einnahmen', 'lohn', 'privat', 'verlauf']), gAuf: new Set(), notiz: new Set() };
 
     const posten = () => state.data.budgetPosten || (state.data.budgetPosten = []);
     const jahr = () => state.year;
@@ -98,7 +99,7 @@
       const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) vom Umsatz inkl. MWST` : o ? 'Betrag aus der verknüpften Offerte' : '';
       const betrag = fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
       const notizAuf = state.bu.notiz.has(p.id);
-      const akt = `${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
+      const akt = `${p.bereich === 'privat' ? `<label class="bu-om ${p.jahresausgabe ? 'an' : ''}" title="Jahresausgabe: einmalig oder einmal im Jahr fällig. In «Private Ausgaben bisher» ohne Vergleich mit der vergangenen Zeit."><input type="checkbox" data-bu="jahresausgabe" data-id="${p.id}"${p.jahresausgabe ? ' checked' : ''}>Jahresausgabe</label>` : ''}${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
         <button class="bu-nz ${p.notiz ? 'hat' : ''} ${notizAuf ? 'auf' : ''}" data-bu="notiz" data-id="${p.id}" title="${p.notiz ? esc(p.notiz) : 'Notiz hinzufügen'}" aria-label="Notiz" aria-expanded="${notizAuf}">${p.notiz ? 'Notiz' : '+ Notiz'}</button>
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
       return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''}" data-id="${p.id}">
@@ -191,32 +192,36 @@
       const mitKonto = posten.filter((x) => x.bisher != null);
       const tot = { budget: posten.reduce((s, x) => s + x.budget, 0), bisher: mitKonto.reduce((s, x) => s + x.bisher, 0) };
       const pc = (x) => `${Math.round(x * 100)} %`;
-      const balken = (budget, bisher, gross) => {
-        if (bisher == null) return `<div class="bv-leer">kein Konto verknüpft</div>`;
-        const anteil = budget > 0 ? bisher / budget : bisher > 0 ? 1.5 : 0;
-        const kl = anteil > 1.0001 ? 'ueber' : anteil > zeit + 0.05 ? 'vor' : 'gut';
-        const breite = Math.min(anteil, 1) * 100;
-        return `<div class="bv-bar ${gross ? 'gross' : ''}" title="${fr(bisher)} von ${fr(budget)} ausgegeben (${pc(anteil)}); ${pc(zeit)} des Jahres vergangen${hochrechnung(bisher) != null ? `; Hochrechnung aufs Jahr: ${fr(hochrechnung(bisher))}` : ''}">
-          <div class="bv-fill ${kl}" style="width:${breite.toFixed(1)}%"></div>
-          <div class="bv-zeit" style="left:${(zeit * 100).toFixed(1)}%"></div>
-          ${anteil > 1.0001 ? '<div class="bv-mehr" aria-hidden="true">▶</div>' : ''}</div>`;
+      // Skala bis 140 % des Budgets, damit Überschreitungen sichtbar bleiben; Strich bei 100 %.
+      const SKALA = 1.4, pos = (x) => `${(Math.min(x, SKALA) / SKALA * 100).toFixed(1)}%`;
+      /** Jahresausgaben (einmalig oder jährlich fällig): Die vergangene Zeit sagt nichts, es zählt nur über oder unter dem Budget. */
+      const klasse = (anteil, jahresausgabe) => (anteil > 1.0001 ? 'ueber' : !jahresausgabe && anteil > zeit + 0.05 ? 'vor' : 'gut');
+      const balken = (budget, bisher, jahresausgabe) => {
+        if (bisher == null) return `<div class="bv-leer">kein Konto gefunden</div>`;
+        const anteil = budget > 0 ? bisher / budget : bisher > 0 ? SKALA + 0.1 : 0;
+        const hr = jahresausgabe ? null : hochrechnung(bisher);
+        return `<div class="bv-bar" title="${fr(bisher)} von ${fr(budget)} ausgegeben (${pc(anteil)})${jahresausgabe ? '; Jahresausgabe' : `; ${pc(zeit)} des Jahres vergangen`}${hr != null ? `; Hochrechnung aufs Jahr: ${fr(hr)}` : ''}">
+          <div class="bv-fill ${klasse(anteil, jahresausgabe)}" style="width:${pos(anteil)}"></div>
+          <div class="bv-voll" style="left:${pos(1)}"></div>
+          ${jahresausgabe ? '' : `<div class="bv-zeit" style="left:${pos(zeit)}"></div>`}
+          ${anteil > SKALA ? '<div class="bv-mehr" aria-hidden="true">▶</div>' : ''}</div>`;
       };
-      const zeile = (name, budget, bisher, kl) => {
+      const zeile = (name, budget, bisher, kl, jahresausgabe) => {
         const anteil = bisher == null ? null : budget > 0 ? bisher / budget : null;
-        return `<div class="bv-z ${kl || ''}"><div class="bv-name" title="${esc(name)}">${esc(name)}</div>
+        return `<div class="bv-z ${kl || ''}"><div class="bv-name" title="${esc(name)}${jahresausgabe ? ' (Jahresausgabe)' : ''}">${esc(name)}</div>
           <div class="bv-zahl">${bisher == null ? '–' : fr(bisher)} <span class="dim">von ${fr(budget)}</span></div>
-          <div class="bv-pc ${anteil != null && anteil > 1.0001 ? 'ueber' : anteil != null && anteil > zeit + 0.05 ? 'vor' : ''}">${anteil == null ? '' : pc(anteil)}</div>
-          ${balken(budget, bisher, kl === 'bv-total')}</div>`;
+          <div class="bv-pc ${anteil == null ? '' : klasse(anteil, jahresausgabe) === 'gut' ? '' : klasse(anteil, jahresausgabe)}">${anteil == null ? '' : pc(anteil)}</div>
+          ${balken(budget, bisher, jahresausgabe)}</div>`;
       };
       let html = zeile('Total private Ausgaben', tot.budget, mitKonto.length ? tot.bisher : null, 'bv-total');
       let gAlt = null;
       for (const x of posten) {
         if (x.g !== gAlt) { html += `<div class="bv-g">${esc(x.g || 'Ohne Gruppe')}</div>`; gAlt = x.g; }
-        html += zeile(x.p.text || 'Ohne Namen', x.budget, x.bisher);
+        html += zeile(x.p.text || 'Ohne Namen', x.budget, x.bisher, '', !!x.p.jahresausgabe);
       }
       return `<section class="pane klapp-box bu-box bv">
         <div class="klapp-kopf" data-bu="auf" data-key="verlauf" tabindex="0" role="button" aria-expanded="${!zu}"><span class="klapp-chev">${zu ? '▸' : '▾'}</span>Private Ausgaben bisher<span class="bu-kh">${j === jetzt ? `Stand ${h.getDate()}.${h.getMonth() + 1}.${j}: ${pc(zeit)} des Jahres vergangen` : j < jetzt ? `${j} ist abgeschlossen` : `${j} hat noch nicht begonnen`}</span></div>
-        ${zu ? '' : `<div class="bv-legende"><span><i class="gut"></i>im Rahmen der Zeit</span><span><i class="vor"></i>schneller als die Zeit</span><span><i class="ueber"></i>über dem Budget</span><span><i class="linie"></i>vergangene Zeit</span><span class="dim">Bisher = Saldo der Konten in der Buchhaltung privat ${j}, nur bestätigte Buchungen.</span></div>
+        ${zu ? '' : `<div class="bv-legende"><span><i class="gut"></i>im Rahmen der Zeit</span><span><i class="vor"></i>schneller als die Zeit</span><span><i class="ueber"></i>über dem Budget</span><span><i class="linie"></i>vergangene Zeit</span><span><i class="voll"></i>100 % des Budgets</span><span>Ohne Zeitstrich: Jahresausgaben</span><span class="dim">Bisher = Saldo der Konten in der Buchhaltung privat ${j}, nur bestätigte Buchungen.</span></div>
         <div class="bv-liste">${html}</div>`}
       </section>`;
     }
@@ -349,7 +354,8 @@
           if (f) { toast(f, { fehler: true }); return; }
         } else p[key] = el.value;
         persist(); render();
-      } else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
+      } else if (a === 'jahresausgabe') { if (el.checked) p.jahresausgabe = true; else delete p.jahresausgabe; persist(); render(); }
+      else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
     });
 
     return { view };
