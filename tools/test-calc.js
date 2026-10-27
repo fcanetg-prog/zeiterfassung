@@ -270,3 +270,50 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(P.normalize({ id: 'x', notiz: '<b>a</b>', notizHtml: true, todosVerschoben: true }).notizHtml, true);
   console.log('Pendenzen bestanden.');
 }
+
+// Budget: Formeln, Rechnung pro Jahr, Offerten nach Jahr, Zusammenführen
+{
+  const B = require('../src/budgetdoc.js');
+  assert.strictEqual(B.formelWert('12*24'), 288); assert.strictEqual(B.formelWert('=2585*4+2237.5*5'), 21527.5);
+  assert.strictEqual(B.formelWert("4’500.50"), 4500.5); assert.strictEqual(B.formelWert('(654+319+99)'), 1072); assert.strictEqual(B.formelWert('-200'), -200);
+  assert.strictEqual(B.formelWert('alert(1)'), null); assert.strictEqual(B.formelWert('3*'), null); assert.strictEqual(B.formelWert(''), null);
+  assert.ok(B.istFormel('12*24')); assert.ok(!B.istFormel('4500')); assert.ok(!B.istFormel('-200'));
+  const P = (o) => B.normalize(Object.assign({ id: 'x' + Math.random(), jahr: 2027 }, o));
+  const posten = [
+    P({ bereich: 'ausgaben', gruppe: 'Software', text: 'Libsyn', formel: '12*24', pos: 1 }),
+    P({ bereich: 'ausgaben', gruppe: 'Steuern', text: 'MWST', satz: 6.2, pos: 2 }),
+    P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'SWD Abo', betrag: 5000, ohneMwst: true, pos: 3 }),
+    P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'Moderation', betrag: 1000, offeriertFormel: '3750', pos: 4 }),
+    P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'Verknüpft', betrag: 999, offerteId: 'o2', pos: 5 }),
+    P({ bereich: 'einnahmen', gruppe: 'MWST', text: 'MWST', satz: 8.1, pos: 6 }),
+    P({ bereich: 'lohn', gruppe: 'Anstellungen', text: 'Uni', betrag: 10090, pos: 7 }),
+    P({ bereich: 'lohn', gruppe: 'Anstellungen', text: 'anderes Jahr', betrag: 1, pos: 1, jahr: 2026 }),
+  ];
+  const off = [
+    { id: 'o1', status: 'zugesagt', kunde: 'A', jahresBetraege: { 2027: 2000, 2028: 500 } },
+    { id: 'o2', status: 'zugesagt', kunde: 'B', jahresBetraege: { 2027: 3000 } },
+    { id: 'o3', status: 'offen', kunde: 'C', jahresBetraege: { 2027: 4000 } },
+    { id: 'o4', status: 'abgesagt', kunde: 'D', jahresBetraege: { 2027: 7000 } },
+    { id: 'o5', status: 'abgeschlossen', kunde: 'E', jahresBetraege: { 2026: 100 } },
+  ];
+  const r = B.rechne(posten, off, 2027);
+  // Umsatz: 5000 + 1000 + 3000 (verknüpft statt 999) + 2000 (bestätigte Offerte) = 11000; MWST-Basis ohne Abo 6000
+  assert.strictEqual(r.umsatz, 11000); assert.strictEqual(r.basis, 6000);
+  assert.strictEqual(r.mwstEin, 486); assert.strictEqual(r.einnahmen, 11486);
+  assert.strictEqual(r.ausgaben, 288 + 372); assert.strictEqual(r.gmbhLohn, 11486 - 660); assert.strictEqual(r.lohnTotal, 11486 - 660 + 10090);
+  assert.strictEqual(r.offeriert, 3750 + 4000);   // offerierter Posten + offene Offerte; abgesagte zählt nirgends
+  assert.deepStrictEqual(r.auto.map((z) => z.offerte.id), ['o1', 'o3']);
+  assert.deepStrictEqual(B.offertenNachJahr(off), { 2026: { offen: 0, zugesagt: 0, abgeschlossen: 100, abgesagt: 0 }, 2027: { offen: 4000, zugesagt: 5000, abgeschlossen: 0, abgesagt: 7000 }, 2028: { offen: 0, zugesagt: 500, abgeschlossen: 0, abgesagt: 0 } });
+  // Abgesagte verknüpfte Offerte zählt nicht
+  const r2 = B.rechne(posten, off.map((o) => (o.id === 'o2' ? { ...o, status: 'abgesagt' } : o)), 2027);
+  assert.strictEqual(r2.umsatz, 8000);
+  // Kopie für das nächste Jahr ohne Verknüpfungen
+  let n = 0; const k = B.kopieFuer(posten, 2027, 2028, () => 'n' + n++);
+  assert.strictEqual(k.length, 7); assert.ok(k.every((x) => x.jahr === 2028 && !x.offerteId && x.offeriert == null));
+  assert.deepStrictEqual(B.jahresBetraege({ 2026: 1.005, x: 3, 2027: 'a' }), { 2026: 1.01 });
+  // Zusammenführen zweier Rechner: Posten einzeln
+  const a = posten[0], b = posten[1];
+  const m = C.mergeData(Object.assign(C.emptyData(), { budgetPosten: [{ ...a, mod: 5 }, { ...b, mod: 5 }] }), Object.assign(C.emptyData(), { budgetPosten: [{ ...a, text: 'neu', mod: 9 }], geloescht: { [b.id]: 7 } }));
+  assert.deepStrictEqual(m.budgetPosten.map((x) => x.text), ['neu']);
+  console.log('Budget bestanden.');
+}

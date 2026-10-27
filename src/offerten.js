@@ -110,11 +110,42 @@
             <option value="">${gewaehlt.length ? 'weiteren Kunden hinzufügen …' : 'Kunde wählen …'}</option>
             ${frei.map((e) => `<option value="${esc(e.key)}">${esc(kLabel(e))}</option>`).join('')}
           </select></div></div>
+        ${jahrZeile(p)}
         ${anhangZeile(p)}
         <div class="of-raster"><label for="oa-${p.id}" class="of-lab">Auftraggeber</label><div class="of-stapel">
           <textarea id="oa-${p.id}" rows="3" data-of="p-feld" data-key="auftraggeber" data-pid="${p.id}" placeholder="Firma&#10;Strasse&#10;PLZ Ort">${esc(p.auftraggeber || '')}</textarea>
           <span class="dim of-hinw">Steht im Vertrag. Bei einer bestätigten, zugewiesenen Offerte wird er als Rechnungsadresse in die Projekte des Kunden übernommen.</span></div></div></td></tr>`;
     }
+    /* ---------- Beträge nach Jahr (für den Reiter Budget) ---------- */
+    const BD = window.BudgetDoc;
+    const fr0 = (x) => { const [g, r] = Math.abs(x).toFixed(2).split('.'); return (x < -0.004 ? '-' : '') + g.replace(/\B(?=(\d{3})+(?!\d))/g, '’') + (r === '00' ? '' : '.' + r); };
+    /** Total der bestätigten (sonst der neusten) Fassung, ohne MWST; null, wenn der Inhalt fehlt. */
+    function offerteTotal(p) {
+      const fs = fassungen(p), v = fs.find((x) => x.id === p.zugesagtId) || fs[fs.length - 1];
+      if (!v || (v.original && !v.lesbar)) return null;
+      const t = BD.round2(v.doc.teile.reduce((s, x) => s + O.teilEnd(x), 0));
+      return t > 0 ? t : null;
+    }
+    const jbJahre = (p) => Object.keys(p.jahresBetraege || {}).sort();
+    const jbKurz = (p) => jbJahre(p).map((j) => `${j}: ${fr0(p.jahresBetraege[j])}`).join(' · ');
+    function jahrZeile(p) {
+      const tot = offerteTotal(p), jb = p.jahresBetraege || {}, summe = BD.round2(Object.values(jb).reduce((s, v) => s + v, 0));
+      const hinweis = tot != null ? `Offerte total ${fr0(tot)}${jbJahre(p).length && Math.abs(summe - tot) > 0.004 ? `, verteilt ${fr0(summe)}` : ''}. ` : '';
+      return `<div class="of-raster"><span class="of-lab">Betrag nach Jahr</span><div class="of-stapel"><div class="of-jbreihe">
+        ${jbJahre(p).map((j) => `<span class="of-chip of-jb"><label for="ojb-${p.id}-${j}">${j}</label><input id="ojb-${p.id}-${j}" class="inline num of-jbw" type="text" inputmode="decimal" value="${esc(fr0(jb[j]))}" data-of="jb" data-pid="${p.id}" data-jahr="${j}" aria-label="Betrag ${j}"><button data-of="jb-weg" data-pid="${p.id}" data-jahr="${j}" title="Jahr entfernen" aria-label="Jahr ${j} entfernen">×</button></span>`).join('')}
+        <button class="btn small" data-of="jb-neu" data-pid="${p.id}" title="Einen Betrag für ein weiteres Jahr eintragen">+ Jahr</button></div>
+        <span class="dim of-hinw">${hinweis}Ohne MWST. Erscheint im Reiter Budget im jeweiligen Jahr.</span></div></div>`;
+    }
+    function jahrNeu(p) {
+      const jb = p.jahresBetraege || (p.jahresBetraege = {}), js = jbJahre(p).map(Number);
+      const fs = fassungen(p), letzte = fs[fs.length - 1];
+      const j = js.length ? Math.max(...js) + 1 : Math.max(+heute.slice(0, 4), letzte ? +letzte.datum.slice(0, 4) : 0);
+      // Das erste Jahr bekommt das ganze Total der Offerte, weitere Jahre den Rest (falls noch etwas übrig ist).
+      const tot = offerteTotal(p), rest = tot != null ? BD.round2(tot - Object.values(jb).reduce((s, v) => s + v, 0)) : 0;
+      jb[j] = rest > 0 ? rest : 0;
+      return j;
+    }
+
     /** Projekte der Zeiterfassung, die zu den zugewiesenen Kunden (Jahr, Bereich) gehören. */
     const zugehoerige = (p) => state.data.projects.filter((x) => (p.kundeLinks || []).includes(kKey(x)));
     /**
@@ -188,6 +219,7 @@
             <input class="inline of-kunde" type="text" value="${esc(p.kunde)}" placeholder="Kunde" data-of="p-feld" data-key="kunde" data-pid="${p.id}" aria-label="Kunde">
             <input class="inline of-name" type="text" value="${esc(p.name)}" placeholder="Projekt" data-of="p-feld" data-key="name" data-pid="${p.id}" aria-label="Projekt">
             <button class="of-anz" data-of="p-auf" data-pid="${p.id}">${fs.length} ${fs.length === 1 ? 'Fassung' : 'Fassungen'}${auf || !letzte ? '' : `, letzte vom ${fmtDate(letzte.datum)}`}</button>
+            ${jbJahre(p).length ? `<span class="of-jbs" title="Betrag nach Jahr, ohne MWST">${esc(jbKurz(p))}</span>` : ''}
             <span class="grow"></span>
             ${knoepfe}
             <button class="btn small ghost" data-of="p-del" data-pid="${p.id}" title="Projekt mit allen Fassungen löschen">Löschen</button>
@@ -512,6 +544,9 @@
       const o = offen();
       switch (a) {
         case 'ab-auf': if (state.off.auf.has(ds.key)) state.off.auf.delete(ds.key); else state.off.auf.add(ds.key); render(); break;
+        case 'jb-neu': { const j = jahrNeu(p); persist(); render(); const f = document.getElementById(`ojb-${p.id}-${j}`); if (f) { f.focus(); f.select(); } break; }
+        case 'jb-weg': { const alt = p.jahresBetraege[ds.jahr]; delete p.jahresBetraege[ds.jahr]; persist(); render();
+          toast(`Betrag ${ds.jahr} entfernt`, { actionLabel: 'Rückgängig', action: () => { (p.jahresBetraege || (p.jahresBetraege = {}))[ds.jahr] = alt; persist(); render(); } }); break; }
         case 'p-auf': if (state.off.umgekehrt.has(ds.pid)) state.off.umgekehrt.delete(ds.pid); else state.off.umgekehrt.add(ds.pid); render(); break;
         case 'n-hoch': { hochladen().then((h) => { if (!h || !state.off.neu) return; Object.assign(state.off.neu, { doc: h.doc, quelle: h.name, art: h.doc.art }); render(); toast(`${h.name} eingelesen`); }); break; }
         case 'e-hoch': { hochladen().then((h) => { const o2 = offen(); if (!h || !o2) return; const ziel = o2.v, alt = ziel.doc; h.doc.art = alt.art; ziel.doc = h.doc; persist(); render();
@@ -650,6 +685,12 @@
       } else if (a === 'alt-datum') { const zp = projekt(el.dataset.pid), zv = zp && zp.versionen.find((x) => x.id === el.dataset.vid); if (zv && el.value) { zv.datum = el.value; persist(); render(); } }
       else if (a === 'v-datum') { const o = offen(); if (o && o.v && el.value) { o.v.datum = el.value; persist(); } }
       else if (a === 'p-feld') { const zp = projekt(el.dataset.pid); if (zp && el.dataset.key === 'auftraggeber') adresseUebernehmen(zp); persist(); }
+      else if (a === 'jb') {
+        const zp = projekt(el.dataset.pid); if (!zp) return;
+        const v = el.value.trim() === '' ? 0 : BD.formelWert(el.value);
+        if (v == null) { toast('Bitte einen Betrag eingeben, zum Beispiel 4500 oder 3*1500.', { fehler: true }); el.focus(); return; }
+        (zp.jahresBetraege || (zp.jahresBetraege = {}))[el.dataset.jahr] = v; persist(); render();
+      }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
         if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }

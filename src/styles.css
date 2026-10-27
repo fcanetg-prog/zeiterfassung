@@ -832,3 +832,72 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .bh-vhin .bh-teilen { font-size: inherit; padding: 0; }
 .bh-vor .bh-vhin { text-align: right; }
 .bh-bankwahl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); } .bh-bankwahl select { max-width: 220px; }
+
+/* ---------- Budget ---------- */
+.bu-box { margin-bottom: 16px; }
+.bu-box div.klapp-kopf { display: flex; align-items: center; }
+.bu-kh { margin-left: 10px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.bu-scroll { overflow-x: auto; }
+.list.bu-mx { font-size: var(--k-schrift); width: auto; min-width: 0; }
+.list.bu-mx th:not(:first-child), .list.bu-mx td:not(:first-child) { width: 120px; }
+.list.bu-mx th, .list.bu-mx td { height: var(--k-zeile); padding: 0 16px; white-space: nowrap; }
+.list.bu-mx th { background: var(--k-kopf); font-size: 12px; color: var(--muted); font-weight: 600; }
+.list.bu-mx td:first-child, .list.bu-mx th:first-child { padding-left: var(--k-einzug); width: 240px; }
+.list.bu-mx th.bu-jetzt { color: var(--ink, #1c2b2b); }
+.list.bu-mx td.bu-jetzt { font-weight: 600; }
+.list.bu-mx tr.zb.zebra > td { background: var(--k-zebra); }
+.bu-hinw { margin: 0; padding: 10px 14px 12px var(--k-einzug); font-size: 12px; border-top: 1px solid var(--line-soft); }
+.bu-hinw .link { font-size: 12px; }
+.bu-leer { margin-bottom: 16px; }
+.bu-leer p { margin: 0 0 12px; }
+.list.bu { table-layout: fixed; width: 100%; min-width: 1100px; font-size: var(--k-schrift); }
+.list.bu col.c-gr { width: 180px; } .list.bu col.c-po { width: auto; } .list.bu col.c-be { width: 135px; } .list.bu col.c-of { width: 115px; }
+.list.bu col.c-gs { width: 100px; } .list.bu col.c-no { width: 15%; } .list.bu col.c-ak { width: 205px; }
+.list.bu th { background: var(--k-kopf); font-size: 12px; color: var(--muted); font-weight: 600; padding: 9px 8px; }
+.list.bu th:first-child { padding-left: var(--k-einzug); }
+.list.bu td { height: var(--k-zeile); padding: 0 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.list.bu td.bu-gr { padding-left: calc(var(--k-einzug) - 6px); font-weight: 600; }
+.list.bu tr.klapp-kopf > td { padding: 0 !important; }
+.bu-kopf { display: flex; align-items: center; padding: 10px 14px; }
+.list.bu tr.zb.zebra > td { background: var(--k-zebra); }
+.list.bu tr.zb:hover > td { background: var(--k-hover); }
+.list.bu input.inline { font-size: var(--k-schrift); }
+.list.bu input.bu-gname { font-weight: 600; }
+.bu-gname-fix { padding-left: 6px; }
+.list.bu td.bu-wert { position: relative; }
+.list.bu input.bu-betrag { text-align: right; font-variant-numeric: tabular-nums; }
+.bu-erg { position: absolute; right: 14px; bottom: 1px; font-size: 10px; color: var(--muted); pointer-events: none; }
+.list.bu td.bu-wert input.bu-betrag.mit-erg { padding-bottom: 9px; padding-top: 1px; }
+.bu-fest { display: block; text-align: right; padding: 0 7px; font-variant-numeric: tabular-nums; }
+.list.bu td.bu-gs { font-weight: 600; color: var(--muted); }
+.list.bu input.bu-notiz { color: var(--muted); }
+.list.bu td.bu-akt { text-align: right; }
+.bu-akt > * { vertical-align: middle; }
+.bu-om { display: inline-block; font-size: 11px; color: var(--muted); margin: 0 4px; white-space: nowrap; border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; line-height: 18px; cursor: pointer; }
+.bu-om input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.bu-om.an { color: var(--teal-deep); border-color: var(--teal-deep); background: #e3f1f1; font-weight: 600; }
+.bu-om:focus-within { outline: 2px solid var(--teal-deep); outline-offset: 1px; }
+select.bu-wahl { width: 100px; font-size: 12px; padding: 2px 4px; }
+.bu-link { max-width: 170px; font-size: 12px; padding: 0 2px 0 4px !important; overflow: hidden; }
+.bu-link .link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.bu-link .pill { font-size: 10px; padding: 0 5px; }
+.bu-otitel { font-size: var(--k-schrift); margin-left: 6px; }
+tr.bu-auto .pill { font-size: 10px; padding: 0 5px; margin-left: 4px; }
+tr.bu-weg td { color: var(--muted); text-decoration: line-through; }
+tr.bu-weg td input { text-decoration: line-through; }
+tr.bu-add td { height: 26px; padding-left: var(--k-einzug); }
+tr.bu-add .link { font-size: 12px; color: var(--muted); }
+tr.bu-add .link:hover { color: var(--teal-deep); }
+tr.bu-sum td { font-weight: 600; border-top: 1px solid var(--line); background: var(--surface); }
+tr.bu-sum td:first-child { padding-left: var(--k-einzug); }
+tr.bu-total td { border-top: 2px solid var(--ink, #1c2b2b); font-size: 14px; }
+.list.bu-mx tr.bu-sum td { padding-left: 16px; }
+.list.bu-mx tr.bu-sum td:first-child { padding-left: var(--k-einzug); }
+.main.view-budget .bu-box:last-child { overflow-x: auto; }
+
+/* Offerten: Beträge nach Jahr */
+.of-jb { padding-right: 2px !important; }
+.of-jb label { font-weight: 600; font-size: 12px; }
+input.of-jbw { width: 92px; text-align: right; padding: 2px 4px; font-variant-numeric: tabular-nums; }
+.of-jbs { font-size: 12px; color: var(--teal-deep); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.of-jbreihe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

@@ -125,6 +125,7 @@
       v: new Map(state.data.offertVorlagen.map((r) => [r.id, ohneMod(r)])),
       t: new Map((state.data.pendenzen || []).map((r) => [r.id, ohneMod(r)])),
       pb: new Map((state.data.privatBuchungen || []).map((r) => [r.id, ohneMod(r)])),
+      bu: new Map((state.data.budgetPosten || []).map((r) => [r.id, ohneMod(r)])),
       pk: Object.fromEntries(Object.entries(state.data.privatKontenplaene || {}).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
       pz: Object.fromEntries(Object.entries(state.data.privatBankZeilen || {}).map(([j, bz]) => [j, JSON.stringify(bz.zeilen)])),
       k: Object.fromEntries(Object.entries(state.data.kontenplaene).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
@@ -136,7 +137,7 @@
     const jetzt = Date.now();
     const d = state.data;
     if (!d.geloescht) d.geloescht = {};
-    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v], [d.pendenzen || (d.pendenzen = []), abbild.t || new Map()], [d.privatBuchungen || (d.privatBuchungen = []), abbild.pb || new Map()]]) {
+    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v], [d.pendenzen || (d.pendenzen = []), abbild.t || new Map()], [d.privatBuchungen || (d.privatBuchungen = []), abbild.pb || new Map()], [d.budgetPosten || (d.budgetPosten = []), abbild.bu || new Map()]]) {
       const da = new Set();
       for (const r of liste) {
         da.add(r.id);
@@ -281,9 +282,12 @@
       zugesagtId: o.zugesagtId || (o.status === 'alt' && o.versionen && o.versionen[0] ? o.versionen[0].id : null), erstellt: o.erstellt || 0, mod: o.mod || 0,
       // Merker des automatischen Abschliessens (bezahlt → abgeschlossen) müssen einen Neustart überstehen.
       ...(o.autoAbgeschlossen ? { autoAbgeschlossen: true } : {}), ...(o.nichtAuto ? { nichtAuto: true } : {}),
+      // Betrag ohne MWST pro Jahr (für den Reiter Budget)
+      ...(Object.keys(window.BudgetDoc.jahresBetraege(o.jahresBetraege)).length ? { jahresBetraege: window.BudgetDoc.jahresBetraege(o.jahresBetraege) } : {}),
       versionen: (o.versionen || []).filter((v) => v && v.id).map((v) => ({ id: v.id, datum: v.datum || heute, erstellt: v.erstellt || 0, doc: OD.normalize(v.doc), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.verschickt || '') ? { verschickt: v.verschickt } : {}), ...(v.original ? { original: String(v.original), lesbar: !!v.lesbar, gelesen: v.gelesen || 1 } : {}) })),
     }));
     out.pendenzen = (d.pendenzen || []).map(window.PendenzDoc.normalize).filter(Boolean);
+    out.budgetPosten = (d.budgetPosten || []).map(window.BudgetDoc.normalize).filter(Boolean);
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
     const normBankZeilen = (quelle) => { const o = {}; for (const [jahr, bz] of Object.entries(quelle || {})) {
       o[jahr] = { mod: (bz && bz.mod) || 0, zeilen: ((bz && bz.zeilen) || []).filter((z) => z && z.datum && C.isNum(z.betrag)).map((z, i) => ({ datum: z.datum, text: z.text || '', betrag: z.betrag, saldo: C.isNum(z.saldo) ? z.saldo : null, schluessel: z.schluessel || '', nr: C.isNum(z.nr) ? z.nr : i })) };
@@ -324,6 +328,7 @@
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung'],
     ['buchhaltungPrivat', 'Buchhaltung privat'],
+    ['budget', 'Budget'],
     ['einstellungen', 'Einstellungen'],
   ];
 
@@ -333,6 +338,10 @@
     for (const p of state.data.projects) ys.add(p.jahr);
     for (const e of state.data.entries) ys.add(+e.datum.slice(0, 4));
     for (const y of Object.keys(state.data.kontenplaene || {})) ys.add(+y);
+    // Budget: auch spätere Jahre, für die es Posten oder Offerten-Beträge gibt
+    for (const b of state.data.budgetPosten || []) ys.add(b.jahr);
+    if (state.view === 'budget') for (let k = 2; k <= 3; k++) ys.add(+heute.slice(0, 4) + k);   // Budget weiter im Voraus planen
+    for (const o of state.data.offerten || []) for (const j of Object.keys(o.jahresBetraege || {})) ys.add(+j);
     return [...ys].sort((a, b) => b - a);
   }
 
@@ -362,7 +371,7 @@
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
 
-    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), buchhaltungPrivat: () => BHP.view(), offerten: () => OFF.view(), pendenzen: () => PD.view(), einstellungen: viewEinstellungen };
+    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), buchhaltungPrivat: () => BHP.view(), budget: () => BU.view(), offerten: () => OFF.view(), pendenzen: () => PD.view(), einstellungen: viewEinstellungen };
     const wocheH = weekTotal(heute);
     $('#app').innerHTML = `
       <nav class="side">
@@ -1448,6 +1457,21 @@
       toast('Vorlage eingelesen. Ergänze Kunde und Projekt.');
       return;
     }
+    if (r.data && r.data.typ === 'budget') {
+      // Budgetposten für ein oder mehrere Jahre; vorhandene Posten dieser Jahre werden ersetzt.
+      if (!state.data) state.data = C.emptyData();
+      const neu = (r.data.posten || []).map(window.BudgetDoc.normalize).filter(Boolean);
+      if (!neu.length) { toast('Die Datei enthält keine Budgetposten.', { fehler: true }); return; }
+      const jahre = [...new Set(neu.map((x) => x.jahr))].sort();
+      const alt = (state.data.budgetPosten || []).filter((x) => jahre.includes(x.jahr));
+      if (alt.length && !confirm(`Für ${jahre.join(' und ')} gibt es schon ${alt.length} Budgetposten. Der Import ersetzt sie durch die ${neu.length} Posten aus der Datei. Fortfahren?`)) return;
+      await api.save(state.data, { sicherungErzwingen: true });
+      state.data.budgetPosten = (state.data.budgetPosten || []).filter((x) => !jahre.includes(x.jahr)).concat(neu.map((x) => Object.assign(x, { id: uid('bu') })));
+      await persist();
+      state.year = jahre[0]; state.view = 'budget'; render();
+      toast(`Budget ${jahre.join(', ')}: ${neu.length} Posten übernommen`);
+      return;
+    }
     if (r.data && r.data.typ === 'buchhaltungPrivat') {
       // Kontenplan (und allenfalls Buchungen) der privaten Buchhaltung; die Buchhaltung des Geschäfts bleibt unberührt.
       if (!state.data) state.data = C.emptyData();
@@ -1504,6 +1528,7 @@
     if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; neu.bankZeilen = state.data.bankZeilen || {}; }
     if (state.data && !r.data.offerten && !r.data.offertVorlagen) { neu.offerten = state.data.offerten; neu.offertVorlagen = state.data.offertVorlagen; }
     if (state.data && !r.data.pendenzen) neu.pendenzen = state.data.pendenzen || [];
+    if (state.data && !r.data.budgetPosten) neu.budgetPosten = state.data.budgetPosten || [];
     if (state.data && !r.data.privatBuchungen && !r.data.privatKontenplaene) { neu.privatBuchungen = state.data.privatBuchungen || []; neu.privatKontenplaene = state.data.privatKontenplaene || {}; neu.privatBankZeilen = state.data.privatBankZeilen || {}; }
     neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;
@@ -1761,6 +1786,7 @@
   const BHP = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid }, { privat: true });
   const OFF = window.Offerten({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
   const PD = window.Pendenzen({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
+  const BU = window.Budget({ state, esc, persist, render, toast, uid, zeigeOfferte: (id) => { state.view = 'offerten'; OFF.zeige(id); render(); } });
   window.__zeit = { state, render, persist };
   start();
 })();

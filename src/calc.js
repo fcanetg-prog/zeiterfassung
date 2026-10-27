@@ -23,7 +23,7 @@
   }
 
   function emptyData() {
-    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [], pendenzen: [], privatBuchungen: [], privatKontenplaene: {}, privatBankZeilen: {} };
+    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [], pendenzen: [], privatBuchungen: [], privatKontenplaene: {}, privatBankZeilen: {}, budgetPosten: [] };
   }
 
   /** Stunden pro Projekt: Map projectId -> Summe */
@@ -427,7 +427,7 @@
     const kontenplaene = nachJahr(a.kontenplaene, b.kontenplaene);
     const bankZeilen = nachJahr(a.bankZeilen, b.bankZeilen);
     // Teile, die diese Version nicht kennt (aus einer neueren App), unverändert mitnehmen.
-    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'pendenzen', 'privatBuchungen', 'privatKontenplaene', 'privatBankZeilen', 'history']);
+    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'pendenzen', 'privatBuchungen', 'privatKontenplaene', 'privatBankZeilen', 'budgetPosten', 'history']);
     const fremd = {};
     for (const q of [a, b]) for (const k of Object.keys(q)) if (!bekanntK.has(k) && fremd[k] === undefined) fremd[k] = q[k];
     return {
@@ -440,6 +440,8 @@
       pendenzen: mergeList(a.pendenzen, b.pendenzen),
       privatBuchungen: sortB(mergeList(a.privatBuchungen, b.privatBuchungen)),
       privatKontenplaene: nachJahr(a.privatKontenplaene, b.privatKontenplaene), privatBankZeilen: nachJahr(a.privatBankZeilen, b.privatBankZeilen),
+      // Budget: Posten einzeln (wie Buchungen)
+      budgetPosten: mergeList(a.budgetPosten, b.budgetPosten).sort((x, y) => (x.jahr - y.jahr) || ((x.pos || 0) - (y.pos || 0))),
       history: Object.assign({}, b.history || {}, a.history || {}),
     };
   }
