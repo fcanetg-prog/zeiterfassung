@@ -7,7 +7,7 @@
     const { state, esc, persist, render, toast, uid, zeigeOfferte } = ctx;
 
     // Beim Öffnen ist alles zugeklappt: Abschnitte und Gruppen
-    state.bu = { zu: new Set(['uebersicht', 'ausgaben', 'einnahmen', 'lohn', 'privat', 'verlauf']), gAuf: new Set(), notiz: new Set() };
+    state.bu = { zu: new Set(['ausgaben', 'einnahmen', 'lohn', 'privat', 'verlauf']), gAuf: new Set(), notiz: new Set() };
 
     const posten = () => state.data.budgetPosten || (state.data.budgetPosten = []);
     const jahr = () => state.year;
@@ -26,25 +26,6 @@
       return (x < -0.004 ? '-' : '') + g.replace(/\B(?=(\d{3})+(?!\d))/g, '’') + (r === '00' ? '' : '.' + r);
     }
     const nummerieren = () => imJahr().forEach((p, i) => { p.pos = i + 1; });
-
-    /* ---------- Übersicht: Offerten nach Jahr und Status ---------- */
-
-    function uebersicht() {
-      const m = BD.offertenNachJahr(offerten());
-      const jahre = [...new Set([...Object.keys(m).map(Number), jahr()])].sort((a, b) => a - b);
-      const wert = (j, k) => (m[j] ? m[j][k] : 0);
-      const ohne = offerten().filter((o) => (o.status === 'offen' || o.status === 'zugesagt') && !Object.keys(o.jahresBetraege || {}).length);
-      const zu = state.bu.zu.has('uebersicht');
-      return `<section class="pane klapp-box bu-box">
-        <div class="klapp-kopf" data-bu="auf" data-key="uebersicht" tabindex="0" role="button" aria-expanded="${!zu}"><span class="klapp-chev">${zu ? '▸' : '▾'}</span>Offerten nach Jahr<span class="bu-kh">ohne MWST</span></div>
-        ${zu ? '' : `<div class="bu-scroll"><table class="list bu-mx" data-zebra>
-          <thead><tr><th></th>${jahre.map((j) => `<th class="r ${j === jahr() ? 'bu-jetzt' : ''}">${j}</th>`).join('')}</tr></thead>
-          <tbody>${BD.STATUS.map(([k, l]) => `<tr class="zb"><td>${l}</td>${jahre.map((j) => `<td class="num r ${j === jahr() ? 'bu-jetzt' : ''}">${fr(wert(j, k), true)}</td>`).join('')}</tr>`).join('')}
-          <tr class="bu-sum"><td>Bestätigt und abgeschlossen</td>${jahre.map((j) => `<td class="num r ${j === jahr() ? 'bu-jetzt' : ''}">${fr(wert(j, 'zugesagt') + wert(j, 'abgeschlossen'), true)}</td>`).join('')}</tr></tbody>
-        </table></div>
-        ${ohne.length ? `<p class="bu-hinw dim">${ohne.length} offene oder bestätigte ${ohne.length === 1 ? 'Offerte hat' : 'Offerten haben'} noch keinen Betrag nach Jahr: ${ohne.slice(0, 6).map((o) => `<button class="link" data-bu="offerte" data-id="${o.id}">${esc(oTitel(o))}</button>`).join(', ')}${ohne.length > 6 ? ` und ${ohne.length - 6} weitere` : ''}. Eintragen im Reiter Offerten im aufgeklappten Eintrag.</p>` : ''}`}
-      </section>`;
-    }
 
     /* ---------- Budget eines Jahres ---------- */
 
@@ -192,8 +173,8 @@
       const mitKonto = posten.filter((x) => x.bisher != null);
       const tot = { budget: posten.reduce((s, x) => s + x.budget, 0), bisher: mitKonto.reduce((s, x) => s + x.bisher, 0) };
       const pc = (x) => `${Math.round(x * 100)} %`;
-      // Skala bis 140 % des Budgets, damit Überschreitungen sichtbar bleiben; Strich bei 100 %.
-      const SKALA = 1.4, pos = (x) => `${(Math.min(x, SKALA) / SKALA * 100).toFixed(1)}%`;
+      // Skala bis 120 % des Budgets, damit Überschreitungen sichtbar bleiben; Strich bei 100 %.
+      const SKALA = 1.2, pos = (x) => `${(Math.min(x, SKALA) / SKALA * 100).toFixed(1)}%`;
       /** Jahresausgaben (einmalig oder jährlich fällig): Die vergangene Zeit sagt nichts, es zählt nur über oder unter dem Budget. */
       const klasse = (anteil, jahresausgabe) => (anteil > 1.0001 ? 'ueber' : !jahresausgabe && anteil > zeit + 0.05 ? 'vor' : 'gut');
       const balken = (budget, bisher, jahresausgabe) => {
@@ -246,7 +227,6 @@
         <div class="bignum"><b class="${r.spielraum < 0 ? 'neg' : 'pos'}">${fr(r.spielraum)}</b><span>${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum'} nach privatem Budget</span></div>
       </header>
       ${fluss(r)}
-      ${uebersicht()}
       ${leer ? `<div class="pane bu-leer"><p>Für ${j} gibt es noch kein Budget.${vorjahre.length ? ` Du kannst die Posten von ${vorjahre[0]} übernehmen (ohne Verknüpfungen mit Offerten) oder unten Gruppen und Posten von Hand anlegen.` : ' Lege unten Gruppen und Posten an.'}</p>
         <div class="row">${vorjahre.length ? `<button class="btn primary" data-bu="kopie" data-von="${vorjahre[0]}">Posten von ${vorjahre[0]} übernehmen</button>` : ''}
         <button class="btn" data-action="import">Budget aus Datei importieren</button></div></div>` : ''}

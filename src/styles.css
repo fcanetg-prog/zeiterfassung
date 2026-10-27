@@ -885,11 +885,11 @@ tr.bu-z:hover select.bu-wahl, tr.bu-z:hover .bu-om, select.bu-wahl:focus, .bu-om
 .bu-fest { display: block; text-align: right; padding: 0 7px; font-variant-numeric: tabular-nums; }
 .list.bu td.bu-akt { text-align: right; }
 .bu-akt > * { vertical-align: middle; }
-.bu-om { display: inline-block; font-size: 11px; color: var(--muted); margin: 0 2px; white-space: nowrap; border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; line-height: 18px; cursor: pointer; }
+.bu-om { display: inline-block; width: 92px; text-align: center; box-sizing: border-box; font-size: 11px; color: var(--muted); margin: 0 2px; white-space: nowrap; border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; line-height: 18px; cursor: pointer; }
 .bu-om input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .bu-om.an { color: var(--teal-deep); border-color: var(--teal-deep); background: #e3f1f1; font-weight: 600; }
 .bu-om:focus-within { outline: 2px solid var(--teal-deep); outline-offset: 1px; }
-.bu-nz { border: 0; background: none; cursor: pointer; font-size: 11px; color: var(--muted); padding: 0 4px; opacity: .55; }
+.bu-nz { border: 0; background: none; cursor: pointer; font-size: 11px; color: var(--muted); padding: 0 4px; opacity: .55; width: 54px; text-align: center; }
 tr.bu-z:hover .bu-nz, .bu-nz:focus, .bu-nz.auf { opacity: 1; }
 .bu-nz.hat { opacity: 1; color: var(--teal-deep); font-weight: 600; }
 tr.bu-nzz td { height: 32px; padding-left: calc(var(--k-einzug) + 14px); background: #f7fafa; }
@@ -975,9 +975,8 @@ select.bu-kwahl.gesetzt { opacity: .55; }
 .bv-pc { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
 .bv-pc.vor { color: #a8740f; font-weight: 600; } .bv-pc.ueber { color: #c0392b; font-weight: 600; }
 .bv-g { grid-column: 1 / -1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 12px 0 2px; border-bottom: 1px solid var(--line-soft); margin-bottom: 2px; }
-.bv-z.bv-total > div { font-weight: 600; padding: 8px 0 10px; }
+.bv-z.bv-total > div:not(.bv-bar) { font-weight: 600; padding: 8px 0 10px; }
 .bv-bar { position: relative; height: 10px; background: #e8eeee; border-radius: 5px; }
-.bv-bar.gross { height: 14px; border-radius: 7px; }
 .bv-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; }
 .bv-fill.gut { background: #4a9d8f; } .bv-fill.vor { background: #d39a2c; } .bv-fill.ueber { background: #c0392b; }
 .bv-zeit { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #1c2b2b; border-radius: 1px; }
