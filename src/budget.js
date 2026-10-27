@@ -149,10 +149,10 @@
       if (key === 'einnahmen') {
         inhalt += summeZeile(key, 'Total Einnahmen', r.umsatz, r.einnahmen, 'bu-total');
       }
-      if (key === 'lohn') inhalt += summeZeile(key, 'Total Lohneinnahmen', r.lohnTotal, null, 'bu-total');
+      if (key === 'lohn') inhalt += summeZeile(key, 'Total Lohneinnahmen (netto)', r.lohnTotal, null, 'bu-total');
       if (key === 'privat') {
         inhalt += summeZeile(key, 'Total private Ausgaben', r.privat, null, 'bu-total');
-        inhalt += summeZeile(key, 'Total Lohneinnahmen (oben)', r.lohnTotal, null, 'bu-mwst');
+        inhalt += summeZeile(key, 'Total Lohneinnahmen (netto, oben)', r.lohnTotal, null, 'bu-mwst');
         inhalt += `<tr class="bu-sum bu-total bu-spiel ${r.spielraum < 0 ? 'neg' : 'pos'}"><td title="Lohneinnahmen minus private Ausgaben gemäss Budgetrahmen">${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum (Sparen)'}</td><td></td><td class="num r">${fr(r.spielraum)}</td><td></td></tr>`;
       }
       return `<tbody class="bu-ab" data-zebra>
@@ -214,7 +214,7 @@
       const op = (z) => `<span class="bu-op" aria-hidden="true">${z}</span>`;
       return `<section class="bu-fluss" aria-label="Rechnung ${jahr()}">
         <div class="bu-fg"><div class="bu-fgt">GmbH</div><div class="bu-fz">${k('Einnahmen inkl. MWST', r.einnahmen, '', 'einnahmen')}${op('−')}${k('Ausgaben', r.ausgaben, '', 'ausgaben')}${op('=')}${k('Netto-Lohn aus GmbH', r.gmbhLohn, 'zw', 'lohn')}</div></div>
-        <div class="bu-fg"><div class="bu-fgt">Ich</div><div class="bu-fz">${op('+')}${k('Anstellungen', r.anstellungen, '', 'lohn')}${op('=')}${k('Lohneinnahmen', r.lohnTotal, 'zw', 'lohn')}${op('−')}${k('Private Ausgaben (Budget)', r.privat, '', 'privat')}${op('=')}${k(r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum', r.spielraum, r.spielraum < 0 ? 'end neg' : 'end pos', 'privat')}<span class="bu-op-leer"></span><button class="bu-fk bu-fk-off" data-bu="springe" data-key="einnahmen" title="Zählt nicht im Budget. Offeriert: ${fr(r.offeriertNach.offeriert)} · noch zu offerieren: ${fr(r.offeriertNach.offerieren)} (inkl. MWST)"><span>Offerierte Beträge</span><b>${fr(r.offeriertInkl)}</b></button></div></div>
+        <div class="bu-fg"><div class="bu-fgt">Ich</div><div class="bu-fz">${op('+')}${k('Anstellungen', r.anstellungen, '', 'lohn')}${op('=')}${k('Lohneinnahmen (netto)', r.lohnTotal, 'zw', 'lohn')}${op('−')}${k('Private Ausgaben (Budget)', r.privat, '', 'privat')}${op('=')}${k(r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum', r.spielraum, r.spielraum < 0 ? 'end neg' : 'end pos', 'privat')}<span class="bu-op-leer"></span><button class="bu-fk bu-fk-off" data-bu="springe" data-key="einnahmen" title="Zählt nicht im Budget. Offeriert: ${fr(r.offeriertNach.offeriert)} · noch zu offerieren: ${fr(r.offeriertNach.offerieren)} (inkl. MWST)"><span>Offerierte Beträge</span><b>${fr(r.offeriertInkl)}</b></button></div></div>
       </section>`;
     }
 

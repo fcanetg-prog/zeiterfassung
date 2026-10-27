@@ -9,7 +9,7 @@
   const isNum = (x) => typeof x === 'number' && isFinite(x);
 
   /** Bereiche des Budgets in der Reihenfolge des Excels. */
-  const BEREICHE = [['ausgaben', 'Ausgaben GmbH'], ['einnahmen', 'Einnahmen GmbH'], ['lohn', 'Lohneinnahmen'], ['privat', 'Private Ausgaben']];
+  const BEREICHE = [['ausgaben', 'Ausgaben GmbH'], ['einnahmen', 'Einnahmen GmbH'], ['lohn', 'Lohneinnahmen (netto)'], ['privat', 'Private Ausgaben']];
   /** Status der Offerten (intern «zugesagt» = bestätigt) in der Reihenfolge der Übersicht. */
   const STATUS = [['offen', 'Offeriert'], ['zugesagt', 'Bestätigt'], ['abgeschlossen', 'Abgeschlossen'], ['abgesagt', 'Abgesagt']];
 
