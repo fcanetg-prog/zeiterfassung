@@ -893,7 +893,7 @@ tr.bu-z:hover select.bu-wahl, tr.bu-z:hover .bu-om, select.bu-wahl:focus, .bu-om
 tr.bu-z:hover .bu-nz, .bu-nz:focus, .bu-nz.auf { opacity: 1; }
 .bu-nz.hat { opacity: 1; color: var(--teal-deep); font-weight: 600; }
 tr.bu-nzz td { height: 32px; padding-left: calc(var(--k-einzug) + 14px); background: #f7fafa; }
-.list.bu input.bu-notiz { color: var(--ink, #1c2b2b); font-style: italic; }
+.list.bu input.bu-notiz { color: var(--ink, #1c2b2b); }
 select.bu-wahl { width: 110px; font-size: 12px; padding: 2px 4px; }
 .bu-link { max-width: 190px; font-size: 12px; padding: 0 2px 0 4px !important; overflow: hidden; }
 .bu-link .link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
@@ -991,3 +991,6 @@ tr.bu-z:hover select.bu-stand, select.bu-stand:focus, select.bu-stand.an { opaci
 select.bu-stand.an { border-color: #d9b44a; background: #fffbe8; color: #7a5a00; font-weight: 600; }
 .bu-op-leer { width: 18px; }
 .bu-fk.bu-fk-off { background: #fff4c7; border-color: #e6cf7a; }
+/* In der App ist nichts kursiv (ausser was in Notizen ausdrücklich so formatiert ist) */
+i, em, cite, dfn, address, var { font-style: normal; }
+.pd-rich i, .pd-rich em { font-style: italic; }
