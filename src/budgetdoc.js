@@ -52,7 +52,8 @@
     if (p.offerteId) o.offerteId = String(p.offerteId);
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
     if (p.serie) o.serie = String(p.serie);         // derselbe Posten in allen Jahren (Änderungen gelten für die folgenden Jahre)
-    if (p.jahresausgabe) o.jahresausgabe = true;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
+    if (p.jahresausgabe) o.jahresausgabe = true;
+    if (p.offen) o.offen = true;                     // Einnahme noch nicht bestätigt (offeriert): zählt nicht ins Budget     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
     return o;
   }
 
@@ -105,7 +106,9 @@
       let wert = p.betrag || 0;
       if (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen')) wert = betragVon(o);
       else if (o && o.status === 'abgesagt') wert = 0;
-      return { posten: p, offerte: o || null, wert, satz: satzVon(p), zaehlt: true };
+      // Noch nicht bestätigt: zählt nicht (ausser die verknüpfte Offerte ist bestätigt)
+      const zaehlt = !(p.offen && p.bereich === 'einnahmen' && !(o && (o.status === 'zugesagt' || o.status === 'abgeschlossen')));
+      return { posten: p, offerte: o || null, wert, satz: satzVon(p), zaehlt };
     });
     // Offerten ohne verknüpften Posten als eigene Zeilen; offene zählen nicht
     const auto = [];
@@ -116,7 +119,7 @@
 
     const inklVon = (z) => (z.satz != null ? z.wert : round2(z.wert * (1 + S.mwst / 100)));   // alle Einnahmen sind mehrwertsteuerpflichtig
     const ein = zeilen.filter((z) => z.posten.bereich === 'einnahmen');
-    const zaehlend = [...ein.filter((z) => z.satz == null), ...auto.filter((z) => z.zaehlt)];
+    const zaehlend = [...ein.filter((z) => z.satz == null && z.zaehlt), ...auto.filter((z) => z.zaehlt)];
     const umsatz = round2(zaehlend.reduce((s, z) => s + z.wert, 0));
     const basis = umsatz;
     const mwstEin0 = round2(basis * S.mwst / 100);
@@ -133,7 +136,7 @@
     const einnahmen = round2(umsatz + mwstEin + satzEin);
     const gmbhLohn = round2(einnahmen - ausgaben);
     const anstellungen = summe(nachBereich('lohn'), 'wert');
-    const offen = auto.filter((z) => !z.zaehlt);
+    const offen = [...ein.filter((z) => !z.zaehlt), ...auto.filter((z) => !z.zaehlt)];
     const privat = summe(nachBereich('privat'), 'wert');
 
     // Gruppen in der Reihenfolge ihres ersten Postens
@@ -141,7 +144,7 @@
     for (const [b] of BEREICHE) {
       const m = new Map();
       for (const z of nachBereich(b)) { const g = z.posten.gruppe; if (!m.has(g)) m.set(g, []); m.get(g).push(z); }
-      gruppen[b] = [...m.entries()].map(([name, zs]) => ({ name, zeilen: zs, summe: summe(zs, 'wert'), inkl: b === 'einnahmen' ? summe(zs, 'inkl') : null }));
+      gruppen[b] = [...m.entries()].map(([name, zs]) => { const z2 = zs.filter((z) => z.zaehlt); return { name, zeilen: zs, summe: summe(z2, 'wert'), inkl: b === 'einnahmen' ? summe(z2, 'inkl') : null }; });
     }
     return {
       zeilen, auto, gruppen, umsatz, basis, basisSaldo, mwstEin, einnahmen, ausgaben, gmbhLohn, anstellungen, saetze: S,
@@ -242,5 +245,25 @@
     return n > 0;
   }
 
-  return { serienVergeben, jahresausgabenMarkieren, BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
+  /**
+   * Offerierte Beträge aus den Notizen der Einnahmen («Offeriert 15’463 …», «Möglich 3’895 …») als Betrag übernehmen,
+   * markiert als «noch nicht bestätigt». Hat der Posten schon einen Betrag, entsteht daneben ein eigener Posten.
+   */
+  function offerierteUebernehmen(posten, uid) {
+    let anders = false;
+    for (const p of posten.slice()) {
+      if (p.bereich !== 'einnahmen') continue;
+      const m = /^\s*(offeriert|möglich)\s+([\d’'.,]+)/i.exec(String(p.notiz || ''));
+      if (!m) continue;
+      const v = formelWert(m[2]);
+      if (v == null) continue;
+      if (Math.abs(p.betrag || 0) < 0.005 && !p.offerteId) { p.betrag = v; p.formel = ''; p.offen = true; }
+      else posten.push(normalize({ id: uid(), jahr: p.jahr, bereich: p.bereich, gruppe: p.gruppe, text: `${p.text} (offeriert)`, formel: '', betrag: v, pos: (p.pos || 0) + 0.5, offen: true }));
+      p.notiz = ''; anders = true;
+    }
+    if (anders) for (const j of new Set(posten.map((x) => x.jahr))) posten.filter((x) => x.jahr === j).sort((a, b) => (a.pos || 0) - (b.pos || 0)).forEach((x, i) => { x.pos = i + 1; });
+    return anders;
+  }
+
+  return { offerierteUebernehmen, serienVergeben, jahresausgabenMarkieren, BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
 });

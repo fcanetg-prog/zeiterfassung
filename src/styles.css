@@ -984,3 +984,6 @@ select.bu-kwahl.gesetzt { opacity: .55; }
 .bv-legende i.voll { width: 0; height: 12px; border-left: 2px dotted #7d8f8f; border-radius: 0; vertical-align: -2px; }
 .bv-mehr { position: absolute; right: -12px; line-height: 1; top: 50%; transform: translateY(-50%); font-size: 9px; color: #c0392b; }
 .bv-leer { font-size: 11px; color: var(--muted); }
+.bu-om.bu-offen-t { width: 124px; }
+tr.bu-nicht td.bu-wert input.bu-betrag { color: var(--muted); font-style: italic; }
+tr.bu-nicht td.bu-inkl { font-style: italic; }

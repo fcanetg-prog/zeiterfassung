@@ -80,10 +80,11 @@
       const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) vom Umsatz inkl. MWST` : o ? 'Betrag aus der verknüpften Offerte' : '';
       const betrag = fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
       const notizAuf = state.bu.notiz.has(p.id);
-      const akt = `${p.bereich === 'privat' ? `<label class="bu-om ${p.jahresausgabe ? 'an' : ''}" title="Jahresausgabe: einmalig oder einmal im Jahr fällig. In «Private Ausgaben bisher» ohne Vergleich mit der vergangenen Zeit."><input type="checkbox" data-bu="jahresausgabe" data-id="${p.id}"${p.jahresausgabe ? ' checked' : ''}>Jahresausgabe</label>` : ''}${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
+      const offenKn = ein && p.satz == null && !(o && o.status !== 'offen') ? `<label class="bu-om bu-offen-t ${p.offen ? 'an' : ''}" title="Noch nicht bestätigt (offeriert oder möglich): zählt nicht zu den budgetierten Einnahmen, sondern zu den offerierten Aufträgen."><input type="checkbox" data-bu="offen" data-id="${p.id}"${p.offen ? ' checked' : ''}>noch nicht bestätigt</label>` : '';
+      const akt = `${offenKn}${p.bereich === 'privat' ? `<label class="bu-om ${p.jahresausgabe ? 'an' : ''}" title="Jahresausgabe: einmalig oder einmal im Jahr fällig. In «Private Ausgaben bisher» ohne Vergleich mit der vergangenen Zeit."><input type="checkbox" data-bu="jahresausgabe" data-id="${p.id}"${p.jahresausgabe ? ' checked' : ''}>Jahresausgabe</label>` : ''}${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
         <button class="bu-nz ${p.notiz ? 'hat' : ''} ${notizAuf ? 'auf' : ''}" data-bu="notiz" data-id="${p.id}" title="${p.notiz ? esc(p.notiz) : 'Notiz hinzufügen'}" aria-label="Notiz" aria-expanded="${notizAuf}">${p.notiz ? 'Notiz' : '+ Notiz'}</button>
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
-      return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''}" data-id="${p.id}">
+      return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''} ${z.zaehlt ? '' : 'bu-nicht'}" data-id="${p.id}">
         <td class="bu-po">${textFeld(p)}</td>
         ${zwei(p.bereich, betrag, ein ? fr(z.inkl) : '', 'bu-wert', 'num r bu-inkl')}
         <td class="r bu-akt">${akt}</td></tr>
@@ -146,7 +147,7 @@
       if (key === 'ausgaben') inhalt += summeZeile(key, 'Total Ausgaben', r.ausgaben, null, 'bu-total');
       if (key === 'einnahmen') {
         inhalt += summeZeile(key, 'Total Einnahmen', r.umsatz, r.einnahmen, 'bu-total');
-        if (r.offeriert) inhalt += summeZeile(key, 'Offene Offerten (zählen noch nicht)', r.offeriert, r.offeriertInkl, 'bu-offen');
+        if (r.offeriert) inhalt += summeZeile(key, 'Noch nicht bestätigt (zählt nicht)', r.offeriert, r.offeriertInkl, 'bu-offen');
       }
       if (key === 'lohn') inhalt += summeZeile(key, 'Total Lohneinnahmen', r.lohnTotal, null, 'bu-total');
       if (key === 'privat') {
@@ -224,6 +225,7 @@
       const vorjahre = [...new Set(posten().map((p) => p.jahr))].filter((x) => x < j).sort((a, b) => b - a);
       return `
       <header class="head"><h1>Budget ${j}</h1>
+        <div class="bignum" title="Einnahmen, die als «noch nicht bestätigt» markiert sind, und offene Offerten mit Betrag für ${j}. Zählen nicht im Budget."><b>${fr(r.offeriertInkl)}</b><span>Offerierte Aufträge, inkl. MWST</span></div>
         <div class="bignum"><b class="${r.spielraum < 0 ? 'neg' : 'pos'}">${fr(r.spielraum)}</b><span>${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum'} nach privatem Budget</span></div>
       </header>
       ${fluss(r)}
@@ -356,11 +358,13 @@
         if (key === 'formel') {
           const f = setzeBetrag(p, key, el.value);
           if (f) { toast(f, { fehler: true }); return; }
-          for (const y of folgende) { y.betrag = p.betrag; y.formel = p.formel; if (p.satz != null) y.satz = p.satz; else delete y.satz; }
+          // Spätere Posten, die noch nicht bestätigt sind (eigener offerierter Betrag), behalten ihren Betrag
+          for (const y of folgende) { if (y.offen && !p.offen) continue; y.betrag = p.betrag; y.formel = p.formel; if (p.satz != null) y.satz = p.satz; else delete y.satz; }
         } else { p[key] = el.value; for (const y of folgende) y[key] = el.value; }
         persist(); render();
         hinweisSpaeter(folgende, { formel: 'Der Betrag', text: 'Der Name', notiz: 'Die Notiz' }[key] || 'Die Änderung');
-      } else if (a === 'jahresausgabe') {
+      } else if (a === 'offen') { if (el.checked) p.offen = true; else delete p.offen; persist(); render(); }
+      else if (a === 'jahresausgabe') {
         const folgende = spaeter(p);
         for (const y of [p, ...folgende]) { if (el.checked) y.jahresausgabe = true; else delete y.jahresausgabe; }
         persist(); render(); hinweisSpaeter(folgende, 'Die Änderung');

@@ -384,3 +384,17 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(B.kopieFuer(ps, 2026, 2029, () => 'k')[0].serie, ps[0].serie);
   console.log('Budget über die Jahre bestanden.');
 }
+
+// Budget: noch nicht bestätigte Einnahmen
+{
+  const B = require('../src/budgetdoc.js');
+  const P = (o) => B.normalize(Object.assign({ id: 'o' + Math.random(), jahr: 2027, bereich: 'einnahmen', gruppe: '' }, o));
+  const ps = [P({ text: 'A', betrag: 1000, pos: 1 }), P({ text: 'B', betrag: 0, notiz: 'Offeriert 15’463', pos: 2 }), P({ text: 'C', betrag: 2500, notiz: 'Offeriert 6’910 · (bei 2 Aufnahmen)', pos: 3 }), P({ text: 'D', betrag: 0, notiz: 'Möglich 3’895 · noch zu offerieren', pos: 4 })];
+  let n = 0; assert.ok(B.offerierteUebernehmen(ps, () => 'n' + n++));
+  assert.deepStrictEqual(ps.sort((a, b) => a.pos - b.pos).map((p) => [p.text, p.betrag, !!p.offen, p.notiz]), [['A', 1000, false, ''], ['B', 15463, true, ''], ['C', 2500, false, ''], ['C (offeriert)', 6910, true, ''], ['D', 3895, true, '']]);
+  const r = B.rechne(ps, [{ id: 'x', status: 'offen', jahresBetraege: { 2027: 100 } }], 2027, { mwst: 10, saldo: 0 });
+  assert.strictEqual(r.umsatz, 3500); assert.strictEqual(r.gruppen.einnahmen[0].summe, 3500);
+  assert.strictEqual(r.offeriert, 15463 + 6910 + 3895 + 100); assert.strictEqual(r.offeriertInkl, B.round2((15463 + 6910 + 3895 + 100) * 1.1));
+  assert.ok(!B.offerierteUebernehmen(ps, () => 'y'));
+  console.log('Noch nicht bestätigte Einnahmen bestanden.');
+}
