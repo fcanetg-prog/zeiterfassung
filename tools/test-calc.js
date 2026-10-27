@@ -316,9 +316,14 @@ console.log('Alle Prüfungen bestanden.');
   const alt = [P({ bereich: 'einnahmen', gruppe: 'Aufträge ohne MWST', text: 'X', betrag: 1, offeriertFormel: '15463', notiz: 'offeriert' }), P({ bereich: 'einnahmen', gruppe: 'MWST', text: 'Mehrwertsteuer', satz: 8.1 }), P({ bereich: 'ausgaben', gruppe: 'Steuern', text: 'Mehrwertsteuer', satz: 6.2 })];
   const st = {};
   assert.ok(B.neueForm(alt, st));
-  assert.deepStrictEqual(alt.map((x) => [x.gruppe, x.notiz, !!x.saldo, x.satz, x.offeriert]), [['Aufträge', 'Offeriert 15’463', false, undefined, undefined], ['Steuern', '', true, undefined, undefined]]);
+  assert.deepStrictEqual(alt.map((x) => [x.gruppe, x.notiz, !!x.saldo, x.satz, x.offeriert]), [['', 'Offeriert 15’463', false, undefined, undefined], ['Steuern', '', true, undefined, undefined]]);
   assert.deepStrictEqual(st.mwstJahre, { 2027: { mwst: 8.1, saldo: 6.2 } });
   assert.ok(!B.neueForm(alt, st));
+  // Umbau der Gruppen: Subcontracts, Übrige Ausgaben, Einnahmen und Lohn ohne Untergruppe, Texte SWI ergänzt
+  const g = [P({ bereich: 'ausgaben', gruppe: 'Buchhaltung', text: 'Revion', pos: 1 }), P({ bereich: 'ausgaben', gruppe: 'Angestellte', text: 'Janna', pos: 2 }), P({ bereich: 'ausgaben', gruppe: 'Anderes', text: 'NZZ', pos: 3 }),
+    P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'Geldcast', pos: 4 }), P({ bereich: 'lohn', gruppe: 'Aus Anstellungen', text: 'SRF', pos: 5 })];
+  let nr = 0; B.neueForm(g, {}, () => 'n' + nr++);
+  assert.deepStrictEqual(g.sort((a, b) => a.pos - b.pos).map((x) => `${x.gruppe}:${x.text}`), ['Subcontracts:Janna', 'Subcontracts:Revion', 'Übrige Ausgaben:NZZ', ':Geldcast', ':SRF', ':Texte SWI']);
   // Kopie für das nächste Jahr ohne Verknüpfungen
   let n = 0; const k = B.kopieFuer(posten, 2027, 2028, () => 'n' + n++);
   assert.strictEqual(k.length, 6); assert.ok(k.every((x) => x.jahr === 2028 && !x.offerteId));

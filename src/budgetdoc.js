@@ -154,7 +154,7 @@
    * die MWST-Zeile der Ausgaben rechnet mit dem Saldosteuersatz aus den Einstellungen; Sätze wandern in die Einstellungen;
    * «offeriert» steht in der Notiz. Gibt true zurück, wenn sich etwas geändert hat.
    */
-  function neueForm(posten, settings) {
+  function neueForm(posten, settings, uid) {
     let anders = false;
     const sj = settings.mwstJahre || (settings.mwstJahre = {});
     for (let i = posten.length - 1; i >= 0; i--) {
@@ -176,6 +176,27 @@
         delete p.offeriert; delete p.offeriertFormel; anders = true;
       }
     }
+    // Umbau Oktober 2026: Gruppen der Ausgaben umbenannt, Buchhaltung zu den Subcontracts; Einnahmen und Lohneinnahmen ohne Untergruppen
+    const UMB = { Angestellte: 'Subcontracts', Buchhaltung: 'Subcontracts', Anderes: 'Übrige Ausgaben' };
+    const jahre = new Set(), letzteAngestellte = {};
+    for (const x of posten) if (x.bereich === 'ausgaben' && x.gruppe === 'Angestellte') letzteAngestellte[x.jahr] = Math.max(letzteAngestellte[x.jahr] || -Infinity, x.pos || 0);
+    for (const p of posten) {
+      if (p.bereich === 'ausgaben' && UMB[p.gruppe]) {
+        // Buchhaltung hinter die Lohnkosten (früher «Angestellte») stellen
+        if (p.gruppe === 'Buchhaltung' && isFinite(letzteAngestellte[p.jahr])) p.pos = letzteAngestellte[p.jahr] + 0.5;
+        p.gruppe = UMB[p.gruppe]; anders = true; jahre.add(p.jahr);
+      }
+      if ((p.bereich === 'einnahmen' && p.gruppe === 'Aufträge') || (p.bereich === 'lohn' && p.gruppe === 'Aus Anstellungen')) { p.gruppe = ''; anders = true; jahre.add(p.jahr); }
+    }
+    // Lohneinnahmen: Universität Neuchâtel, Universität Bern, SRF und Texte SWI gibt es in jedem Jahr
+    if (uid) for (const j of new Set(posten.filter((x) => x.bereich === 'lohn').map((x) => x.jahr))) {
+      const lohn = posten.filter((x) => x.jahr === j && x.bereich === 'lohn');
+      if (lohn.length && !lohn.some((x) => /texte swi/i.test(x.text))) {
+        posten.push(normalize({ id: uid(), jahr: j, bereich: 'lohn', gruppe: '', text: 'Texte SWI', formel: '', betrag: 0, pos: Math.max(...lohn.map((x) => x.pos || 0)) + 0.5 }));
+        anders = true; jahre.add(j);
+      }
+    }
+    for (const j of jahre) posten.filter((x) => x.jahr === j).sort((a, b) => (a.pos || 0) - (b.pos || 0)).forEach((x, i) => { x.pos = i + 1; });
     return anders;
   }
 

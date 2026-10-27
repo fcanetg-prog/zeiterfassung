@@ -1486,7 +1486,7 @@
       // Sätze aus der Datei übernehmen, ohne erfasste zu überschreiben; ältere Dateien in die heutige Form bringen
       const mj = state.data.settings.mwstJahre || (state.data.settings.mwstJahre = {});
       for (const [j, z] of Object.entries(r.data.mwstJahre || {})) mj[j] = Object.assign({}, z, mj[j]);
-      window.BudgetDoc.neueForm(state.data.budgetPosten, state.data.settings);
+      window.BudgetDoc.neueForm(state.data.budgetPosten, state.data.settings, () => uid('bu'));
       await persist();
       state.year = jahre[0]; state.view = 'budget'; render();
       toast(`Budget ${jahre.join(', ')}: ${neu.length} Posten übernommen`);
@@ -1788,6 +1788,8 @@
     const st = state.data.settings, m = Object.assign({}, st.einmalig);
     const vorher = JSON.stringify(m);
     if (!m.budget2) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st); m.budget2 = true; }
+    // budget3: Ausgaben-Gruppen Subcontracts und Übrige Ausgaben, Einnahmen und Lohneinnahmen ohne Untergruppen, Texte SWI
+    if (!m.budget3) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st, () => uid('bu')); m.budget3 = true; }
     if (!m.bebu2710) {
       const pl = (state.data.privatKontenplaene || {})['2026'];
       if (pl) for (const z of pl.zeilen.filter((x) => x.konto && x.text.trim() === 'BIC')) {

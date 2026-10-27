@@ -96,6 +96,13 @@
         <option value="">Konto …</option>${ks.map((z) => `<option value="${esc(z.konto)}" ${z.konto === k ? 'selected' : ''}>${esc(z.konto)} ${esc(z.text)}</option>`).join('')}</select>`;
     }
 
+    /** Bereiche mit nur einem Betrag (Ausgaben, Lohneinnahmen) zeigen ihn in der rechten Spalte, bündig mit «inkl. MWST». */
+    const EINSPALTIG = new Set(['ausgaben', 'lohn']);
+    const zwei = (bereich, a, b, klA, klB) => (EINSPALTIG.has(bereich)
+      ? `<td></td><td class="${klA || 'num r'}">${a}</td>`
+      : `<td class="${klA || 'num r'}">${a}</td><td class="${klB || 'num r'}">${b}</td>`);
+    const zahl = (x) => (x == null ? '' : typeof x === 'string' ? x : fr(x));
+
     function postenZeilen(z) {
       const p = z.posten, o = z.offerte, ein = p.bereich === 'einnahmen', S = saetze();
       const fest = p.saldo || (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen' || o.status === 'abgesagt'));
@@ -109,8 +116,7 @@
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
       return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''}" data-id="${p.id}">
         <td class="bu-po">${textFeld(p)}</td>
-        <td class="bu-wert">${betrag}</td>
-        <td class="num r bu-inkl">${ein ? fr(z.inkl) : priv ? istZelle(z.wert, ist) : ''}</td>
+        ${zwei(p.bereich, betrag, ein ? fr(z.inkl) : priv ? istZelle(z.wert, ist) : '', 'bu-wert', 'num r bu-inkl')}
         <td class="r bu-akt">${akt}</td></tr>
         ${notizAuf ? `<tr class="bu-nzz"><td colspan="4"><input id="bu-${p.id}-notiz" class="inline bu-notiz" type="text" value="${esc(p.notiz)}" placeholder="Notiz zu diesem Posten" data-bu="feld" data-id="${p.id}" data-key="notiz"></td></tr>` : ''}`;
     }
@@ -130,13 +136,18 @@
       const auf = gOffen(bereich, name);
       return `<tr class="bu-g ${auf ? 'auf' : ''}" data-bu="g-auf" data-bereich="${bereich}" data-gruppe="${esc(name)}" tabindex="0" role="button" aria-expanded="${auf}">
         <td class="bu-gt"><span class="klapp-chev">${auf ? '▾' : '▸'}</span>${fest ? `<span class="bu-gname-fix">${esc(name)}</span>` : `<input class="inline bu-gname" id="${gId(bereich, name)}" type="text" size="${Math.max(8, name.length + 2)}" value="${esc(name)}" placeholder="Gruppe" data-bu="gruppe" data-bereich="${bereich}" data-alt="${esc(name)}" title="Name der Gruppe ändern">`}<span class="klapp-zahl">${anzahl}</span></td>
-        <td class="num r">${fr(summe)}</td><td class="num r">${inkl == null ? '' : typeof inkl === 'string' ? inkl : fr(inkl)}</td><td></td></tr>`;
+        ${zwei(bereich, fr(summe), zahl(inkl))}<td></td></tr>`;
     }
 
     function gruppenZeilen(bereich, r) {
       let html = '';
       for (const g of r.gruppen[bereich]) {
-        const istG = bereich === 'privat' ? g.zeilen.reduce((s, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? s : s + i; }, 0) : null;
+        if (!g.name) {   // Posten ohne Gruppe: direkt im Bereich, ohne Zwischenzeile
+          for (const z of g.zeilen) html += postenZeilen(z);
+          html += `<tr class="bu-add"><td colspan="4"><button class="link" data-bu="neu" data-bereich="${bereich}" data-gruppe="">+ Posten</button></td></tr>`;
+          continue;
+        }
+        const istG = bereich === 'privat' ? g.zeilen.reduce((s, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? s : (s || 0) + i; }, null) : null;
         html += gruppeKopf(bereich, g.name, g.summe, bereich === 'privat' ? istZelle(g.summe, istG) : g.inkl, g.zeilen.length);
         if (!gOffen(bereich, g.name)) continue;
         for (const z of g.zeilen) html += postenZeilen(z);
@@ -145,15 +156,18 @@
       return html;
     }
 
-    const summeZeile = (text, a, b, kl) => `<tr class="bu-sum ${kl || ''}"><td>${text}</td><td class="num r">${a == null ? '' : fr(a)}</td><td class="num r">${b == null ? '' : fr(b)}</td><td></td></tr>`;
+    const summeZeile = (bereich, text, a, b, kl) => `<tr class="bu-sum ${kl || ''}"><td>${text}</td>${zwei(bereich, zahl(a), zahl(b))}<td></td></tr>`;
 
     function bereich([key, titel], r) {
+      const S = r.saetze;
       const zu = state.bu.zu.has(key);
-      const istP = key === 'privat' ? r.gruppen.privat.reduce((s, g) => s + g.zeilen.reduce((t, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? t : t + i; }, 0), 0) : null;
+      const istP = key === 'privat' ? r.gruppen.privat.reduce((s, g) => g.zeilen.reduce((t, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? t : (t || 0) + i; }, s), null) : null;
       const kopfSumme = { ausgaben: [r.ausgaben, null], einnahmen: [r.umsatz, r.einnahmen], lohn: [r.lohnTotal, null], privat: [r.privat, istZelle(r.privat, istP)] }[key];
       let inhalt = '';
+      if (EINSPALTIG.has(key)) inhalt += `<tr class="bu-sub"><td></td><td></td><td class="r">Betrag</td><td></td></tr>`;
+      if (key === 'einnahmen') inhalt += `<tr class="bu-sub"><td></td><td class="r">Betrag ohne MWST</td><td class="r" title="Plus ${S.mwst} % MWST (Satz ${jahr()} in den Einstellungen)">inkl. MWST ${S.mwst} %</td><td class="r"><span class="bu-saetze">${S.erfasst ? '' : 'Sätze für ' + jahr() + ' noch nicht erfasst · '}<button class="link" data-action="nav" data-view="einstellungen">MWST-Sätze</button></span></td></tr>`;
       if (key === 'privat') inhalt += `<tr class="bu-sub"><td>Budgetrahmen, den du dir selber gibst</td><td class="r">Budgetrahmen</td><td class="r" title="Saldo der Konten in der Buchhaltung privat ${jahr()}">Ist bisher</td><td></td></tr>`;
-      if (key === 'lohn') inhalt += `<tr class="bu-g bu-fix"><td class="bu-gt"><span class="klapp-chev"></span><span class="bu-gname-fix" title="Total Einnahmen inkl. MWST minus Total Ausgaben">Aus der GmbH (netto)</span></td><td class="num r">${fr(r.gmbhLohn)}</td><td></td><td></td></tr>`;
+      if (key === 'lohn') inhalt += `<tr class="zb bu-z bu-auto"><td class="bu-po"><span class="bu-gname-fix" title="Total Einnahmen inkl. MWST minus Total Ausgaben der GmbH">Fabio Canetg GmbH</span> <span class="dim bu-zn">Einnahmen minus Ausgaben</span></td><td></td><td class="num r"><span class="bu-fest">${fr(r.gmbhLohn)}</span></td><td></td></tr>`;
       inhalt += gruppenZeilen(key, r);
       if (key === 'einnahmen' && r.auto.length) {
         const name = 'Aus den Offerten';
@@ -164,20 +178,19 @@
         }
       }
       inhalt += `<tr class="bu-add"><td colspan="4"><button class="link" data-bu="neu-gruppe" data-bereich="${key}">+ Gruppe</button></td></tr>`;
-      if (key === 'ausgaben') inhalt += summeZeile('Total Ausgaben', r.ausgaben, null, 'bu-total');
+      if (key === 'ausgaben') inhalt += summeZeile(key, 'Total Ausgaben', r.ausgaben, null, 'bu-total');
       if (key === 'einnahmen') {
-        inhalt += summeZeile(`MWST ${r.saetze.mwst} %`, null, r.mwstEin, 'bu-mwst');
-        inhalt += summeZeile('Total Einnahmen', r.umsatz, r.einnahmen, 'bu-total');
-        if (r.offeriert) inhalt += summeZeile('Offene Offerten (zählen noch nicht)', r.offeriert, r.offeriertInkl, 'bu-offen');
+        inhalt += summeZeile(key, 'Total Einnahmen', r.umsatz, r.einnahmen, 'bu-total');
+        if (r.offeriert) inhalt += summeZeile(key, 'Offene Offerten (zählen noch nicht)', r.offeriert, r.offeriertInkl, 'bu-offen');
       }
-      if (key === 'lohn') inhalt += summeZeile('Total Lohneinnahmen', r.lohnTotal, null, 'bu-total');
+      if (key === 'lohn') inhalt += summeZeile(key, 'Total Lohneinnahmen', r.lohnTotal, null, 'bu-total');
       if (key === 'privat') {
         inhalt += `<tr class="bu-sum bu-total"><td>Total private Ausgaben</td><td class="num r">${fr(r.privat)}</td><td class="num r">${istZelle(r.privat, istP)}</td><td></td></tr>`;
-        inhalt += summeZeile('Total Lohneinnahmen (oben)', r.lohnTotal, null, 'bu-mwst');
+        inhalt += summeZeile(key, 'Total Lohneinnahmen (oben)', r.lohnTotal, null, 'bu-mwst');
         inhalt += `<tr class="bu-sum bu-total bu-spiel ${r.spielraum < 0 ? 'neg' : 'pos'}"><td title="Lohneinnahmen minus private Ausgaben gemäss Budgetrahmen">${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum (Sparen)'}</td><td class="num r">${fr(r.spielraum)}</td><td></td><td></td></tr>`;
       }
       return `<tbody class="bu-ab" data-zebra>
-        <tr class="klapp-kopf" data-bu="auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${!zu}"><td><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${titel}</td><td class="num r">${fr(kopfSumme[0])}</td><td class="num r">${kopfSumme[1] == null ? '' : typeof kopfSumme[1] === 'string' ? kopfSumme[1] : fr(kopfSumme[1])}</td><td></td></tr>
+        <tr class="klapp-kopf" data-bu="auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${!zu}"><td><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${titel}</td>${zwei(key, fr(kopfSumme[0]), zahl(kopfSumme[1]))}<td></td></tr>
         ${zu ? '' : inhalt}</tbody>`;
     }
 
@@ -192,8 +205,8 @@
     }
 
     function view() {
-      const j = jahr(), S = saetze();
-      const r = BD.rechne(posten(), offerten(), j, S);
+      const j = jahr();
+      const r = BD.rechne(posten(), offerten(), j, saetze());
       const leer = !imJahr().length;
       const vorjahre = [...new Set(posten().map((p) => p.jahr))].filter((x) => x < j).sort((a, b) => b - a);
       return `
@@ -208,7 +221,6 @@
       <section class="pane klapp-box bu-box">
         <table class="list bu">
           <colgroup><col class="c-po"><col class="c-be"><col class="c-in"><col class="c-ak"></colgroup>
-          <thead><tr><th>Posten</th><th class="r">Betrag ohne MWST</th><th class="r" title="Einnahmen plus ${S.mwst} % MWST (Satz ${j} in den Einstellungen)">inkl. MWST ${S.mwst} %</th><th class="r"><span class="bu-saetze">${S.erfasst ? '' : 'Sätze für ' + j + ' noch nicht erfasst · '}<button class="link" data-action="nav" data-view="einstellungen">MWST-Sätze</button></span></th></tr></thead>
           ${BD.BEREICHE.map((b) => bereich(b, r)).join('')}
         </table>
       </section>`;

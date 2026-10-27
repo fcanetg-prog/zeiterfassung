@@ -952,3 +952,4 @@ tr.bu-spiel.pos td:nth-child(2) { color: var(--green); }
 tr.bu-spiel.neg td:nth-child(2) { color: var(--red); }
 select.bu-kwahl { width: 150px; }
 select.bu-kwahl.gesetzt { opacity: .55; }
+.list.bu td.num.r .bu-fest { padding-right: 0; }
