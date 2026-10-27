@@ -87,7 +87,7 @@
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
       return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''} ${z.zaehlt ? '' : 'bu-nicht'}" data-id="${p.id}">
         <td class="bu-po">${textFeld(p)}</td>
-        ${zwei(p.bereich, betrag, ein ? fr(z.inkl) : '', 'bu-wert', 'num r bu-inkl')}
+        ${zwei(p.bereich, betrag, ein ? `${p.satz == null ? `<button class="bu-null ${p.ohneMwst ? 'an' : ''}" data-bu="null" data-id="${p.id}" title="${p.ohneMwst ? '0 % MWST: kein Zuschlag. Klicken für den normalen Satz.' : 'Klicken, wenn für diesen Posten 0 % MWST gelten (kein Zuschlag).'}" aria-pressed="${!!p.ohneMwst}">0 %</button>` : ''}${fr(z.inkl)}` : '', 'bu-wert', 'num r bu-inkl')}
         <td class="r bu-akt">${akt}</td></tr>
         ${notizAuf ? `<tr class="bu-nzz"><td colspan="4"><input id="bu-${p.id}-notiz" class="inline bu-notiz" type="text" value="${esc(p.notiz)}" placeholder="Notiz zu diesem Posten" data-bu="feld" data-id="${p.id}" data-key="notiz"></td></tr>` : ''}`;
     }
@@ -310,6 +310,7 @@
           persist(); render();
           toast(`Posten «${p.text || 'ohne Namen'}» gelöscht${weg.length > 1 ? `, auch in ${jahreText(weg.slice(1))}` : ''}`, { actionLabel: 'Rückgängig', action: () => { posten().push(...weg); persist(); render(); } });
         } break;
+        case 'null': if (p) { if (p.ohneMwst) delete p.ohneMwst; else p.ohneMwst = true; for (const y of spaeter(p)) { if (p.ohneMwst) y.ohneMwst = true; else delete y.ohneMwst; } persist(); render(); } break;
         case 'link-weg': if (p) { delete p.offerteId; persist(); render(); } break;
         case 'kopie': {
           const von = +el.dataset.von, neu = BD.kopieFuer(posten(), von, jahr(), () => uid('bu'));

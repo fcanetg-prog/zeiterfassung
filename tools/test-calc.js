@@ -300,13 +300,14 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(B.saetzeFuer({ mwstSatz: 7.7 }, 2027), { mwst: 7.7, saldo: 0, erfasst: false });
   const r = B.rechne(posten, off, 2027, sz);
   // Umsatz: 5000 + 1000 + 3000 (verknüpft statt 999) + 2000 (bestätigte Offerte) = 11000; alle Einnahmen mit MWST
-  assert.strictEqual(r.umsatz, 11000); assert.strictEqual(r.mwstEin, 891); assert.strictEqual(r.einnahmen, 11891);
+  // SWD Abo mit 0 % MWST: MWST nur auf 6000
+  assert.strictEqual(r.umsatz, 11000); assert.strictEqual(r.mwstEin, 486); assert.strictEqual(r.einnahmen, 11486);
   // Saldosteuer 6.2 % vom Umsatz inkl. MWST
-  assert.strictEqual(r.basisSaldo, 11891); assert.strictEqual(r.ausgaben, B.round2(288 + 737.24));
-  assert.strictEqual(r.gmbhLohn, B.round2(11891 - 1025.24)); assert.strictEqual(r.lohnTotal, B.round2(11891 - 1025.24 + 10090));
+  assert.strictEqual(r.basisSaldo, 11486); assert.strictEqual(r.ausgaben, B.round2(288 + 712.13));
+  assert.strictEqual(r.gmbhLohn, B.round2(11486 - 1000.13)); assert.strictEqual(r.lohnTotal, B.round2(11486 - 1000.13 + 10090));
   assert.strictEqual(r.zeilen.find((z) => z.posten.text === 'Moderation').inkl, 1081);
-  assert.strictEqual(r.zeilen.find((z) => z.posten.text === 'SWD Abo').inkl, 5405);
-  assert.strictEqual(r.gruppen.einnahmen[0].inkl, 5405 + 1081 + 3243);
+  assert.strictEqual(r.zeilen.find((z) => z.posten.text === 'SWD Abo').inkl, 5000);
+  assert.strictEqual(r.gruppen.einnahmen[0].inkl, 5000 + 1081 + 3243);
   assert.strictEqual(r.offeriert, 4000);   // offene Offerte zählt nicht; abgesagte gar nicht
   assert.deepStrictEqual(r.auto.map((z) => [z.offerte.id, z.zaehlt]), [['o1', true], ['o3', false]]);
   assert.deepStrictEqual(B.offertenNachJahr(off), { 2026: { offen: 0, zugesagt: 0, abgeschlossen: 100, abgesagt: 0 }, 2027: { offen: 4000, zugesagt: 5000, abgeschlossen: 0, abgesagt: 7000 }, 2028: { offen: 0, zugesagt: 500, abgeschlossen: 0, abgesagt: 0 } });

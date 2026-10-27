@@ -53,6 +53,7 @@
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
     if (p.serie) o.serie = String(p.serie);         // derselbe Posten in allen Jahren (Änderungen gelten für die folgenden Jahre)
     if (p.jahresausgabe) o.jahresausgabe = true;
+    if (p.ohneMwst) o.ohneMwst = true;               // Einnahme mit 0 % MWST: inkl. MWST = ohne MWST
     // Stand einer Einnahme: bestätigt (Standard, zählt), offeriert oder noch zu offerieren (zählen nicht). Früher: «offen» = offeriert.
     const st = ['offeriert', 'offerieren'].includes(p.status) ? p.status : p.offen ? 'offeriert' : '';
     if (st) o.status = st;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
@@ -119,12 +120,12 @@
       auto.push({ offerte: o, wert: betragVon(o), zaehlt: o.status === 'zugesagt' || o.status === 'abgeschlossen' });
     }
 
-    const inklVon = (z) => (z.satz != null ? z.wert : round2(z.wert * (1 + S.mwst / 100)));   // alle Einnahmen sind mehrwertsteuerpflichtig
+    const inklVon = (z) => (z.satz != null || (z.posten && z.posten.ohneMwst) ? z.wert : round2(z.wert * (1 + S.mwst / 100)));   // 0 % MWST: kein Zuschlag
     const ein = zeilen.filter((z) => z.posten.bereich === 'einnahmen');
     const zaehlend = [...ein.filter((z) => z.satz == null && z.zaehlt), ...auto.filter((z) => z.zaehlt)];
     const umsatz = round2(zaehlend.reduce((s, z) => s + z.wert, 0));
     const basis = umsatz;
-    const mwstEin0 = round2(basis * S.mwst / 100);
+    const mwstEin0 = round2(zaehlend.filter((z) => !(z.posten && z.posten.ohneMwst)).reduce((s, z) => s + z.wert, 0) * S.mwst / 100);
     // Saldosteuersatz auf dem Umsatz inklusive MWST (wie die ESTV rechnet); eigene Prozentsätze auf dem Umsatz ohne MWST
     const basisSaldo = round2(umsatz + mwstEin0);
     for (const z of zeilen) if (z.satz != null) z.wert = round2((z.posten.saldo ? basisSaldo : basis) * z.satz / 100);
@@ -187,8 +188,6 @@
         delete p.offeriert; delete p.offeriertFormel; anders = true;
       }
     }
-    // Alle Einnahmen sind mehrwertsteuerpflichtig: frühere Markierung «ohne MWST» entfällt
-    for (const p of posten) if (p.ohneMwst) { delete p.ohneMwst; anders = true; }
     // Umbau Oktober 2026: Gruppen der Ausgaben umbenannt, Buchhaltung zu den Subcontracts; Einnahmen und Lohneinnahmen ohne Untergruppen
     const UMB = { Angestellte: 'Subcontracts', Buchhaltung: 'Subcontracts', Anderes: 'Übrige Ausgaben' };
     const jahre = new Set(), letzteAngestellte = {};
