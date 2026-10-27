@@ -241,6 +241,24 @@
 
     /* ---------- Bearbeiten ---------- */
 
+    /* ---------- Änderungen gelten auch für die folgenden Jahre ---------- */
+    /** Derselbe Posten (gleiche «serie») in den Jahren nach dem angezeigten. */
+    const spaeter = (p) => (p.serie ? posten().filter((x) => x.serie === p.serie && x.jahr > p.jahr) : []);
+    const jahreText = (l) => [...new Set(l.map((x) => x.jahr))].sort().join(', ');
+    function hinweisSpaeter(l, was) { if (l.length) toast(`${was} gilt auch für ${jahreText(l)}`); }
+    /** In einem späteren Jahr einen neuen Posten an die passende Stelle setzen (hinter die Gruppe, sonst ans Ende des Bereichs). */
+    function einfuegenIn(j, vorlage) {
+      const l = posten().filter((x) => x.jahr === j).sort((a, b) => a.pos - b.pos);
+      const BER = BD.BEREICHE.map(([k]) => k);
+      const g = l.filter((x) => x.bereich === vorlage.bereich && x.gruppe === vorlage.gruppe), b = l.filter((x) => x.bereich === vorlage.bereich);
+      const nach = g.length ? g[g.length - 1].pos : b.length ? b[b.length - 1].pos : Math.max(0, ...l.filter((x) => BER.indexOf(x.bereich) < BER.indexOf(vorlage.bereich)).map((x) => x.pos));
+      const n = Object.assign({}, vorlage, { id: uid('bu'), jahr: j, pos: nach + 0.5, mod: 0 });
+      delete n.offerteId;
+      posten().push(n);
+      l.concat([n]).sort((a, c) => a.pos - c.pos).forEach((x, i) => { x.pos = i + 1; });
+      return n;
+    }
+
     function neuerPosten(bereich, gruppe) {
       const l = imJahr();
       const inGruppe = l.filter((p) => p.bereich === bereich && p.gruppe === gruppe);
@@ -249,8 +267,10 @@
       const nach = inGruppe.length ? inGruppe[inGruppe.length - 1].pos
         : imBereich.length ? imBereich[imBereich.length - 1].pos
           : Math.max(0, ...l.filter((p) => BER.indexOf(p.bereich) < BER.indexOf(bereich)).map((p) => p.pos));
-      const p = BD.normalize({ id: uid('bu'), jahr: jahr(), bereich, gruppe, text: '', formel: '', betrag: 0, pos: nach + 0.5 });
+      const p = BD.normalize({ id: uid('bu'), jahr: jahr(), bereich, gruppe, text: '', formel: '', betrag: 0, pos: nach + 0.5, serie: uid('bs') });
       posten().push(p); nummerieren();
+      // Auch in den folgenden Jahren, für die es schon ein Budget gibt
+      for (const j of [...new Set(posten().map((x) => x.jahr))].filter((x) => x > jahr())) einfuegenIn(j, p);
       return p;
     }
 
@@ -284,8 +304,10 @@
         case 'g-auf': { if (ev.target.closest('input')) break; const k = gKey(el.dataset.bereich, el.dataset.gruppe); if (state.bu.gAuf.has(k)) state.bu.gAuf.delete(k); else state.bu.gAuf.add(k); render(); break; }
         case 'notiz': if (p) { if (state.bu.notiz.has(p.id)) state.bu.notiz.delete(p.id); else state.bu.notiz.add(p.id); render(); const f = document.getElementById(`bu-${p.id}-notiz`); if (f) f.focus(); } break;
         case 'weg': if (p) {
-          const i = posten().indexOf(p); posten().splice(i, 1); persist(); render();
-          toast(`Posten «${p.text || 'ohne Namen'}» gelöscht`, { actionLabel: 'Rückgängig', action: () => { posten().splice(i, 0, p); persist(); render(); } });
+          const weg = [p, ...spaeter(p)];
+          for (const x of weg) posten().splice(posten().indexOf(x), 1);
+          persist(); render();
+          toast(`Posten «${p.text || 'ohne Namen'}» gelöscht${weg.length > 1 ? `, auch in ${jahreText(weg.slice(1))}` : ''}`, { actionLabel: 'Rückgängig', action: () => { posten().push(...weg); persist(); render(); } });
         } break;
         case 'link-weg': if (p) { delete p.offerteId; persist(); render(); } break;
         case 'kopie': {
@@ -321,20 +343,28 @@
       const el = ev.target, a = el.dataset && el.dataset.bu;
       if (!a || !state.data || state.view !== 'budget') return;
       if (a === 'gruppe') {
-        const alt = el.dataset.alt, neu = el.value.trim(), b = el.dataset.bereich;
-        for (const x of imJahr()) if (x.bereich === b && x.gruppe === alt) x.gruppe = neu;
+        const alt = el.dataset.alt, neu = el.value.trim(), b = el.dataset.bereich, mit = [];
+        for (const x of imJahr()) if (x.bereich === b && x.gruppe === alt) { x.gruppe = neu; for (const y of spaeter(x)) if (y.gruppe === alt) { y.gruppe = neu; mit.push(y); } }
+        hinweisSpaeter(mit, 'Der neue Gruppenname');
         if (state.bu.gAuf.delete(gKey(b, alt))) state.bu.gAuf.add(gKey(b, neu));
         persist(); render(); return;
       }
       const p = finde(el.dataset.id); if (!p) return;
       if (a === 'feld') {
         const key = el.dataset.key;
+        const folgende = spaeter(p);
         if (key === 'formel') {
           const f = setzeBetrag(p, key, el.value);
           if (f) { toast(f, { fehler: true }); return; }
-        } else p[key] = el.value;
+          for (const y of folgende) { y.betrag = p.betrag; y.formel = p.formel; if (p.satz != null) y.satz = p.satz; else delete y.satz; }
+        } else { p[key] = el.value; for (const y of folgende) y[key] = el.value; }
         persist(); render();
-      } else if (a === 'jahresausgabe') { if (el.checked) p.jahresausgabe = true; else delete p.jahresausgabe; persist(); render(); }
+        hinweisSpaeter(folgende, { formel: 'Der Betrag', text: 'Der Name', notiz: 'Die Notiz' }[key] || 'Die Änderung');
+      } else if (a === 'jahresausgabe') {
+        const folgende = spaeter(p);
+        for (const y of [p, ...folgende]) { if (el.checked) y.jahresausgabe = true; else delete y.jahresausgabe; }
+        persist(); render(); hinweisSpaeter(folgende, 'Die Änderung');
+      }
       else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
     });
 

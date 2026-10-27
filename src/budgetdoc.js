@@ -51,6 +51,7 @@
     if (String(p.offeriertFormel || '').trim()) { o.offeriertFormel = String(p.offeriertFormel); o.offeriert = formelWert(p.offeriertFormel) || 0; }
     if (p.offerteId) o.offerteId = String(p.offerteId);
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
+    if (p.serie) o.serie = String(p.serie);         // derselbe Posten in allen Jahren (Änderungen gelten für die folgenden Jahre)
     if (p.jahresausgabe) o.jahresausgabe = true;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
     return o;
   }
@@ -222,5 +223,24 @@
     return n > 0;
   }
 
-  return { jahresausgabenMarkieren, BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
+  /**
+   * Verbindet gleiche Posten über die Jahre (Bereich, Gruppe und Name gleich) mit einer gemeinsamen «serie».
+   * Posten, die schon eine haben, behalten sie. Gibt true zurück, wenn etwas vergeben wurde.
+   */
+  function serienVergeben(posten, uid) {
+    const key = (p) => `${p.bereich}|${String(p.gruppe).trim().toLowerCase()}|${String(p.text).trim().toLowerCase()}`;
+    const map = new Map();
+    for (const p of posten) if (p.serie && !map.has(key(p))) map.set(key(p), p.serie);
+    let n = 0;
+    for (const p of posten.slice().sort((a, b) => a.jahr - b.jahr || (a.pos || 0) - (b.pos || 0))) {
+      if (p.serie) continue;
+      const k = key(p);
+      // Leere Namen nicht zusammenhängen
+      if (!String(p.text).trim() || !map.has(k)) { p.serie = uid(); if (String(p.text).trim()) map.set(k, p.serie); } else p.serie = map.get(k);
+      n++;
+    }
+    return n > 0;
+  }
+
+  return { serienVergeben, jahresausgabenMarkieren, BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
 });

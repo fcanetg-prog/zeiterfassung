@@ -371,3 +371,16 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(v(p.zeilen[2]).text, 'TWINT Ticketpark');
   console.log('GKB-Export bestanden.');
 }
+
+// Budget: gleiche Posten über die Jahre verbinden
+{
+  const B = require('../src/budgetdoc.js');
+  const P = (o) => B.normalize(Object.assign({ id: 'z' + Math.random() }, o));
+  const ps = [P({ jahr: 2026, bereich: 'ausgaben', gruppe: 'Software', text: 'Libsyn' }), P({ jahr: 2027, bereich: 'ausgaben', gruppe: 'Software', text: 'libsyn ' }),
+    P({ jahr: 2027, bereich: 'ausgaben', gruppe: 'Hardware', text: 'Libsyn' }), P({ jahr: 2027, bereich: 'ausgaben', gruppe: 'Software', text: '' }), P({ jahr: 2028, bereich: 'ausgaben', gruppe: 'Software', text: '' })];
+  let n = 0; assert.ok(B.serienVergeben(ps, () => 's' + n++));
+  assert.strictEqual(ps[0].serie, ps[1].serie); assert.notStrictEqual(ps[0].serie, ps[2].serie); assert.notStrictEqual(ps[3].serie, ps[4].serie);
+  assert.ok(!B.serienVergeben(ps, () => 'x'));
+  assert.strictEqual(B.kopieFuer(ps, 2026, 2029, () => 'k')[0].serie, ps[0].serie);
+  console.log('Budget über die Jahre bestanden.');
+}

@@ -1493,6 +1493,7 @@
       const mj = state.data.settings.mwstJahre || (state.data.settings.mwstJahre = {});
       for (const [j, z] of Object.entries(r.data.mwstJahre || {})) mj[j] = Object.assign({}, z, mj[j]);
       window.BudgetDoc.neueForm(state.data.budgetPosten, state.data.settings, () => uid('bu'));
+      window.BudgetDoc.serienVergeben(state.data.budgetPosten, () => uid('bs'));
       await persist();
       state.year = jahre[0]; state.view = 'budget'; render();
       toast(`Budget ${jahre.join(', ')}: ${neu.length} Posten übernommen`);
@@ -1798,6 +1799,8 @@
     // budget4: private Jahresausgaben (Gönner, SBB, Auto, … Steuern) markieren
     if (!m.budget4) { window.BudgetDoc.jahresausgabenMarkieren(state.data.budgetPosten || []); m.budget4 = true; }
     if (!m.budget3) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st, () => uid('bu')); m.budget3 = true; }
+    // budget5 (nach den übrigen Umbauten): gleiche Posten über die Jahre verbinden, Änderungen gelten für die folgenden Jahre
+    if (!m.budget5) { window.BudgetDoc.serienVergeben(state.data.budgetPosten || [], () => uid('bs')); m.budget5 = true; }
     if (!m.bebu2710) {
       const pl = (state.data.privatKontenplaene || {})['2026'];
       if (pl) for (const z of pl.zeilen.filter((x) => x.konto && x.text.trim() === 'BIC')) {
