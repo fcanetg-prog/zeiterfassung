@@ -155,6 +155,7 @@
 
   async function persist(opts) {
     offertenAbschliessen();
+    BHP.ausgleichen();   // Buchhaltung privat: GmbH-Konto und Wertschriften nachführen
     stempeln();
     recompute();
     const r = await api.save(state.data, opts);
@@ -326,7 +327,7 @@
     ['pendenzen', 'Pendenzen'],
     ['projekte', 'Projekte'],
     ['rechnungen', 'Rechnungen'],
-    ['buchhaltung', 'Buchhaltung'],
+    ['buchhaltung', 'Buchhaltung GmbH'],
     ['buchhaltungPrivat', 'Buchhaltung privat'],
     ['budget', 'Budget'],
     ['einstellungen', 'Einstellungen'],
@@ -1749,6 +1750,26 @@
     return neu.length;
   }
 
+  /**
+   * Einmalige Bereinigungen, die über den Merker in den Einstellungen nur einmal laufen (auf beiden Rechnern gleich):
+   * - bebu2710: Aus dem Excel übernommene private Buchungen 2026 tragen das Datum 27.10.2026 (ausser den Anfangsbeständen); Konto «BIC» entfällt.
+   */
+  function einmalig() {
+    const st = state.data.settings, m = st.einmalig || {};
+    if (m.bebu2710) return false;
+    for (const b of state.data.privatBuchungen || []) {
+      if (b.jahr !== 2026 || !/^BEBU 2026:/.test(b.bankText || '') || /Anfangsbestand/.test(b.bankText)) continue;
+      b.datum = '2026-10-27'; b.bankText = b.bankText.replace(/ · Datum geschätzt$/, '');
+    }
+    const pl = (state.data.privatKontenplaene || {})['2026'];
+    if (pl) {
+      const bic = pl.zeilen.filter((z) => z.konto && z.text.trim() === 'BIC');
+      for (const z of bic) if (!(state.data.privatBuchungen || []).some((b) => b.soll === z.konto || b.haben === z.konto)) pl.zeilen.splice(pl.zeilen.indexOf(z), 1);
+    }
+    st.einmalig = Object.assign({}, m, { bebu2710: true });
+    return true;
+  }
+
   async function start() {
     render();
     try {
@@ -1760,7 +1781,11 @@
       if (r.wiederhergestellt) setTimeout(() => toast(`Die Buchhaltung fehlte in der Datendatei und wurde aus den Sicherungen zurückgeholt (${r.wiederhergestellt} Buchungen). Bitte kontrolliere die letzten Buchungen.`, { dauer: 15000 }), 600);
       if (r.eingearbeitet) setTimeout(() => toast('Änderungen von einem anderen Rechner wurden eingearbeitet.'), 400);
       if (api.onChanged) api.onChanged(holeAenderungen);
-      if (state.data && !state.veraltet) { const vorher = JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])); offertenAbschliessen(); if (JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])) !== vorher) persist(); }
+      if (state.data && !state.veraltet) {
+        const vorher = JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])); offertenAbschliessen();
+        const anders = einmalig() | BHP.ausgleichen();
+        if (anders || JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])) !== vorher) persist();
+      }
     } catch (e) {
       state.fehler = 'Die Daten konnten nicht geladen werden: ' + e.message;
     }

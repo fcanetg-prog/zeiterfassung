@@ -12,13 +12,15 @@
     const $ = (sel, root) => (root || document).querySelector(sel);
     const PRIVAT = !!opt.privat;
     const VIEW = PRIVAT ? 'buchhaltungPrivat' : 'buchhaltung';
-    const TITEL = PRIVAT ? 'Buchhaltung privat' : 'Buchhaltung';
+    const TITEL = PRIVAT ? 'Buchhaltung privat' : 'Buchhaltung GmbH';
     const K = PRIVAT
       ? { b: 'privatBuchungen', kp: 'privatKontenplaene', bz: 'privatBankZeilen', ign: 'privatBankIgnoriert' }
       : { b: 'buchungen', kp: 'kontenplaene', bz: 'bankZeilen', ign: 'bankIgnoriert' };
     const DB = () => state.data[K.b] || (state.data[K.b] = []);
     const KP = () => state.data[K.kp] || (state.data[K.kp] = {});
-    const BZ = () => state.data[K.bz] || (state.data[K.bz] = {});
+    const BZ_ = () => state.data[K.bz] || (state.data[K.bz] = {});
+    /** Gespeicherte Bankbewegungen: im Geschäft pro Jahr, privat pro Jahr und Bankkonto (mehrere Banken). */
+    const bzKey = (j) => (PRIVAT ? `${j}-${BANK_()}` : String(j));
 
     const S = state[PRIVAT ? 'bhp' : 'bh'] = { tab: 'buchungen', konto: null, edit: null, q: '', alleKonten: false, neu: null, kEdit: null };
 
@@ -33,7 +35,7 @@
        Buchung, auch für später von Hand erfasste oder geänderte Buchungen, ohne dass die Datei neu eingelesen werden muss. */
     let platzMemo = { sig: '', map: new Map() };
     function plaetze() {
-      const bz = BZ()[jahr()];
+      const bz = BZ_()[bzKey(jahr())];
       if (!bz || !bz.zeilen.length) return null;
       const alle = DB().filter((b) => b.jahr === jahr());
       const sig = `${jahr()}|${bz.zeilen.length}|${bz.mod}|${alle.map((b) => `${b.id}:${b.datum}:${b.betrag}:${b.soll}:${b.haben}:${b.bankSchluessel || ''}`).join(',')}`;
@@ -41,7 +43,58 @@
       return platzMemo.map;
     }
     const vorschlaege = () => L.bankSortiert(DB().filter((b) => b.jahr === jahr() && b.vorschlag), plaetze()).reverse();
-    /** Bankkonto, gegen das die E-Banking-Bewegungen gebucht werden: im Geschäft 1010 (Raiffeisen), privat frei wählbar. */
+    /** Privat: Bankkonten für den E-Banking-Import (Aktiven mit Bank im Namen, ohne Wertschriften und GmbH). */
+    const bankKonten = () => konten().filter((z) => String(z.bklasse) === '1' && /bank|konto|raiffeisen|post|ubs|zkb|bekb/i.test(z.text) && !/wertschrift|depot|gmbh/i.test(z.text));
+    const kontoMit = (zeilen, re, bk) => zeilen.find((z) => z.konto && String(z.bklasse) === bk && re.test(z.text));
+    const wertKonto = (zeilen) => kontoMit(zeilen, /wertschrift|depot/i, '1');
+
+    /* ---------- Privat: automatischer Ausgleich (GmbH-Konto, Wertschriften) ---------- */
+
+    /** Ertragskonto suchen oder nach dem letzten Ertragskonto anlegen. */
+    function ertragKonto(zeilen, re, nr, text) {
+      const k = kontoMit(zeilen, re, '4'); if (k) return k.konto;
+      let i = -1; zeilen.forEach((z, j) => { if (z.konto && String(z.bklasse) === '4') i = j; });
+      let n = +nr; while (zeilen.some((z) => z.konto === String(n))) n++;
+      zeilen.splice(i >= 0 ? i + 1 : zeilen.length, 0, { sektion: '', gruppe: '', konto: String(n), text, bklasse: '4', summe_in: i >= 0 ? zeilen[i].summe_in : '' });
+      return String(n);
+    }
+    /**
+     * Hält zwei Konten der privaten Buchhaltung auf ihrem Sollwert, mit je einer automatischen Buchung pro Jahr:
+     * - «Fabio Canetg GmbH» = Saldo des Bankkontos 1010 in der Buchhaltung GmbH (Differenz: Firmengewinn)
+     * - Wertschriften = eingetragener Kurswert (Differenz: Anlagegewinn)
+     * Gibt true zurück, wenn sich etwas geändert hat.
+     */
+    function ausgleichen() {
+      if (!PRIVAT || !state.data) return false;
+      let geaendert = false;
+      for (const [j, pl] of Object.entries(KP())) {
+        const J = +j, z = pl.zeilen, ziele = [];
+        const gmbh = kontoMit(z, /gmbh/i, '1');
+        if (gmbh && (state.data.kontenplaene || {})[j]) {
+          const s = L.saldi((state.data.buchungen || []).filter((b) => b.jahr === J && !b.vorschlag)).get('1010');
+          ziele.push({ id: `auto-gmbh-${j}`, konto: gmbh.konto, ziel: s ? s.saldo : 0, re: /firmengewinn/i, nr: '3800', name: 'Firmengewinn', text: 'Firmengewinn: Ausgleich auf den Kontostand der Bank in der Buchhaltung GmbH (automatisch)' });
+        }
+        const ws = wertKonto(z), kw = (state.data.settings.privatKurswert || {})[j];
+        if (ws && kw && C.isNum(kw.wert)) ziele.push({ id: `auto-wert-${j}`, konto: ws.konto, ziel: kw.wert, datum: kw.datum, re: /anlagegewinn/i, nr: '3810', name: 'Anlagegewinn', text: 'Anlagegewinn: Wertschriften zum Kurswert (automatisch)' });
+        else { const i = DB().findIndex((b) => b.id === `auto-wert-${j}`); if (i >= 0) { DB().splice(i, 1); geaendert = true; } }
+        for (const a of ziele) {
+          const i = DB().findIndex((b) => b.id === a.id), alt = i >= 0 ? DB()[i] : null;
+          const s = L.saldi(DB().filter((b) => b.jahr === J && !b.vorschlag && b.id !== a.id)).get(a.konto);
+          const diff = C.round2(a.ziel - (s ? s.saldo : 0));
+          if (Math.abs(diff) < 0.005) { if (alt) { DB().splice(i, 1); geaendert = true; } continue; }
+          const ertrag = ertragKonto(z, a.re, a.nr, a.name);
+          const soll = diff > 0 ? a.konto : ertrag, haben = diff > 0 ? ertrag : a.konto, betrag = Math.abs(diff);
+          if (alt && alt.soll === soll && alt.haben === haben && Math.abs(alt.betrag - betrag) < 0.005 && alt.text === a.text && (!a.datum || alt.datum === a.datum)) continue;
+          const datum = a.datum || (J === +heute.slice(0, 4) ? heute : `${J}-12-31`);
+          const neu = { id: a.id, jahr: J, datum, beleg: '', text: a.text, soll, haben, betrag, pos: alt ? alt.pos : DB().reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1, vorschlag: false, sicher: true, bankText: '', bankSchluessel: '', bankDatum: null, bankNr: null, mod: alt ? alt.mod : 0 };
+          if (alt) Object.assign(alt, neu); else DB().push(neu);
+          geaendert = true;
+        }
+      }
+      return geaendert;
+    }
+
+    /** Bankkonto, gegen das die E-Banking-Bewegungen gebucht werden: im Geschäft 1010 (Raiffeisen), privat das zuletzt gewählte. */
     function BANK_() {
       if (!PRIVAT) return '1010';
       const gewaehlt = state.data.settings.privatBank;
@@ -89,6 +142,8 @@
 
     function view() {
       if (!plan()) return viewLeer();
+      // Privat: GmbH-Konto und Wertschriften laufend nachführen (z. B. nach Buchungen in der Buchhaltung GmbH)
+      if (PRIVAT && ausgleichen()) setTimeout(() => persist(), 0);
       const t = L.totalsummen(plan(), buchungen());
       const gewinn = -t.erfolg;
       const inhalt = { buchungen: viewBuchungen, konten: viewKonten, abschluss: viewAbschluss, auszug: viewAuszug }[S.tab]();
@@ -101,10 +156,11 @@
         <div class="seg">${TABS.map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-bh="tab" data-tab="${k}">${l}${k === 'buchungen' && vorschlaege().length ? ` <span class="bh-zahl">${vorschlaege().length}</span>` : ''}</button>`).join('')}</div>
         <span class="grow"></span>
         ${Math.abs(t.differenz) > 0.004 ? `<span class="warn">Differenz Soll/Haben: ${chf(t.differenz)}</span>` : ''}
-        ${PRIVAT ? `<label class="bh-bankwahl" title="Gegen dieses Konto werden die Bewegungen aus dem E-Banking gebucht">Bankkonto
-          <select data-bh="bankkonto">${BANK_() ? '' : '<option value="">wählen …</option>'}${konten().filter((z) => String(z.bklasse) === '1').map((z) => `<option value="${esc(z.konto)}" ${z.konto === BANK_() ? 'selected' : ''}>${esc(z.konto)} ${esc(z.text)}</option>`).join('')}</select></label>` : ''}
-        <button class="btn" data-bh="bank">Bankbewegungen einlesen</button>
-        ${BZ()[jahr()] ? `<button class="btn ${S.abgl ? 'on' : ''}" data-bh="abgl" title="Zeigt für die letzten Bankbewegungen, welcher Buchung sie zugeordnet sind">Abgleich ${S.abgl ? 'ausblenden' : 'zeigen'}</button>` : ''}
+        ${PRIVAT && wertKonto(plan() || []) ? (() => { const kw = (state.data.settings.privatKurswert || {})[jahr()]; return `<label class="bh-kurs" title="Aktueller Wert des Depots. Die Differenz zum Saldo des Kontos ${esc(wertKonto(plan()).konto)} wird als Anlagegewinn gebucht.">Kurswert Wertschriften
+          <input id="bh-kurswert" data-bh="kurswert" type="text" inputmode="decimal" placeholder="Fr." value="${kw ? esc(chf(kw.wert)) : ''}">${kw ? `<span class="dim">per ${fmtDate(kw.datum)}</span>` : ''}</label>`; })() : ''}
+        <span class="bh-bankmenu-wrap"><button class="btn" data-bh="bank">Bankbewegungen einlesen</button>
+          ${PRIVAT && S.bankMenu ? `<div class="bh-bankmenu" role="menu"><div class="bh-bm-t">Bewegungen welches Kontos?</div>${bankKonten().map((z) => `<button role="menuitem" data-bh="bank-konto" data-konto="${esc(z.konto)}">${esc(z.konto)} ${esc(z.text)}</button>`).join('')}</div>` : ''}</span>
+        ${BZ_()[bzKey(jahr())] ? `<button class="btn ${S.abgl ? 'on' : ''}" data-bh="abgl" title="Zeigt für die letzten Bankbewegungen, welcher Buchung sie zugeordnet sind">Abgleich ${S.abgl ? 'ausblenden' : 'zeigen'}</button>` : ''}
         <button class="btn" data-bh="pdf">Dossier als PDF</button>
       </div>
       ${PRIVAT ? '' : zahlPanel()}
@@ -115,7 +171,7 @@
     function viewLeer() {
       const vor = KP()[jahr() - 1];
       return `<header class="head"><h1>${TITEL} ${jahr()}</h1></header>
-      <div class="sec"><p>Für ${jahr()} gibt es noch keine ${PRIVAT ? 'private Buchhaltung. Sobald der Kontenplan geladen ist, funktioniert hier alles wie in der Buchhaltung des Geschäfts' : 'Buchhaltung'}.</p>
+      <div class="sec"><p>Für ${jahr()} gibt es noch keine ${PRIVAT ? 'private Buchhaltung. Sobald der Kontenplan geladen ist, funktioniert hier alles wie in der Buchhaltung GmbH' : 'Buchhaltung'}.</p>
         <div class="row" style="margin-top:12px">
           ${vor ? `<button class="btn primary" data-bh="eroeffnen">Aus ${jahr() - 1} eröffnen</button>` : ''}
           <button class="btn" data-action="import">${PRIVAT ? 'Kontenplan importieren' : 'Buchhaltung importieren'}</button>
@@ -291,7 +347,7 @@
 
     /** Die letzten Bankbewegungen mit ihrer Zuordnung: So sieht man, warum etwas nicht vorgeschlagen wird, und kann es korrigieren. */
     function abgleichPanel() {
-      const bz = BZ()[jahr()];
+      const bz = BZ_()[bzKey(jahr())];
       if (!S.abgl || !bz) return '';
       const alle = DB().filter((b) => b.jahr === jahr());
       const ign = new Set(state.data.settings[K.ign] || []);
@@ -342,17 +398,17 @@
       if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
       const p = L.parseBankCsv(r.text);
       if (p.fehler) { toast(p.fehler, { fehler: true }); return; }
-      if (!BANK_()) { toast('Wähle zuerst oben das Bankkonto, gegen das die Bewegungen gebucht werden.', { fehler: true }); return; }
+      if (!BANK_()) { toast('Im Kontenplan gibt es kein Bankkonto, gegen das die Bewegungen gebucht werden können.', { fehler: true }); return; }
       const bezahlt = PRIVAT ? 0 : rechnungenAbgleichen(p.zeilen);
       const zusatz = bezahlt ? ` ${bezahlt === 1 ? 'Eine Rechnung' : `${bezahlt} Rechnungen`} als bezahlt eingetragen.` : '';
       const z = p.zeilen.filter((x) => x.datum.startsWith(jahr() + '-'));
       if (!z.length) { if (bezahlt) persist(); render(); toast(`Die Datei enthält keine Bewegungen im Jahr ${jahr()}.${zusatz}`, { fehler: !bezahlt }); return; }
       const alle = DB().filter((b) => b.jahr === jahr());
       // Bankbewegungen des Jahres merken: Sie bestimmen dauerhaft die Reihenfolge der Buchungen.
-      const gemerkt = BZ()[jahr()] || { mod: 0, zeilen: [] };
+      const gemerkt = BZ_()[bzKey(jahr())] || { mod: 0, zeilen: [] };
       const zusammen = L.bankZeilenMerge(gemerkt.zeilen, z.filter((x) => Math.abs(x.betrag) > 0.004));
       const zeilenNeu = JSON.stringify(zusammen) !== JSON.stringify(gemerkt.zeilen);
-      BZ()[jahr()] = { mod: gemerkt.mod, zeilen: zusammen };
+      BZ_()[bzKey(jahr())] = { mod: gemerkt.mod, zeilen: zusammen };
       const a = L.bankAbgleich(z, alle, BANK_(), state.data.settings[K.ign] || []);
       // Gelernt wird nur aus bestätigten Buchungen.
       const lern = a.paare.filter((x) => x.buchungen.every((b) => !b.vorschlag));
@@ -598,12 +654,17 @@
       if (!el || !state.data || state.view !== VIEW) return;
       const a = el.dataset.bh;
       if (a === 'tab') { S.tab = el.dataset.tab; S.edit = null; render(); }
-      else if (a === 'bank') bankEinlesen();
+      else if (a === 'bank') {
+        // Privat gibt es mehrere Bankkonten: zuerst wählen, zu welchem die Datei gehört.
+        if (PRIVAT && bankKonten().length > 1) { S.bankMenu = !S.bankMenu; render(); }
+        else { if (PRIVAT && bankKonten().length === 1) state.data.settings.privatBank = bankKonten()[0].konto; bankEinlesen(); }
+      }
+      else if (a === 'bank-konto') { S.bankMenu = false; state.data.settings.privatBank = el.dataset.konto; render(); bankEinlesen(); }
       else if (a === 'abgl') { S.abgl = !S.abgl; render(); }
       else if (a === 'abgl-alle') { S.abglAlle = !S.abglAlle; render(); }
       else if (a === 'abg-neu') {
         // Bankbewegung ausdrücklich als Vorschlag anlegen; über ihren Schlüssel bleibt sie künftig dieser Buchung zugeordnet.
-        const bz = BZ()[jahr()], z = bz.zeilen.find((x) => x.schluessel === el.dataset.key);
+        const bz = BZ_()[bzKey(jahr())], z = bz.zeilen.find((x) => x.schluessel === el.dataset.key);
         if (!z) return;
         const alle = DB().filter((b) => b.jahr === jahr());
         const ign = state.data.settings[K.ign] || [];
@@ -709,7 +770,13 @@
     document.addEventListener('change', (ev) => {
       const el = ev.target, a = el.dataset && el.dataset.bh;
       if (!a || !state.data || state.view !== VIEW) return;
-      if (a === 'bankkonto') { state.data.settings.privatBank = el.value; persist(); render(); return; }
+      if (a === 'kurswert') {
+        const alle = state.data.settings.privatKurswert || (state.data.settings.privatKurswert = {});
+        const v = el.value.trim() === '' ? null : C.parseAmount(el.value);
+        if (el.value.trim() !== '' && v == null) { toast('Bitte einen Betrag eingeben, zum Beispiel 72500.', { fehler: true }); return; }
+        if (v == null) delete alle[jahr()]; else alle[jahr()] = { wert: v, datum: heute };
+        persist(); render(); return;
+      }
       if (a === 'feld' && el.dataset.key === 'text') {
         const neuForm = el.dataset.form === 'neu';
         const f = neuForm ? neu() : S.editForm;
@@ -821,6 +888,10 @@
       zeilen.splice(i, 0, konto);
     }
 
-    return { view, dossierHtml };
+    // Auswahl des Bankkontos schliessen: Klick daneben oder Escape
+    document.addEventListener('mousedown', (ev) => { if (S.bankMenu && state.view === VIEW && !ev.target.closest('.bh-bankmenu-wrap')) { S.bankMenu = false; render(); } });
+    document.addEventListener('keydown', (ev) => { if (S.bankMenu && ev.key === 'Escape' && state.view === VIEW) { S.bankMenu = false; render(); } });
+
+    return { view, dossierHtml, ausgleichen };
   };
 })();
