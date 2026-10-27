@@ -264,7 +264,9 @@
   }
 
   /** Buchungsvorschlag für eine neue Bankbewegung, gelernt aus früheren gleichartigen Zahlungen. */
-  function bankVorschlag(zeile, paare, konto) {
+  /** opt.regeln: feste Regeln des Geschäfts (TWINT = Jahresbeiträge SWD) anwenden; in der privaten Buchhaltung aus. */
+  function bankVorschlag(zeile, paare, konto, opt) {
+    const regeln = !opt || opt.regeln !== false;
     const kern = bankKern(zeile.text);
     const bsp = [];
     for (const p of paare) {
@@ -275,7 +277,7 @@
     const basis = { datum: zeile.datum, betrag: Math.abs(zeile.betrag), bankText: zeile.text, bankSchluessel: zeile.schluessel, bankDatum: zeile.datum, bankNr: zeile.nr };
     const fertig = (text, gegen, sicher) => Object.assign(basis, { text, soll: zeile.betrag > 0 ? konto : gegen, haben: zeile.betrag > 0 ? gegen : konto, sicher });
     // Feste Regel: TWINT-Eingänge sind immer Jahresbeiträge für «Schweizer Wirtschaft Daily» (Gegenkonto wie bisher verbucht, sonst 3413).
-    if (/twint/i.test(zeile.text) && zeile.betrag > 0) {
+    if (regeln && /twint/i.test(zeile.text) && zeile.betrag > 0) {
       const text = 'Jahresbeiträge «Schweizer Wirtschaft Daily»';
       const frueher = paare.flatMap((p) => p.buchungen).filter((b) => b.text === text && b.soll === konto).map((b) => b.haben);
       const haeufig = [...new Set(frueher)].sort((a, b) => frueher.filter((x) => x === b).length - frueher.filter((x) => x === a).length)[0];

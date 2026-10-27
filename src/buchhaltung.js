@@ -3,35 +3,55 @@
   'use strict';
   const L = window.Ledger;
 
-  window.Buchhaltung = function (ctx) {
+  /**
+   * Zwei Buchhaltungen mit demselben Code: das Geschäft (Standard) und privat (opt.privat).
+   * Jede hat ihre eigenen Buchungen, Kontenpläne und Bankbewegungen; Rechnungsabgleich und feste Regeln gibt es nur fürs Geschäft.
+   */
+  window.Buchhaltung = function (ctx, opt = {}) {
     const { state, C, esc, fmtDate, heute, persist, render, toast, api, uid } = ctx;
     const $ = (sel, root) => (root || document).querySelector(sel);
+    const PRIVAT = !!opt.privat;
+    const VIEW = PRIVAT ? 'buchhaltungPrivat' : 'buchhaltung';
+    const TITEL = PRIVAT ? 'Buchhaltung privat' : 'Buchhaltung';
+    const K = PRIVAT
+      ? { b: 'privatBuchungen', kp: 'privatKontenplaene', bz: 'privatBankZeilen', ign: 'privatBankIgnoriert' }
+      : { b: 'buchungen', kp: 'kontenplaene', bz: 'bankZeilen', ign: 'bankIgnoriert' };
+    const DB = () => state.data[K.b] || (state.data[K.b] = []);
+    const KP = () => state.data[K.kp] || (state.data[K.kp] = {});
+    const BZ = () => state.data[K.bz] || (state.data[K.bz] = {});
 
-    state.bh = { tab: 'buchungen', konto: null, edit: null, q: '', alleKonten: false, neu: null, kEdit: null };
+    const S = state[PRIVAT ? 'bhp' : 'bh'] = { tab: 'buchungen', konto: null, edit: null, q: '', alleKonten: false, neu: null, kEdit: null };
 
     /* ---------- Daten ---------- */
 
     const jahr = () => state.year;
-    const plan = () => { const p = state.data.kontenplaene[jahr()]; return p ? p.zeilen : null; };
+    const plan = () => { const p = KP()[jahr()]; return p ? p.zeilen : null; };
     // Vorschläge aus dem Bankabgleich zählen erst, wenn sie bestätigt sind.
-    const buchungen = () => state.data.buchungen.filter((b) => b.jahr === jahr() && !b.vorschlag);
+    const buchungen = () => DB().filter((b) => b.jahr === jahr() && !b.vorschlag);
     // Neueste zuoberst, wie in der Liste der Buchungen.
     /* Reihenfolge wie im E-Banking: Die eingelesenen Bankbewegungen sind gespeichert; daraus ergibt sich der Platz jeder
        Buchung, auch für später von Hand erfasste oder geänderte Buchungen, ohne dass die Datei neu eingelesen werden muss. */
     let platzMemo = { sig: '', map: new Map() };
     function plaetze() {
-      const bz = (state.data.bankZeilen || {})[jahr()];
+      const bz = BZ()[jahr()];
       if (!bz || !bz.zeilen.length) return null;
-      const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
+      const alle = DB().filter((b) => b.jahr === jahr());
       const sig = `${jahr()}|${bz.zeilen.length}|${bz.mod}|${alle.map((b) => `${b.id}:${b.datum}:${b.betrag}:${b.soll}:${b.haben}:${b.bankSchluessel || ''}`).join(',')}`;
-      if (platzMemo.sig !== sig) platzMemo = { sig, map: L.bankPlaetze(bz.zeilen, alle, BANK) };
+      if (platzMemo.sig !== sig) platzMemo = { sig, map: L.bankPlaetze(bz.zeilen, alle, BANK_()) };
       return platzMemo.map;
     }
-    const vorschlaege = () => L.bankSortiert(state.data.buchungen.filter((b) => b.jahr === jahr() && b.vorschlag), plaetze()).reverse();
-    const BANK = '1010';
+    const vorschlaege = () => L.bankSortiert(DB().filter((b) => b.jahr === jahr() && b.vorschlag), plaetze()).reverse();
+    /** Bankkonto, gegen das die E-Banking-Bewegungen gebucht werden: im Geschäft 1010 (Raiffeisen), privat frei wählbar. */
+    function BANK_() {
+      if (!PRIVAT) return '1010';
+      const gewaehlt = state.data.settings.privatBank;
+      if (gewaehlt && konten().some((z) => z.konto === gewaehlt)) return gewaehlt;
+      const k = konten().find((z) => String(z.bklasse) === '1' && /bank|konto|raiffeisen|post|ubs|zkb|bekb|cs\b/i.test(z.text));
+      return k ? k.konto : '';
+    }
     const konten = () => (plan() || []).filter((z) => z.konto);
     const kontoName = (nr) => { const z = konten().find((x) => x.konto === nr); return z ? z.text : ''; };
-    const firma = () => (state.data.settings.absender && state.data.settings.absender.firma) || 'Buchhaltung';
+    const firma = () => (PRIVAT ? 'Buchhaltung privat' : (state.data.settings.absender && state.data.settings.absender.firma) || 'Buchhaltung');
 
     function chf(x, leerBeiNull) {
       if (x == null || !isFinite(x) || (leerBeiNull && Math.abs(x) < 0.005)) return '';
@@ -45,8 +65,8 @@
       return { datum: letzte && letzte.datum > `${jahr()}-01-01` ? (heute.startsWith(String(jahr())) ? heute : letzte.datum) : (heute.startsWith(String(jahr())) ? heute : `${jahr()}-01-01`), beleg: L.naechsterBeleg(bs), text: '', soll: '', haben: '', betrag: '' };
     }
     function neu() {
-      if (!state.bh.neu || state.bh.neuJahr !== jahr()) { state.bh.neu = neuVorlage(); state.bh.neuJahr = jahr(); }
-      return state.bh.neu;
+      if (!S.neu || S.neuJahr !== jahr()) { S.neu = neuVorlage(); S.neuJahr = jahr(); }
+      return S.neu;
     }
 
     /** Prüft eine Buchung aus dem Formular. Gibt die fertige Buchung oder eine Fehlermeldung zurück. */
@@ -71,34 +91,36 @@
       if (!plan()) return viewLeer();
       const t = L.totalsummen(plan(), buchungen());
       const gewinn = -t.erfolg;
-      const inhalt = { buchungen: viewBuchungen, konten: viewKonten, abschluss: viewAbschluss, auszug: viewAuszug }[state.bh.tab]();
+      const inhalt = { buchungen: viewBuchungen, konten: viewKonten, abschluss: viewAbschluss, auszug: viewAuszug }[S.tab]();
       return `
       <header class="head">
-        <h1>Buchhaltung ${jahr()}</h1>
-        <div class="bignum"><b class="${gewinn < 0 ? 'neg' : ''}">${chf(gewinn)}</b><span>${gewinn < 0 ? 'Jahresverlust' : 'Jahresgewinn'} bisher</span></div>
+        <h1>${TITEL} ${jahr()}</h1>
+        <div class="bignum"><b class="${gewinn < 0 ? 'neg' : ''}">${chf(gewinn)}</b><span>${PRIVAT ? (gewinn < 0 ? 'Mehrausgaben' : 'Überschuss') : gewinn < 0 ? 'Jahresverlust' : 'Jahresgewinn'} bisher</span></div>
       </header>
       <div class="bh-bar">
-        <div class="seg">${TABS.map(([k, l]) => `<button class="${state.bh.tab === k ? 'on' : ''}" data-bh="tab" data-tab="${k}">${l}${k === 'buchungen' && vorschlaege().length ? ` <span class="bh-zahl">${vorschlaege().length}</span>` : ''}</button>`).join('')}</div>
+        <div class="seg">${TABS.map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-bh="tab" data-tab="${k}">${l}${k === 'buchungen' && vorschlaege().length ? ` <span class="bh-zahl">${vorschlaege().length}</span>` : ''}</button>`).join('')}</div>
         <span class="grow"></span>
         ${Math.abs(t.differenz) > 0.004 ? `<span class="warn">Differenz Soll/Haben: ${chf(t.differenz)}</span>` : ''}
+        ${PRIVAT ? `<label class="bh-bankwahl" title="Gegen dieses Konto werden die Bewegungen aus dem E-Banking gebucht">Bankkonto
+          <select data-bh="bankkonto">${BANK_() ? '' : '<option value="">wählen …</option>'}${konten().filter((z) => String(z.bklasse) === '1').map((z) => `<option value="${esc(z.konto)}" ${z.konto === BANK_() ? 'selected' : ''}>${esc(z.konto)} ${esc(z.text)}</option>`).join('')}</select></label>` : ''}
         <button class="btn" data-bh="bank">Bankbewegungen einlesen</button>
-        ${(state.data.bankZeilen || {})[jahr()] ? `<button class="btn ${state.bh.abgl ? 'on' : ''}" data-bh="abgl" title="Zeigt für die letzten Bankbewegungen, welcher Buchung sie zugeordnet sind">Abgleich ${state.bh.abgl ? 'ausblenden' : 'zeigen'}</button>` : ''}
+        ${BZ()[jahr()] ? `<button class="btn ${S.abgl ? 'on' : ''}" data-bh="abgl" title="Zeigt für die letzten Bankbewegungen, welcher Buchung sie zugeordnet sind">Abgleich ${S.abgl ? 'ausblenden' : 'zeigen'}</button>` : ''}
         <button class="btn" data-bh="pdf">Dossier als PDF</button>
       </div>
-      ${zahlPanel()}
+      ${PRIVAT ? '' : zahlPanel()}
       ${abgleichPanel()}
       ${inhalt}`;
     }
 
     function viewLeer() {
-      const vor = state.data.kontenplaene[jahr() - 1];
-      return `<header class="head"><h1>Buchhaltung ${jahr()}</h1></header>
-      <div class="sec"><p>Für ${jahr()} gibt es noch keine Buchhaltung.</p>
+      const vor = KP()[jahr() - 1];
+      return `<header class="head"><h1>${TITEL} ${jahr()}</h1></header>
+      <div class="sec"><p>Für ${jahr()} gibt es noch keine ${PRIVAT ? 'private Buchhaltung. Sobald der Kontenplan geladen ist, funktioniert hier alles wie in der Buchhaltung des Geschäfts' : 'Buchhaltung'}.</p>
         <div class="row" style="margin-top:12px">
           ${vor ? `<button class="btn primary" data-bh="eroeffnen">Aus ${jahr() - 1} eröffnen</button>` : ''}
-          <button class="btn" data-action="import">Buchhaltung importieren</button>
+          <button class="btn" data-action="import">${PRIVAT ? 'Kontenplan importieren' : 'Buchhaltung importieren'}</button>
         </div>
-        ${vor ? `<p class="hint">«Eröffnen» übernimmt den Kontenplan von ${jahr() - 1} und bucht per 1. Januar die Schlusssaldi aller Bilanzkonten gegen das Konto 2970 (Gewinnvortrag oder Verlustvortrag). Der Jahreserfolg ${jahr() - 1} landet damit im Vortrag.</p>` : ''}
+        ${vor ? `<p class="hint">«Eröffnen» übernimmt den Kontenplan von ${jahr() - 1} und bucht per 1. Januar die Schlusssaldi aller Bilanzkonten gegen ${PRIVAT ? 'das Vortrags- oder Eigenkapitalkonto' : 'das Konto 2970 (Gewinnvortrag oder Verlustvortrag)'}. Der Jahreserfolg ${jahr() - 1} landet damit im Vortrag.</p>` : ''}
       </div>`;
     }
 
@@ -116,12 +138,12 @@
 
     function viewBuchungen() {
       const alle = L.bankSortiert(buchungen(), plaetze());
-      const q = state.bh.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const q = S.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const liste = alle.filter((b) => !q.length || q.every((t) => `${fmtDate(b.datum)} ${b.beleg} ${b.text} ${b.soll} ${b.haben} ${b.betrag.toFixed(2)}`.toLowerCase().includes(t))).reverse();
       const texte = [...new Set(alle.map((b) => b.text))].sort();
       const summe = liste.reduce((a, b) => a + b.betrag, 0);
-      const zeile = (b) => (state.bh.edit === b.id
-        ? `<tr class="bh-edit" data-id="${b.id}">${formZeile(state.bh.editForm, 'be', 'edit')}
+      const zeile = (b) => (S.edit === b.id
+        ? `<tr class="bh-edit" data-id="${b.id}">${formZeile(S.editForm, 'be', 'edit')}
             <td class="r"><button class="btn small primary" data-bh="edit-save">Speichern</button> <button class="btn small" data-bh="edit-cancel">Abbrechen</button> <button class="btn small danger" data-bh="del" data-id="${b.id}">Löschen</button></td></tr>`
         : `<tr class="bh-row" data-bh="edit" data-id="${b.id}" tabindex="0">
             <td class="num">${fmtDate(b.datum)}</td><td>${esc(b.beleg)}</td><td class="bt" title="${esc(b.text)}">${esc(b.text)}</td>
@@ -130,9 +152,9 @@
       return `
       <datalist id="bh-texte">${texte.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
       <div class="bh-wrap"><table class="bh-tab">
-        <colgroup><col style="width:120px"><col style="width:62px"><col><col style="width:68px"><col style="width:68px"><col style="width:104px"><col style="width:${state.bh.edit ? 272 : vorschlaege().length ? 236 : 196}px"></colgroup>
+        <colgroup><col style="width:120px"><col style="width:62px"><col><col style="width:68px"><col style="width:68px"><col style="width:104px"><col style="width:${S.edit ? 272 : vorschlaege().length ? 236 : 196}px"></colgroup>
         <thead><tr><th>Datum</th><th>Beleg</th><th>Beschreibung</th><th>Soll</th><th>Haben</th><th class="r">Betrag CHF</th>
-          <th class="r"><input type="search" id="bh-q" placeholder="Suchen" value="${esc(state.bh.q)}" data-bh="suche"></th></tr></thead>
+          <th class="r"><input type="search" id="bh-q" placeholder="Suchen" value="${esc(S.q)}" data-bh="suche"></th></tr></thead>
         <tbody>
           <tr class="bh-neu">${formZeile(neu(), 'bn', 'neu')}<td class="r"><button class="btn primary small" data-bh="neu-save">Buchen</button> <span class="dim" id="bh-hinweis">${esc(hinweisNeu())}</span></td></tr>
           ${vorschlagZeilen()}
@@ -144,7 +166,7 @@
 
     function vHinweis(v) {
       if (istSammel(v) && !v.teilVon && !teile(v).length) return 'Sammelzahlung: bitte aufteilen';
-      const gegen = v.soll === BANK ? v.haben : v.soll;
+      const gegen = v.soll === BANK_() ? v.haben : v.soll;
       if (!gegen) return 'Gegenkonto fehlt';
       const name = kontoName(gegen) || 'Konto unbekannt';
       return v.sicher ? name : `${name}, bitte prüfen`;
@@ -153,8 +175,8 @@
     /* Aufteilen einer Bankbewegung (Sammelzahlung): Der Hauptteil kennt das Bank-Total und erhält jeweils den Rest. */
     const istSammel = (v) => /^sammel(zahlung|auftrag)/i.test(String(v.bankText || '').trim());
     // Alle Teile, auch schon bestätigte: Sie gehören weiterhin zur selben Bankbewegung.
-    const teile = (h) => state.data.buchungen.filter((x) => x.teilVon === h.id);
-    const hauptVon = (v) => (v.teilVon ? state.data.buchungen.find((x) => x.id === v.teilVon) : v);
+    const teile = (h) => DB().filter((x) => x.teilVon === h.id);
+    const hauptVon = (v) => (v.teilVon ? DB().find((x) => x.id === v.teilVon) : v);
     function restRechnen(h) {
       if (!h || !h.vorschlag || !C.isNum(h.bankTotal)) return;
       h.betrag = L.round2(h.bankTotal - teile(h).reduce((s, t) => s + (t.betrag || 0), 0));
@@ -162,10 +184,10 @@
     function aufteilen(v) {
       const h = hauptVon(v);
       if (!C.isNum(h.bankTotal)) h.bankTotal = h.betrag;
-      const ausgang = h.haben === BANK;
-      const t = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), jahr: h.jahr, datum: h.datum, beleg: '', text: '', soll: ausgang ? '' : BANK, haben: ausgang ? BANK : '', betrag: 0,
+      const ausgang = h.haben === BANK_();
+      const t = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), jahr: h.jahr, datum: h.datum, beleg: '', text: '', soll: ausgang ? '' : BANK_(), haben: ausgang ? BANK_() : '', betrag: 0,
         vorschlag: true, sicher: false, bankText: h.bankText, bankSchluessel: h.bankSchluessel, bankDatum: h.bankDatum, bankNr: h.bankNr, teilVon: h.id, pos: h.pos };
-      state.data.buchungen.push(t);
+      DB().push(t);
       return t;
     }
 
@@ -173,19 +195,19 @@
     function vorschlagZeilen() {
       const vs = vorschlaege();
       if (!vs.length) return '';
-      const sal = L.saldi(buchungen()).get(BANK);
+      const sal = L.saldi(buchungen()).get(BANK_());
       let nach = sal ? sal.saldo : 0;
-      for (const v of vs) nach += v.soll === BANK ? v.betrag : v.haben === BANK ? -v.betrag : 0;
-      const bank = state.bh.bank && state.bh.bank.jahr === jahr() ? state.bh.bank : null;
+      for (const v of vs) nach += v.soll === BANK_() ? v.betrag : v.haben === BANK_() ? -v.betrag : 0;
+      const bank = S.bank && S.bank.jahr === jahr() ? S.bank : null;
       const stimmt = bank && bank.saldo != null && Math.abs(nach - bank.saldo) < 0.005;
       const kopf = `<tr class="bh-vkopf"><td colspan="7"><div class="bh-vk"><b>${vs.length} ${vs.length === 1 ? 'Vorschlag' : 'Vorschläge'} aus dem E-Banking</b>
         <span>Prüfen und bestätigen. Bis dahin zählen sie nicht mit.</span>
         <span class="grow"></span>
-        ${bank && bank.saldo != null ? `<span class="${stimmt ? 'pos' : 'neg'}">Bank per ${fmtDate(bank.datum)}: ${chf(bank.saldo)}, Konto ${BANK} danach: ${chf(nach)}${stimmt ? ' ✓' : ''}</span>` : ''}
+        ${bank && bank.saldo != null ? `<span class="${stimmt ? 'pos' : 'neg'}">Bank per ${fmtDate(bank.datum)}: ${chf(bank.saldo)}, Konto ${BANK_()} danach: ${chf(nach)}${stimmt ? ' ✓' : ''}</span>` : ''}
         <button class="btn small" data-bh="v-alle">Alle eindeutigen bestätigen</button></div></td></tr>`;
       const feld = (v, key, extra) => `<input id="bv-${v.id}-${key}" data-bh="vfeld" data-id="${v.id}" data-key="${key}" value="${esc(v[key])}" ${extra || ''}>`;
       return kopf + vs.map((v) => {
-        const gegen = v.soll === BANK ? v.haben : v.soll;
+        const gegen = v.soll === BANK_() ? v.haben : v.soll;
         const h = hauptVon(v), nTeile = h ? teile(h).length : 0, hauptMitTeilen = !v.teilVon && nTeile > 0;
         return `<tr class="bh-vor ${gegen && v.sicher ? '' : 'unsicher'} ${v.teilVon || hauptMitTeilen ? 'bh-teil' : ''}" data-id="${v.id}">
           <td class="num">${feld(v, 'datum', 'type="date" class="bh-vdat"')}</td><td></td>
@@ -221,7 +243,7 @@
       const form = (x) => ({ datum: x.zeile.datum, betrag: x.zeile.betrag, text: x.zeile.text, schluessel: x.zeile.schluessel, projekte: x.projekte.map((q) => q.id) });
       const gesetzt = r.treffer.map(form), fast = r.fast.map(form);
       gesetzt.forEach(setzeBezahlt);
-      state.bh.zahl = gesetzt.length || fast.length ? { gesetzt, fast } : null;
+      S.zahl = gesetzt.length || fast.length ? { gesetzt, fast } : null;
       return gesetzt.length;
     }
     /**
@@ -236,7 +258,7 @@
       const out = [];
       for (const paar of paare) {
         const z = paar.zeile, b = paar.buchungen[0];
-        if (paar.buchungen.length !== 1 || z.betrag <= 0 || b.soll !== BANK) continue;
+        if (paar.buchungen.length !== 1 || z.betrag <= 0 || b.soll !== BANK_()) continue;
         const nah = bezahlt.filter((x) => x.zahlungBank === z.schluessel || Math.abs(C.daysBetween(x.zahlungsdatum, z.datum)) <= 3);
         const gruppen = (liste) => { const m = new Map(); for (const x of liste) (m.get(x.bereich) || m.set(x.bereich, []).get(x.bereich)).push(x); return [...m.values()]; };
         const passtBetrag = (g) => Math.abs(g.reduce((a, x) => a + brutto(x), 0) - z.betrag) <= 0.05;
@@ -259,7 +281,7 @@
     /** Ergänzt einen Vorschlag um das, was die zugeordnete Rechnung verrät: Ertragskonto und Text. */
     function mitRechnung(v, ids, eindeutig, beispiele) {
       const ps = ids.map(projekt).filter(Boolean);
-      if (!ps.length || v.soll !== BANK) return v;
+      if (!ps.length || v.soll !== BANK_()) return v;
       const kunden = new Set(ps.map((x) => x.kunde)), bereiche = new Set(ps.map((x) => x.bereich));
       const rang = (e) => ([...e.kunden].some((k) => kunden.has(k)) ? 2 : bereiche.has(e.bereich) ? 1 : 0);
       const bsp = beispiele.filter((e) => rang(e) > 0).sort((a, b) => rang(b) - rang(a) || (a.datum < b.datum ? 1 : -1))[0];
@@ -269,13 +291,13 @@
 
     /** Die letzten Bankbewegungen mit ihrer Zuordnung: So sieht man, warum etwas nicht vorgeschlagen wird, und kann es korrigieren. */
     function abgleichPanel() {
-      const bz = (state.data.bankZeilen || {})[jahr()];
-      if (!state.bh.abgl || !bz) return '';
-      const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
-      const ign = new Set(state.data.settings.bankIgnoriert || []);
-      const a = L.bankAbgleich(bz.zeilen, alle, BANK, [...ign]);
+      const bz = BZ()[jahr()];
+      if (!S.abgl || !bz) return '';
+      const alle = DB().filter((b) => b.jahr === jahr());
+      const ign = new Set(state.data.settings[K.ign] || []);
+      const a = L.bankAbgleich(bz.zeilen, alle, BANK_(), [...ign]);
       const zu = new Map(a.paare.map((p) => [p.zeile.schluessel, p.buchungen]));
-      const n = state.bh.abglAlle ? bz.zeilen.length : 20;
+      const n = S.abglAlle ? bz.zeilen.length : 20;
       const zeilen = bz.zeilen.slice(-n).reverse();
       const zeile = (z) => {
         const bs = zu.get(z.schluessel);
@@ -293,11 +315,11 @@
         <h3>Abgleich mit der Bank</h3>
         <p>Jede Bankbewegung und die Buchung, der sie zugeordnet ist. Die neuste steht zuoberst.</p>
         <div class="bh-abgl-wrap"><table><thead><tr><th>Datum</th><th class="r">Betrag</th><th>Text der Bank</th><th>Zugeordnet</th><th></th></tr></thead><tbody>${zeilen.map(zeile).join('')}</tbody></table></div>
-        ${bz.zeilen.length > 20 ? `<button class="of-mehr" data-bh="abgl-alle">${state.bh.abglAlle ? 'Nur die letzten 20 zeigen' : `Alle ${bz.zeilen.length} zeigen`}</button>` : ''}</div>`;
+        ${bz.zeilen.length > 20 ? `<button class="of-mehr" data-bh="abgl-alle">${S.abglAlle ? 'Nur die letzten 20 zeigen' : `Alle ${bz.zeilen.length} zeigen`}</button>` : ''}</div>`;
     }
 
     function zahlPanel() {
-      const z = state.bh.zahl;
+      const z = S.zahl;
       if (!z) return '';
       const zeile = (e, i, art) => `<tr><td class="num">${fmtDate(e.datum)}</td><td class="num r">${chf(e.betrag)}</td>
         <td>${esc(e.text.replace(/^Gutschrift\s+/i, ''))}</td><td>${e.projekte.map((id) => esc(pName(id))).join('<br>')}</td>
@@ -320,28 +342,28 @@
       if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
       const p = L.parseBankCsv(r.text);
       if (p.fehler) { toast(p.fehler, { fehler: true }); return; }
-      const bezahlt = rechnungenAbgleichen(p.zeilen);
+      if (!BANK_()) { toast('Wähle zuerst oben das Bankkonto, gegen das die Bewegungen gebucht werden.', { fehler: true }); return; }
+      const bezahlt = PRIVAT ? 0 : rechnungenAbgleichen(p.zeilen);
       const zusatz = bezahlt ? ` ${bezahlt === 1 ? 'Eine Rechnung' : `${bezahlt} Rechnungen`} als bezahlt eingetragen.` : '';
       const z = p.zeilen.filter((x) => x.datum.startsWith(jahr() + '-'));
       if (!z.length) { if (bezahlt) persist(); render(); toast(`Die Datei enthält keine Bewegungen im Jahr ${jahr()}.${zusatz}`, { fehler: !bezahlt }); return; }
-      const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
+      const alle = DB().filter((b) => b.jahr === jahr());
       // Bankbewegungen des Jahres merken: Sie bestimmen dauerhaft die Reihenfolge der Buchungen.
-      if (!state.data.bankZeilen) state.data.bankZeilen = {};
-      const gemerkt = state.data.bankZeilen[jahr()] || { mod: 0, zeilen: [] };
+      const gemerkt = BZ()[jahr()] || { mod: 0, zeilen: [] };
       const zusammen = L.bankZeilenMerge(gemerkt.zeilen, z.filter((x) => Math.abs(x.betrag) > 0.004));
       const zeilenNeu = JSON.stringify(zusammen) !== JSON.stringify(gemerkt.zeilen);
-      state.data.bankZeilen[jahr()] = { mod: gemerkt.mod, zeilen: zusammen };
-      const a = L.bankAbgleich(z, alle, BANK, state.data.settings.bankIgnoriert || []);
+      BZ()[jahr()] = { mod: gemerkt.mod, zeilen: zusammen };
+      const a = L.bankAbgleich(z, alle, BANK_(), state.data.settings[K.ign] || []);
       // Gelernt wird nur aus bestätigten Buchungen.
       const lern = a.paare.filter((x) => x.buchungen.every((b) => !b.vorschlag));
-      let pos = state.data.buchungen.reduce((m, b) => Math.max(m, b.pos || 0), 0);
+      let pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0);
       // Welche Gutschrift gehört zu welcher Rechnung? Das bestimmt Konto und Text des Vorschlags.
       const zuRechnung = new Map();
-      for (const x of state.data.projects) if (x.zahlungBank) { const e = zuRechnung.get(x.zahlungBank) || { ids: [], eindeutig: true }; e.ids.push(x.id); zuRechnung.set(x.zahlungBank, e); }
-      if (state.bh.zahl) for (const e of state.bh.zahl.fast) zuRechnung.set(e.schluessel, { ids: e.projekte, eindeutig: false });
+      if (!PRIVAT) for (const x of state.data.projects) if (x.zahlungBank) { const e = zuRechnung.get(x.zahlungBank) || { ids: [], eindeutig: true }; e.ids.push(x.id); zuRechnung.set(x.zahlungBank, e); }
+      if (S.zahl) for (const e of S.zahl.fast) zuRechnung.set(e.schluessel, { ids: e.projekte, eindeutig: false });
       const beispiele = zuRechnung.size ? rechnungsBeispiele(lern) : [];
       const vorschlag = (zeile) => {
-        const v = L.bankVorschlag(zeile, lern, BANK), r = zuRechnung.get(zeile.schluessel);
+        const v = L.bankVorschlag(zeile, lern, BANK_(), { regeln: !PRIVAT }), r = zuRechnung.get(zeile.schluessel);
         return r ? mitRechnung(v, r.ids, r.eindeutig, beispiele) : v;
       };
       let geaendert = 0;
@@ -349,19 +371,19 @@
       for (const paar of a.paare) for (const b of paar.buchungen) {
         if (b.bankNr !== paar.zeile.nr || b.bankDatum !== paar.zeile.datum) { b.bankNr = paar.zeile.nr; b.bankDatum = paar.zeile.datum; geaendert++; }
       }
-      for (const n of a.neu) state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos: ++pos, vorschlag: true }, vorschlag(n)));
+      for (const n of a.neu) DB().push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos: ++pos, vorschlag: true }, vorschlag(n)));
       // Bestehende, von Hand noch nicht veränderte Vorschläge nachführen, sobald eine Rechnung dazu bekannt ist.
       for (const paar of a.paare) {
         const b = paar.buchungen[0];
         if (paar.buchungen.length !== 1 || !b.vorschlag || !zuRechnung.has(paar.zeile.schluessel)) continue;
-        const roh = L.bankVorschlag(paar.zeile, lern, BANK);
+        const roh = L.bankVorschlag(paar.zeile, lern, BANK_(), { regeln: !PRIVAT });
         if (b.text !== roh.text || b.soll !== roh.soll || b.haben !== roh.haben) continue;
         const neu = vorschlag(paar.zeile);
         if (neu.text !== b.text || neu.haben !== b.haben) { Object.assign(b, { text: neu.text, haben: neu.haben, sicher: neu.sicher }); geaendert++; }
       }
       const letzte = z[z.length - 1];
-      state.bh.bank = { jahr: jahr(), datum: letzte.datum, saldo: letzte.saldo };
-      state.bh.tab = 'buchungen'; state.bh.q = '';
+      S.bank = { jahr: jahr(), datum: letzte.datum, saldo: letzte.saldo };
+      S.tab = 'buchungen'; S.q = '';
       if (a.neu.length || bezahlt || geaendert || zeilenNeu) persist();
       render();
       const offenV = a.paare.length - lern.length;
@@ -376,22 +398,22 @@
 
     function viewKonten() {
       const a = L.auswertung(plan(), buchungen());
-      const q = String(state.bh.kq || '').trim().toLowerCase();
+      const q = String(S.kq || '').trim().toLowerCase();
       const sichtbar = plan().filter((z) => {
-        if (state.bh.alleKonten || !z.konto) return true;
+        if (S.alleKonten || !z.konto) return true;
         return a.konto.has(z.konto);
       });
       // Gruppen ohne sichtbares Konto und ohne Saldo ausblenden, wenn nur bewegte Konten gezeigt werden.
       // Beim Suchen: alle Konten und Gruppen, deren Nummer oder Beschreibung passt (auch ohne Bewegung).
       const zeilen = q
         ? plan().filter((z) => (z.konto || z.gruppe) && q.split(/\s+/).every((w) => `${z.konto || ''} ${z.gruppe || ''} ${z.text || ''}`.toLowerCase().includes(w)))
-        : sichtbar.filter((z) => state.bh.alleKonten || !z.gruppe || Math.abs(a.saldoVon(z)) > 0.004);
+        : sichtbar.filter((z) => S.alleKonten || !z.gruppe || Math.abs(a.saldoVon(z)) > 0.004);
       const gruppen = (plan() || []).filter((z) => z.gruppe);
-      const k = state.bh.kEdit;
+      const k = S.kEdit;
       return `
       <div class="bh-bar2">
-        <input id="bh-ksuche" type="search" placeholder="Konto suchen (Nummer oder Name)" value="${esc(state.bh.kq || '')}" data-bh="ksuche" class="bh-ksuche">
-        <label class="check"><input type="checkbox" data-bh="alle-konten" ${state.bh.alleKonten ? 'checked' : ''}> Auch Konten ohne Bewegung zeigen</label>
+        <input id="bh-ksuche" type="search" placeholder="Konto suchen (Nummer oder Name)" value="${esc(S.kq || '')}" data-bh="ksuche" class="bh-ksuche">
+        <label class="check"><input type="checkbox" data-bh="alle-konten" ${S.alleKonten ? 'checked' : ''}> Auch Konten ohne Bewegung zeigen</label>
         <span class="grow"></span>
         <button class="btn" data-bh="konto-neu">Konto hinzufügen</button>
       </div>
@@ -412,7 +434,7 @@
           if (z.gruppe) return `<tr class="k-grp ${/^(1|2|00|E\d|10|14|20|24|2A|28)$/.test(z.gruppe) ? 'gross' : ''}"><td></td><td>${esc(z.gruppe)}</td><td></td><td>${esc(z.text)}</td><td></td><td>${esc(z.summe_in)}</td><td class="num r">${chf(s, true)}</td><td></td></tr>`;
           return `<tr class="k-kto"><td></td><td></td><td class="num">${esc(z.konto)}</td><td>${esc(z.text)}</td><td>${esc(z.bklasse)}</td><td>${esc(z.summe_in)}</td><td class="num r">${chf(s, true)}</td>
             <td class="r"><button class="link" data-bh="auszug" data-konto="${esc(z.konto)}">Auszug</button> <button class="link" data-bh="konto-edit" data-konto="${esc(z.konto)}">Ändern</button></td></tr>`;
-        }).join('') || `<tr><td colspan="8" class="dim">Kein Konto passt zu «${esc(state.bh.kq)}».</td></tr>`}</tbody>
+        }).join('') || `<tr><td colspan="8" class="dim">Kein Konto passt zu «${esc(S.kq)}».</td></tr>`}</tbody>
       </table></div>`;
     }
 
@@ -440,8 +462,8 @@
     function viewAuszug() {
       const a = L.auswertung(plan(), buchungen());
       const mit = konten().filter((z) => a.konto.has(z.konto));
-      if (!state.bh.konto || !konten().some((z) => z.konto === state.bh.konto)) state.bh.konto = mit.length ? mit[0].konto : (konten()[0] || {}).konto;
-      const nr = state.bh.konto;
+      if (!S.konto || !konten().some((z) => z.konto === S.konto)) S.konto = mit.length ? mit[0].konto : (konten()[0] || {}).konto;
+      const nr = S.konto;
       const k = L.kontoauszug(nr, buchungen());
       return `
       <div class="bh-bar2"><label for="bh-konto">Konto</label>
@@ -537,7 +559,7 @@
 
     async function pdf() {
       const name = `${firma().replace(/[^A-Za-z0-9äöüÄÖÜ]+/g, '_')}_${jahr()}_Stand_${heute.replace(/-/g, '')}.pdf`;
-      const r = await api.savePdf(dossierHtml(), { ordner: 'Buchhaltung', name, fuss: fmtDate(heute) });
+      const r = await api.savePdf(dossierHtml(), { ordner: PRIVAT ? 'Buchhaltung privat' : 'Buchhaltung', name, fuss: fmtDate(heute) });
       if (r.fehler) toast(r.fehler, { fehler: true }); else toast('Dossier gespeichert: ' + r.path);
     }
 
@@ -546,20 +568,20 @@
     function buche() {
       const p = pruefe(neu());
       if (p.fehler) { toast(p.fehler, { fehler: true }); const el = $('#bn-' + p.feld); if (el) el.focus(); return; }
-      const pos = state.data.buchungen.reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
-      state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), pos }, p.buchung));
+      const pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
+      DB().push(Object.assign({ id: uid('b'), jahr: jahr(), pos }, p.buchung));
       const datum = p.buchung.datum;
-      state.bh.neu = null;
+      S.neu = null;
       persist(); neu().datum = datum; render();
       const el = $('#bn-text'); if (el) el.focus();
     }
 
     function speichereEdit() {
-      const b = state.data.buchungen.find((x) => x.id === state.bh.edit);
-      const p = pruefe(state.bh.editForm);
+      const b = DB().find((x) => x.id === S.edit);
+      const p = pruefe(S.editForm);
       if (p.fehler) { toast(p.fehler, { fehler: true }); const el = $('#be-' + p.feld); if (el) el.focus(); return; }
       Object.assign(b, p.buchung);
-      state.bh.edit = null; persist(); render(); toast('Buchung gespeichert');
+      S.edit = null; persist(); render(); toast('Buchung gespeichert');
     }
 
     /** Gleiche Beschreibung wie früher: Soll und Haben der letzten solchen Buchung vorschlagen. */
@@ -573,56 +595,56 @@
 
     document.addEventListener('click', (ev) => {
       const el = ev.target.closest('[data-bh]');
-      if (!el || !state.data || state.view !== 'buchhaltung') return;
+      if (!el || !state.data || state.view !== VIEW) return;
       const a = el.dataset.bh;
-      if (a === 'tab') { state.bh.tab = el.dataset.tab; state.bh.edit = null; render(); }
+      if (a === 'tab') { S.tab = el.dataset.tab; S.edit = null; render(); }
       else if (a === 'bank') bankEinlesen();
-      else if (a === 'abgl') { state.bh.abgl = !state.bh.abgl; render(); }
-      else if (a === 'abgl-alle') { state.bh.abglAlle = !state.bh.abglAlle; render(); }
+      else if (a === 'abgl') { S.abgl = !S.abgl; render(); }
+      else if (a === 'abgl-alle') { S.abglAlle = !S.abglAlle; render(); }
       else if (a === 'abg-neu') {
         // Bankbewegung ausdrücklich als Vorschlag anlegen; über ihren Schlüssel bleibt sie künftig dieser Buchung zugeordnet.
-        const bz = state.data.bankZeilen[jahr()], z = bz.zeilen.find((x) => x.schluessel === el.dataset.key);
+        const bz = BZ()[jahr()], z = bz.zeilen.find((x) => x.schluessel === el.dataset.key);
         if (!z) return;
-        const alle = state.data.buchungen.filter((b) => b.jahr === jahr());
-        const ign = state.data.settings.bankIgnoriert || [];
+        const alle = DB().filter((b) => b.jahr === jahr());
+        const ign = state.data.settings[K.ign] || [];
         const k = ign.indexOf(z.schluessel); if (k >= 0) ign.splice(k, 1);
-        const lern = L.bankAbgleich(bz.zeilen, alle, BANK, []).paare.filter((x) => x.zeile.schluessel !== z.schluessel && x.buchungen.every((b) => !b.vorschlag));
-        const pos = state.data.buchungen.reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
-        state.data.buchungen.push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos, vorschlag: true }, L.bankVorschlag(z, lern, BANK)));
-        state.bh.tab = 'buchungen'; persist(); render(); toast('Als Vorschlag angelegt');
+        const lern = L.bankAbgleich(bz.zeilen, alle, BANK_(), []).paare.filter((x) => x.zeile.schluessel !== z.schluessel && x.buchungen.every((b) => !b.vorschlag));
+        const pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
+        DB().push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos, vorschlag: true }, L.bankVorschlag(z, lern, BANK_(), { regeln: !PRIVAT })));
+        S.tab = 'buchungen'; persist(); render(); toast('Als Vorschlag angelegt');
       }
-      else if (a === 'z-zu') { state.bh.zahl = null; render(); }
+      else if (a === 'z-zu') { S.zahl = null; render(); }
       else if (a === 'z-zurueck') {
-        const [e] = state.bh.zahl.gesetzt.splice(+el.dataset.i, 1);
+        const [e] = S.zahl.gesetzt.splice(+el.dataset.i, 1);
         for (const id of e.projekte) { const x = projekt(id); if (x && x.zahlungBank === e.schluessel) { x.zahlungsdatum = null; x.zahlungBank = null; } }
         (state.data.settings.zahlungNein || (state.data.settings.zahlungNein = [])).push(e.schluessel);
-        state.bh.zahl.fast.push(e); persist(); render();
+        S.zahl.fast.push(e); persist(); render();
       } else if (a === 'z-setzen') {
-        const [e] = state.bh.zahl.fast.splice(+el.dataset.i, 1);
-        setzeBezahlt(e); state.bh.zahl.gesetzt.push(e); persist(); render();
+        const [e] = S.zahl.fast.splice(+el.dataset.i, 1);
+        setzeBezahlt(e); S.zahl.gesetzt.push(e); persist(); render();
       }
       else if (a === 'v-teilen') {
-        const v = state.data.buchungen.find((x) => x.id === el.dataset.id); if (!v) return;
+        const v = DB().find((x) => x.id === el.dataset.id); if (!v) return;
         const t = aufteilen(v); persist(); render();
         const f = document.getElementById(`bv-${t.id}-betrag`); if (f) { f.focus(); f.select(); }
       } else if (a === 'v-teil-weg') {
-        const i = state.data.buchungen.findIndex((x) => x.id === el.dataset.id); if (i < 0) return;
-        const [weg] = state.data.buchungen.splice(i, 1); restRechnen(hauptVon(weg)); persist(); render();
+        const i = DB().findIndex((x) => x.id === el.dataset.id); if (i < 0) return;
+        const [weg] = DB().splice(i, 1); restRechnen(hauptVon(weg)); persist(); render();
       }
       else if (a === 'v-ok') {
-        const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
+        const v = DB().find((x) => x.id === el.dataset.id);
         const f = bestaetige(v);
         if (f) { toast(f, { fehler: true }); return; }
         persist(); render(); toast('Buchung bestätigt');
       } else if (a === 'v-weg') {
-        const i = state.data.buchungen.findIndex((x) => x.id === el.dataset.id);
-        const [weg] = state.data.buchungen.splice(i, 1);
+        const i = DB().findIndex((x) => x.id === el.dataset.id);
+        const [weg] = DB().splice(i, 1);
         // Verwerfen gilt für die ganze Bankbewegung: auch ihre Teile entfernen.
-        for (let k = state.data.buchungen.length - 1; k >= 0; k--) if (state.data.buchungen[k].vorschlag && state.data.buchungen[k].teilVon === weg.id) state.data.buchungen.splice(k, 1);
-        const ign = state.data.settings.bankIgnoriert || (state.data.settings.bankIgnoriert = []);
+        for (let k = DB().length - 1; k >= 0; k--) if (DB()[k].vorschlag && DB()[k].teilVon === weg.id) DB().splice(k, 1);
+        const ign = state.data.settings[K.ign] || (state.data.settings[K.ign] = []);
         if (weg.bankSchluessel) ign.push(weg.bankSchluessel);
         persist(); render();
-        toast('Vorschlag verworfen', { actionLabel: 'Rückgängig', action: () => { state.data.buchungen.splice(i, 0, weg); const k = ign.indexOf(weg.bankSchluessel); if (k >= 0) ign.splice(k, 1); persist(); render(); } });
+        toast('Vorschlag verworfen', { actionLabel: 'Rückgängig', action: () => { DB().splice(i, 0, weg); const k = ign.indexOf(weg.bankSchluessel); if (k >= 0) ign.splice(k, 1); persist(); render(); } });
       } else if (a === 'v-alle') {
         let n = 0, rest = 0;
         // In der Reihenfolge der Bank bestätigen (älteste zuerst), damit die Belegnummern gleich laufen.
@@ -633,68 +655,71 @@
       else if (a === 'neu-save') buche();
       else if (a === 'edit') {
         if (ev.target.closest('input,button')) return;
-        const b = state.data.buchungen.find((x) => x.id === el.dataset.id);
-        state.bh.edit = b.id; state.bh.editForm = { datum: b.datum, beleg: b.beleg, text: b.text, soll: b.soll, haben: b.haben, betrag: b.betrag.toFixed(2) };
+        const b = DB().find((x) => x.id === el.dataset.id);
+        S.edit = b.id; S.editForm = { datum: b.datum, beleg: b.beleg, text: b.text, soll: b.soll, haben: b.haben, betrag: b.betrag.toFixed(2) };
         render(); const f = $('#be-text'); if (f) f.focus();
       } else if (a === 'edit-save') speichereEdit();
-      else if (a === 'edit-cancel') { state.bh.edit = null; render(); }
+      else if (a === 'edit-cancel') { S.edit = null; render(); }
       else if (a === 'del') {
-        const i = state.data.buchungen.findIndex((x) => x.id === el.dataset.id);
-        const [weg] = state.data.buchungen.splice(i, 1);
-        state.bh.edit = null; persist(); render();
-        toast('Buchung gelöscht', { actionLabel: 'Rückgängig', action: () => { state.data.buchungen.splice(i, 0, weg); persist(); render(); } });
-      } else if (a === 'auszug') { state.bh.konto = el.dataset.konto; state.bh.tab = 'auszug'; render(); }
-      else if (a === 'konto-neu') { state.bh.kEdit = { konto: '', text: '', bklasse: '3', summe_in: (plan().find((z) => z.gruppe) || {}).gruppe || '', alt: null }; render(); const f = $('#bk-konto'); if (f) f.focus(); }
-      else if (a === 'konto-edit') { const z = konten().find((x) => x.konto === el.dataset.konto); state.bh.kEdit = { konto: z.konto, text: z.text, bklasse: z.bklasse, summe_in: z.summe_in, alt: z.konto }; render(); $('.main').scrollTop = 0; const f = $('#bk-text'); if (f) f.focus(); }
-      else if (a === 'konto-abbr') { state.bh.kEdit = null; render(); }
+        const i = DB().findIndex((x) => x.id === el.dataset.id);
+        const [weg] = DB().splice(i, 1);
+        S.edit = null; persist(); render();
+        toast('Buchung gelöscht', { actionLabel: 'Rückgängig', action: () => { DB().splice(i, 0, weg); persist(); render(); } });
+      } else if (a === 'auszug') { S.konto = el.dataset.konto; S.tab = 'auszug'; render(); }
+      else if (a === 'konto-neu') { S.kEdit = { konto: '', text: '', bklasse: '3', summe_in: (plan().find((z) => z.gruppe) || {}).gruppe || '', alt: null }; render(); const f = $('#bk-konto'); if (f) f.focus(); }
+      else if (a === 'konto-edit') { const z = konten().find((x) => x.konto === el.dataset.konto); S.kEdit = { konto: z.konto, text: z.text, bklasse: z.bklasse, summe_in: z.summe_in, alt: z.konto }; render(); $('.main').scrollTop = 0; const f = $('#bk-text'); if (f) f.focus(); }
+      else if (a === 'konto-abbr') { S.kEdit = null; render(); }
       else if (a === 'konto-del') {
-        const p = state.data.kontenplaene[jahr()];
-        p.zeilen = p.zeilen.filter((z) => z.konto !== state.bh.kEdit.alt);
-        state.bh.kEdit = null; persist(); render(); toast('Konto gelöscht');
+        const p = KP()[jahr()];
+        p.zeilen = p.zeilen.filter((z) => z.konto !== S.kEdit.alt);
+        S.kEdit = null; persist(); render(); toast('Konto gelöscht');
       } else if (a === 'eroeffnen') {
-        const vor = state.data.kontenplaene[jahr() - 1];
-        const vortrag = vor.zeilen.some((z) => z.konto === '2970') ? '2970' : null;
-        if (!vortrag) { toast('Im Kontenplan fehlt das Konto 2970 für den Gewinnvortrag.', { fehler: true }); return; }
-        state.data.kontenplaene[jahr()] = { zeilen: JSON.parse(JSON.stringify(vor.zeilen)), mod: 0 };
-        const er = L.eroeffnung(vor.zeilen, state.data.buchungen.filter((b) => b.jahr === jahr() - 1 && !b.vorschlag), jahr(), vortrag);
-        let pos = state.data.buchungen.reduce((m, b) => Math.max(m, b.pos || 0), 0);
-        for (const b of er) state.data.buchungen.push(Object.assign(b, { id: uid('b'), pos: ++pos }));
+        const vor = KP()[jahr() - 1];
+        // Geschäft: 2970 Gewinnvortrag. Privat: das Konto für Vortrag bzw. Eigenkapital/Vermögen im eigenen Kontenplan.
+        const vortrag = vor.zeilen.some((z) => z.konto === '2970') ? '2970'
+          : PRIVAT ? ((vor.zeilen.find((z) => z.konto && String(z.bklasse) === '2' && /vortrag|eigenkapital|reinverm|vermögen/i.test(z.text)) || {}).konto || null) : null;
+        if (!vortrag) { toast(PRIVAT ? 'Im Kontenplan fehlt ein Passivkonto für Vortrag, Eigenkapital oder Vermögen.' : 'Im Kontenplan fehlt das Konto 2970 für den Gewinnvortrag.', { fehler: true }); return; }
+        KP()[jahr()] = { zeilen: JSON.parse(JSON.stringify(vor.zeilen)), mod: 0 };
+        const er = L.eroeffnung(vor.zeilen, DB().filter((b) => b.jahr === jahr() - 1 && !b.vorschlag), jahr(), vortrag);
+        let pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0);
+        for (const b of er) DB().push(Object.assign(b, { id: uid('b'), pos: ++pos }));
         persist(); render(); toast(`Buchhaltung ${jahr()} eröffnet mit ${er.length} Eröffnungsbuchungen`);
       }
     });
 
     document.addEventListener('input', (ev) => {
       const el = ev.target, a = el.dataset && el.dataset.bh;
-      if (!a || !state.data) return;
+      if (!a || !state.data || state.view !== VIEW) return;
       if (a === 'feld') {
-        const f = el.dataset.form === 'neu' ? neu() : state.bh.editForm;
+        const f = el.dataset.form === 'neu' ? neu() : S.editForm;
         f[el.dataset.key] = el.value;
         if (el.dataset.form === 'neu') { const h = $('#bh-hinweis'); if (h) h.textContent = hinweisNeu(); }
       } else if (a === 'vfeld') {
-        const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
+        const v = DB().find((x) => x.id === el.dataset.id);
         const key = el.dataset.key;
         if (key === 'betrag') { const b = C.parseAmount(el.value); if (b == null || b <= 0) return; v.betrag = Math.round(b * 100) / 100; if (v.teilVon) restRechnen(hauptVon(v)); }
         else if (key === 'datum') { if (!/^\d{4}-\d{2}-\d{2}$/.test(el.value)) return; v.datum = el.value; }
         else v[key] = key === 'text' ? el.value : el.value.trim().split(/\s/)[0];
         v.sicher = true;   // von Hand angefasst gilt als geprüft
-      } else if (a === 'suche') { state.bh.q = el.value; render(); }
-      else if (a === 'ksuche') { state.bh.kq = el.value; render(); }
-      else if (a === 'kfeld') state.bh.kEdit[el.dataset.key] = el.value;
+      } else if (a === 'suche') { S.q = el.value; render(); }
+      else if (a === 'ksuche') { S.kq = el.value; render(); }
+      else if (a === 'kfeld') S.kEdit[el.dataset.key] = el.value;
     });
 
     document.addEventListener('change', (ev) => {
       const el = ev.target, a = el.dataset && el.dataset.bh;
-      if (!a || !state.data) return;
+      if (!a || !state.data || state.view !== VIEW) return;
+      if (a === 'bankkonto') { state.data.settings.privatBank = el.value; persist(); render(); return; }
       if (a === 'feld' && el.dataset.key === 'text') {
         const neuForm = el.dataset.form === 'neu';
-        const f = neuForm ? neu() : state.bh.editForm;
+        const f = neuForm ? neu() : S.editForm;
         if (neuForm && vorschlag(f)) { render(); const b = $('#bn-betrag'); if (b) b.focus(); }
       } else if (a === 'vfeld') {
         // Kein Neuaufbau der Liste, sonst ginge beim Tabben der Fokus verloren.
-        const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
+        const v = DB().find((x) => x.id === el.dataset.id);
         const tr = el.closest('tr');
         if (v && tr) {
-          const gegen = v.soll === BANK ? v.haben : v.soll;
+          const gegen = v.soll === BANK_() ? v.haben : v.soll;
           tr.classList.toggle('unsicher', !(gegen && v.sicher));
           const h = tr.querySelector('.bh-vhin-t'); if (h) h.textContent = vHinweis(v);
         }
@@ -702,8 +727,8 @@
         // Datum und Betrag verschieben Reihenfolge und Bank-Saldo: neu zeichnen (der Fokus bleibt über die id erhalten).
         if (el.dataset.key === 'datum' || el.dataset.key === 'betrag') render();
       }
-      else if (a === 'alle-konten') { state.bh.alleKonten = el.checked; render(); }
-      else if (a === 'konto-wahl') { state.bh.konto = el.value; render(); }
+      else if (a === 'alle-konten') { S.alleKonten = el.checked; render(); }
+      else if (a === 'konto-wahl') { S.konto = el.value; render(); }
     });
 
     /* ---------- Kontoauswahl: eigene, scrollbare Liste statt der Vorschlagsliste des Browsers ---------- */
@@ -729,10 +754,10 @@
       const input = kw.input; input.value = kw.treffer[i].konto; kwSchliessen();
       input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    document.addEventListener('focusin', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
+    document.addEventListener('focusin', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && state.view === VIEW) kwZeigen(ev.target, true); });
     document.addEventListener('focusout', (ev) => { if (kw && ev.target === kw.input) setTimeout(() => { if (kw && document.activeElement !== kw.input) kwSchliessen(); }, 0); });
-    document.addEventListener('input', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && ev.isTrusted && state.view === 'buchhaltung') kwZeigen(ev.target, false); });
-    document.addEventListener('click', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && !kw && state.view === 'buchhaltung') kwZeigen(ev.target, true); });
+    document.addEventListener('input', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && ev.isTrusted && state.view === VIEW) kwZeigen(ev.target, false); });
+    document.addEventListener('click', (ev) => { if (ev.target.dataset && ev.target.dataset.kontowahl && !kw && state.view === VIEW) kwZeigen(ev.target, true); });
     document.addEventListener('mousedown', (ev) => {
       const z = ev.target.closest && ev.target.closest('.bh-kwahl');
       if (!z) return;
@@ -757,22 +782,22 @@
 
     document.addEventListener('keydown', (ev) => {
       const el = ev.target;
-      if (!state.data || state.view !== 'buchhaltung') return;
+      if (!state.data || state.view !== VIEW) return;
       if (el.dataset && el.dataset.bh === 'feld') {
         if (ev.key === 'Enter') { ev.preventDefault(); if (el.dataset.form === 'neu') buche(); else speichereEdit(); }
-        else if (ev.key === 'Escape' && el.dataset.form === 'edit') { state.bh.edit = null; render(); }
+        else if (ev.key === 'Escape' && el.dataset.form === 'edit') { S.edit = null; render(); }
       } else if (el.dataset && el.dataset.bh === 'vfeld' && ev.key === 'Enter') {
         ev.preventDefault();
-        const v = state.data.buchungen.find((x) => x.id === el.dataset.id);
+        const v = DB().find((x) => x.id === el.dataset.id);
         const f = bestaetige(v);
         if (f) toast(f, { fehler: true }); else { persist(); render(); toast('Buchung bestätigt'); }
       } else if (ev.key === 'Enter' && el.classList && el.classList.contains('bh-row')) el.click();
     });
 
     document.addEventListener('submit', (ev) => {
-      if (ev.target.dataset.bhForm !== 'konto') return;
+      if (ev.target.dataset.bhForm !== 'konto' || state.view !== VIEW) return;
       ev.preventDefault(); ev.stopImmediatePropagation();
-      const k = state.bh.kEdit, p = state.data.kontenplaene[jahr()];
+      const k = S.kEdit, p = KP()[jahr()];
       const nr = String(k.konto).trim(), text = String(k.text).trim();
       if (!/^\d{3,6}$/.test(nr)) { toast('Die Kontonummer muss aus 3 bis 6 Ziffern bestehen.', { fehler: true }); return; }
       if (!text) { toast('Die Beschreibung fehlt.', { fehler: true }); return; }
@@ -785,7 +810,7 @@
         if (p.zeilen.some((x) => x.konto === nr)) { toast(`Das Konto ${nr} gibt es schon.`, { fehler: true }); return; }
         einfuegen(p.zeilen, { sektion: '', gruppe: '', konto: nr, text, bklasse: k.bklasse, summe_in: k.summe_in });
       }
-      state.bh.kEdit = null; persist(); render(); toast(k.alt ? 'Konto gespeichert' : 'Konto hinzugefügt');
+      S.kEdit = null; persist(); render(); toast(k.alt ? 'Konto gespeichert' : 'Konto hinzugefügt');
     }, true);
 
     /** Fügt ein Konto vor der Zeile seiner Gruppe ein, sortiert nach Nummer unter den Konten derselben Gruppe. */

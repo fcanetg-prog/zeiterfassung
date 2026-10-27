@@ -100,6 +100,13 @@ console.log('Alle Prüfungen bestanden.');
   const M = C.mergeData({ projects: [], entries: [], buchungen: [Object.assign({}, b[0], { mod: 1 })], kontenplaene: { 2026: { mod: 1, zeilen: plan } } },
     { projects: [], entries: [], buchungen: [Object.assign({}, b[0], { mod: 5, betrag: 1 }), Object.assign({}, b[1], { mod: 2 })], kontenplaene: { 2026: { mod: 3, zeilen: plan.slice(0, 2) }, 2027: { mod: 1, zeilen: [] } } });
   assert.deepStrictEqual(M.buchungen.map((x) => x.id + ':' + x.betrag), ['a:1', 'b:1081.05']); assert.strictEqual(M.kontenplaene[2026].zeilen.length, 2); assert.ok(M.kontenplaene[2027]);
+  {
+    // Buchhaltung privat: eigene Daten, beim Zusammenführen zweier Rechner gleich behandelt wie die des Geschäfts
+    const A = Object.assign(C.emptyData(), { privatBuchungen: [{ id: 'p1', datum: '2026-10-01', text: 'alt', soll: '6500', haben: '1010', betrag: 5, mod: 1 }], privatKontenplaene: { 2026: { mod: 1, zeilen: [{ konto: '1010' }] } } });
+    const B = Object.assign(C.emptyData(), { privatBuchungen: [{ id: 'p1', datum: '2026-10-01', text: 'neu', soll: '6500', haben: '1010', betrag: 5, mod: 2 }, { id: 'p2', datum: '2026-10-02', text: 'x', soll: '6500', haben: '1010', betrag: 1, mod: 2 }], privatKontenplaene: { 2026: { mod: 3, zeilen: [{ konto: '1020' }] } } });
+    const m = C.mergeData(A, B);
+    assert.deepStrictEqual(m.privatBuchungen.map((b) => b.text), ['neu', 'x']); assert.strictEqual(m.privatKontenplaene[2026].zeilen[0].konto, '1020'); assert.strictEqual(m.buchungen.length, 0);
+  }
   console.log('Buchhaltung bestanden.');
 
   // Bankabgleich (erfundene Daten)

@@ -23,7 +23,7 @@
   }
 
   function emptyData() {
-    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [], pendenzen: [] };
+    return { version: 1, settings: Object.assign({}, DEFAULTS), projects: [], entries: [], history: {}, buchungen: [], kontenplaene: {}, bankZeilen: {}, offerten: [], offertVorlagen: [], pendenzen: [], privatBuchungen: [], privatKontenplaene: {}, privatBankZeilen: {} };
   }
 
   /** Stunden pro Projekt: Map projectId -> Summe */
@@ -420,21 +420,14 @@
     projects.sort((x, y) => (x.jahr - y.jahr) || (x.sort - y.sort) || (x.id < y.id ? -1 : 1));
     const neuer = (b.settingsMod || 0) > (a.settingsMod || 0) ? b : a;
     // Buchhaltung: Buchungen einzeln zusammenführen, Kontenplan pro Jahr als Ganzes (jüngere Fassung gewinnt).
-    const buchungen = mergeList(a.buchungen, b.buchungen)
-      .sort((x, y) => (x.datum < y.datum ? -1 : x.datum > y.datum ? 1 : (x.pos || 0) - (y.pos || 0)));
-    const kontenplaene = {};
-    for (const quelle of [a.kontenplaene || {}, b.kontenplaene || {}]) {
-      for (const [jahr, plan] of Object.entries(quelle)) {
-        if (!kontenplaene[jahr] || (plan.mod || 0) > (kontenplaene[jahr].mod || 0)) kontenplaene[jahr] = plan;
-      }
-    }
-    // Gespeicherte Bankbewegungen pro Jahr: die jüngere Fassung gewinnt.
-    const bankZeilen = {};
-    for (const quelle of [a.bankZeilen || {}, b.bankZeilen || {}]) {
-      for (const [jahr, bz] of Object.entries(quelle)) if (!bankZeilen[jahr] || (bz.mod || 0) > (bankZeilen[jahr].mod || 0)) bankZeilen[jahr] = bz;
-    }
+    // Buchhaltung (Geschäft und privat gleich): Buchungen einzeln, Kontenplan und Bankbewegungen pro Jahr (jüngere Fassung gewinnt).
+    const nachJahr = (x, y) => { const o = {}; for (const q of [x || {}, y || {}]) for (const [j, v] of Object.entries(q)) if (!o[j] || (v.mod || 0) > (o[j].mod || 0)) o[j] = v; return o; };
+    const sortB = (l) => l.sort((x, y) => (x.datum < y.datum ? -1 : x.datum > y.datum ? 1 : (x.pos || 0) - (y.pos || 0)));
+    const buchungen = sortB(mergeList(a.buchungen, b.buchungen));
+    const kontenplaene = nachJahr(a.kontenplaene, b.kontenplaene);
+    const bankZeilen = nachJahr(a.bankZeilen, b.bankZeilen);
     // Teile, die diese Version nicht kennt (aus einer neueren App), unverändert mitnehmen.
-    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'pendenzen', 'history']);
+    const bekanntK = new Set(['version', 'settings', 'settingsMod', 'projects', 'entries', 'geloescht', 'buchungen', 'kontenplaene', 'bankZeilen', 'offerten', 'offertVorlagen', 'pendenzen', 'privatBuchungen', 'privatKontenplaene', 'privatBankZeilen', 'history']);
     const fremd = {};
     for (const q of [a, b]) for (const k of Object.keys(q)) if (!bekanntK.has(k) && fremd[k] === undefined) fremd[k] = q[k];
     return {
@@ -445,6 +438,8 @@
       projects, entries, geloescht, buchungen, kontenplaene, bankZeilen,
       offerten: mergeList(a.offerten, b.offerten), offertVorlagen: mergeList(a.offertVorlagen, b.offertVorlagen),
       pendenzen: mergeList(a.pendenzen, b.pendenzen),
+      privatBuchungen: sortB(mergeList(a.privatBuchungen, b.privatBuchungen)),
+      privatKontenplaene: nachJahr(a.privatKontenplaene, b.privatKontenplaene), privatBankZeilen: nachJahr(a.privatBankZeilen, b.privatBankZeilen),
       history: Object.assign({}, b.history || {}, a.history || {}),
     };
   }

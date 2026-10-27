@@ -390,7 +390,7 @@ th.r { text-align: right; }
 .list.re th.r { padding-right: 6px; }
 
 /* ---------- Buchhaltung ---------- */
-.main.view-buchhaltung { overflow: hidden; padding-bottom: 16px; }
+.main.view-buchhaltung, .main.view-buchhaltungPrivat { overflow: hidden; padding-bottom: 16px; }
 .bh-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .bh-bar2 { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .bh-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
@@ -568,7 +568,7 @@ th.r { text-align: right; }
 .of-art .of-vdat { width: 130px; display: inline-block; font-weight: 500; padding: 2px 4px; }
 /* Offerten: Die Liste darf nicht zusammengestaucht werden, sonst wird ihr unteres Ende abgeschnitten statt scrollbar. */
 /* Seiten, die als Ganzes scrollen: Inhalte nie zusammendrücken (sonst wird z. B. ein Kasten mit overflow:hidden abgeschnitten). */
-.main:not(.view-projekte):not(.view-buchhaltung) > * { flex-shrink: 0; }
+.main:not(.view-projekte):not(.view-buchhaltung):not(.view-buchhaltungPrivat) > * { flex-shrink: 0; }
 .main.view-offerten { padding-bottom: 90px; }
 .of-keine { margin: 0 0 6px; font-size: 13px; } .of-pfld .row { margin-bottom: 4px; }
 .of-altpill { color: #8a5a00; border-color: #e0b866; background: #fdf1d6; font-size: 11px; margin-right: 2px; flex: none; }
@@ -831,3 +831,4 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .bh-ksuche { width: 260px; margin-right: 14px; }
 .bh-vhin .bh-teilen { font-size: inherit; padding: 0; }
 .bh-vor .bh-vhin { text-align: right; }
+.bh-bankwahl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); } .bh-bankwahl select { max-width: 220px; }

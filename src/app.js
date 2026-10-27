@@ -124,6 +124,9 @@
       o: new Map(state.data.offerten.map((r) => [r.id, ohneMod(r)])),
       v: new Map(state.data.offertVorlagen.map((r) => [r.id, ohneMod(r)])),
       t: new Map((state.data.pendenzen || []).map((r) => [r.id, ohneMod(r)])),
+      pb: new Map((state.data.privatBuchungen || []).map((r) => [r.id, ohneMod(r)])),
+      pk: Object.fromEntries(Object.entries(state.data.privatKontenplaene || {}).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
+      pz: Object.fromEntries(Object.entries(state.data.privatBankZeilen || {}).map(([j, bz]) => [j, JSON.stringify(bz.zeilen)])),
       k: Object.fromEntries(Object.entries(state.data.kontenplaene).map(([j, pl]) => [j, JSON.stringify(pl.zeilen)])),
       z: Object.fromEntries(Object.entries(state.data.bankZeilen || {}).map(([j, bz]) => [j, JSON.stringify(bz.zeilen)])),
       s: JSON.stringify(state.data.settings),
@@ -133,7 +136,7 @@
     const jetzt = Date.now();
     const d = state.data;
     if (!d.geloescht) d.geloescht = {};
-    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v], [d.pendenzen || (d.pendenzen = []), abbild.t || new Map()]]) {
+    for (const [liste, alt] of [[d.projects, abbild.p], [d.entries, abbild.e], [d.buchungen, abbild.b], [d.offerten, abbild.o], [d.offertVorlagen, abbild.v], [d.pendenzen || (d.pendenzen = []), abbild.t || new Map()], [d.privatBuchungen || (d.privatBuchungen = []), abbild.pb || new Map()]]) {
       const da = new Set();
       for (const r of liste) {
         da.add(r.id);
@@ -144,6 +147,8 @@
     if (JSON.stringify(d.settings) !== abbild.s) d.settingsMod = jetzt;
     for (const [j, pl] of Object.entries(d.kontenplaene)) if (JSON.stringify(pl.zeilen) !== abbild.k[j]) pl.mod = jetzt;
     for (const [j, bz] of Object.entries(d.bankZeilen || {})) if (JSON.stringify(bz.zeilen) !== (abbild.z || {})[j]) bz.mod = jetzt;
+    for (const [j, pl] of Object.entries(d.privatKontenplaene || {})) if (JSON.stringify(pl.zeilen) !== (abbild.pk || {})[j]) pl.mod = jetzt;
+    for (const [j, bz] of Object.entries(d.privatBankZeilen || {})) if (JSON.stringify(bz.zeilen) !== (abbild.pz || {})[j]) bz.mod = jetzt;
     merkeAbbild();
   }
 
@@ -253,13 +258,15 @@
     out.settings = Object.assign({}, C.DEFAULTS, d.settings || {});
     out.history = d.history || {};
     out.geloescht = Object.assign({}, d.geloescht || {});
-    out.buchungen = (d.buchungen || []).filter((b) => b && b.datum && C.isNum(b.betrag)).map((b, i) => ({
+    const normBuchungen = (liste) => (liste || []).filter((b) => b && b.datum && C.isNum(b.betrag)).map((b, i) => ({
       id: b.id || uid('b'), jahr: +b.jahr || +b.datum.slice(0, 4), datum: b.datum, beleg: String(b.beleg == null ? '' : b.beleg), text: b.text || '',
       soll: String(b.soll == null ? '' : b.soll), haben: String(b.haben == null ? '' : b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
       vorschlag: !!b.vorschlag, sicher: !!b.sicher, bankText: b.bankText || '', bankSchluessel: b.bankSchluessel || '', bankDatum: b.bankDatum || null, bankNr: Number.isFinite(b.bankNr) ? b.bankNr : null,
       // Aufgeteilte Bankbewegung (z. B. Sammelzahlung): Teile verweisen auf den Hauptteil, der das Bank-Total kennt.
       ...(b.teilVon ? { teilVon: String(b.teilVon) } : {}), ...(C.isNum(b.bankTotal) ? { bankTotal: b.bankTotal } : {}),
     }));
+    out.buchungen = normBuchungen(d.buchungen);
+    out.privatBuchungen = normBuchungen(d.privatBuchungen);   // Buchhaltung privat: eigene Buchungen
     const OD = window.OffertDoc;
     // Frühere Fassungen kannten die Zuweisung zu einem einzelnen Projekt oder nur zum Kundennamen.
     const alteKundenLinks = (o) => {
@@ -278,14 +285,14 @@
     }));
     out.pendenzen = (d.pendenzen || []).map(window.PendenzDoc.normalize).filter(Boolean);
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
-    out.bankZeilen = {};
-    for (const [jahr, bz] of Object.entries(d.bankZeilen || {})) {
-      out.bankZeilen[jahr] = { mod: (bz && bz.mod) || 0, zeilen: ((bz && bz.zeilen) || []).filter((z) => z && z.datum && C.isNum(z.betrag)).map((z, i) => ({ datum: z.datum, text: z.text || '', betrag: z.betrag, saldo: C.isNum(z.saldo) ? z.saldo : null, schluessel: z.schluessel || '', nr: C.isNum(z.nr) ? z.nr : i })) };
-    }
-    out.kontenplaene = {};
-    for (const [jahr, plan] of Object.entries(d.kontenplaene || {})) {
-      out.kontenplaene[jahr] = { mod: plan.mod || 0, zeilen: (plan.zeilen || []).map((z) => ({ sektion: z.sektion || '', gruppe: z.gruppe || '', konto: z.konto || '', text: z.text || '', bklasse: String(z.bklasse || ''), summe_in: z.summe_in || '' })) };
-    }
+    const normBankZeilen = (quelle) => { const o = {}; for (const [jahr, bz] of Object.entries(quelle || {})) {
+      o[jahr] = { mod: (bz && bz.mod) || 0, zeilen: ((bz && bz.zeilen) || []).filter((z) => z && z.datum && C.isNum(z.betrag)).map((z, i) => ({ datum: z.datum, text: z.text || '', betrag: z.betrag, saldo: C.isNum(z.saldo) ? z.saldo : null, schluessel: z.schluessel || '', nr: C.isNum(z.nr) ? z.nr : i })) };
+    } return o; };
+    const normPlaene = (quelle) => { const o = {}; for (const [jahr, plan] of Object.entries(quelle || {})) {
+      o[jahr] = { mod: plan.mod || 0, zeilen: (plan.zeilen || []).map((z) => ({ sektion: z.sektion || '', gruppe: z.gruppe || '', konto: z.konto || '', text: z.text || '', bklasse: String(z.bklasse || ''), summe_in: z.summe_in || '' })) };
+    } return o; };
+    out.bankZeilen = normBankZeilen(d.bankZeilen); out.privatBankZeilen = normBankZeilen(d.privatBankZeilen);
+    out.kontenplaene = normPlaene(d.kontenplaene); out.privatKontenplaene = normPlaene(d.privatKontenplaene);
     out.settingsMod = d.settingsMod || 0;
     out.projects = d.projects.map((p, i) => ({
       id: p.id || uid('p'), jahr: +p.jahr || state.year, sort: C.isNum(p.sort) ? p.sort : i,
@@ -316,6 +323,7 @@
     ['projekte', 'Projekte'],
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung'],
+    ['buchhaltungPrivat', 'Buchhaltung privat'],
     ['einstellungen', 'Einstellungen'],
   ];
 
@@ -354,7 +362,7 @@
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
 
-    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), offerten: () => OFF.view(), pendenzen: () => PD.view(), einstellungen: viewEinstellungen };
+    const views = { erfassen: viewErfassen, projekte: viewProjekte, rechnungen: viewRechnungen, buchhaltung: () => BH.view(), buchhaltungPrivat: () => BHP.view(), offerten: () => OFF.view(), pendenzen: () => PD.view(), einstellungen: viewEinstellungen };
     const wocheH = weekTotal(heute);
     $('#app').innerHTML = `
       <nav class="side">
@@ -1440,6 +1448,22 @@
       toast('Vorlage eingelesen. Ergänze Kunde und Projekt.');
       return;
     }
+    if (r.data && r.data.typ === 'buchhaltungPrivat') {
+      // Kontenplan (und allenfalls Buchungen) der privaten Buchhaltung; die Buchhaltung des Geschäfts bleibt unberührt.
+      if (!state.data) state.data = C.emptyData();
+      const j = +r.data.jahr || state.year, neueB = r.data.buchungen || [];
+      if (!Array.isArray(r.data.kontenplan)) { toast('Die Datei enthält keinen Kontenplan.', { fehler: true }); return; }
+      const alteP = (state.data.privatBuchungen || []).filter((b) => b.jahr === j);
+      if ((alteP.length || (state.data.privatKontenplaene || {})[j]) && !confirm(`Für ${j} gibt es schon eine private Buchhaltung mit ${alteP.length} Buchungen. Der Import ersetzt den Kontenplan${neueB.length ? ` und die Buchungen durch ${neueB.length} aus der Datei` : '; die Buchungen bleiben'}. Fortfahren?`)) return;
+      await api.save(state.data, { sicherungErzwingen: true });
+      if (neueB.length) state.data.privatBuchungen = (state.data.privatBuchungen || []).filter((b) => b.jahr !== j).concat(neueB.map((b) => Object.assign({}, b, { jahr: j })));
+      (state.data.privatKontenplaene || (state.data.privatKontenplaene = {}))[j] = { zeilen: r.data.kontenplan, mod: 0 };
+      state.data = normalize(state.data);
+      await persist();
+      state.year = j; state.view = 'buchhaltungPrivat'; render();
+      toast(`Private Buchhaltung ${j}: Kontenplan mit ${r.data.kontenplan.filter((z) => z.konto).length} Konten übernommen${neueB.length ? `, ${neueB.length} Buchungen` : ''}`);
+      return;
+    }
     if (r.data && r.data.typ === 'buchhaltung') {
       if (!state.data) state.data = C.emptyData();
       const j = +r.data.jahr, neueB = r.data.buchungen || [], alte = state.data.buchungen.filter((b) => b.jahr === j);
@@ -1480,6 +1504,7 @@
     if (state.data && !r.data.buchungen && !r.data.kontenplaene) { neu.buchungen = state.data.buchungen; neu.kontenplaene = state.data.kontenplaene; neu.bankZeilen = state.data.bankZeilen || {}; }
     if (state.data && !r.data.offerten && !r.data.offertVorlagen) { neu.offerten = state.data.offerten; neu.offertVorlagen = state.data.offertVorlagen; }
     if (state.data && !r.data.pendenzen) neu.pendenzen = state.data.pendenzen || [];
+    if (state.data && !r.data.privatBuchungen && !r.data.privatKontenplaene) { neu.privatBuchungen = state.data.privatBuchungen || []; neu.privatKontenplaene = state.data.privatKontenplaene || {}; neu.privatBankZeilen = state.data.privatBankZeilen || {}; }
     neu.geloescht = Object.assign({}, state.data ? state.data.geloescht : {});
     state.data = neu; state.fehler = null;
     await persist({ ersetzen: true });
@@ -1733,6 +1758,7 @@
   setInterval(pruefeUpdate, 6 * 3600 * 1000);
 
   const BH = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid });
+  const BHP = window.Buchhaltung({ state, C, esc, fmtDate, heute, persist, render, toast, api, uid }, { privat: true });
   const OFF = window.Offerten({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
   const PD = window.Pendenzen({ state, esc, fmtDate, heute, persist, render, toast, api, uid });
   window.__zeit = { state, render, persist };
