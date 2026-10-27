@@ -46,6 +46,7 @@
     };
     // Prozent vom Umsatz (Mehrwertsteuer) statt fester Betrag
     if (isNum(p.satz)) o.satz = p.satz;
+    if (p.saldo) o.saldo = true;                   // Saldosteuersatz des Jahres (Einstellungen) vom Umsatz
     // Offerierter Betrag (zählt nicht ins Total), z. B. «offeriert» oder «noch zu offerieren» aus dem Excel
     if (String(p.offeriertFormel || '').trim()) { o.offeriertFormel = String(p.offeriertFormel); o.offeriert = formelWert(p.offeriertFormel) || 0; }
     if (p.ohneMwst) o.ohneMwst = true;             // z. B. Abo-Beiträge: nicht mehrwertsteuerpflichtig
@@ -71,67 +72,108 @@
   }
 
   /**
-   * Budget eines Jahres rechnen.
-   * - Posten mit «satz» sind Prozent vom Umsatz (ohne die Posten «ohne MWST»).
-   * - Bestätigte und abgeschlossene Offerten mit Betrag für dieses Jahr zählen als Einnahmen,
-   *   offene erscheinen unter «Offeriert» (zählt nicht), abgesagte gar nicht.
+   * MWST-Satz und Saldosteuersatz eines Jahres aus den Einstellungen ({ mwstJahre: { 2026: { mwst, saldo } } }).
+   * Fehlt das Jahr, gilt das nächstfrühere (sonst das nächstspätere) erfasste Jahr; ohne Angaben der allgemeine MWST-Satz.
+   */
+  function saetzeFuer(settings, jahr) {
+    const m = (settings && settings.mwstJahre) || {}, js = Object.keys(m).map(Number).sort((a, b) => a - b);
+    const j = js.filter((x) => x <= +jahr).pop() || js.find((x) => x > +jahr);
+    const z = j ? m[j] : {};
+    return { mwst: isNum(z.mwst) ? z.mwst : isNum(settings && settings.mwstSatz) ? settings.mwstSatz : 8.1, saldo: isNum(z.saldo) ? z.saldo : 0, erfasst: !!m[jahr] };
+  }
+
+  /**
+   * Budget eines Jahres rechnen. Beträge der Posten sind ohne MWST.
+   * - Einnahmen: «inkl. MWST» = Betrag plus MWST-Satz des Jahres (Posten «ohne MWST» ausgenommen).
+   * - Posten mit «saldo» rechnen den Saldosteuersatz des Jahres vom Umsatz (ohne Posten «ohne MWST»), Posten mit «satz» einen eigenen Prozentsatz.
+   * - Bestätigte und abgeschlossene Offerten mit Betrag für dieses Jahr zählen als Einnahmen; offene erscheinen,
+   *   zählen aber nicht; abgesagte gar nicht.
    * - Ist ein Posten mit einer Offerte verknüpft, kommt deren Betrag in diesen Posten (keine Doppelzählung).
    */
-  function rechne(posten, offerten, jahr) {
-    const J = String(jahr);
+  function rechne(posten, offerten, jahr, saetze) {
+    const J = String(jahr), S = saetze || { mwst: 8.1, saldo: 0 };
     const alle = (posten || []).filter((p) => p.jahr === +jahr).slice().sort((a, b) => (a.pos || 0) - (b.pos || 0));
     const offById = new Map((offerten || []).map((o) => [o.id, o]));
     const betragVon = (o) => (o && o.jahresBetraege && isNum(o.jahresBetraege[J]) ? o.jahresBetraege[J] : 0);
     const verknuepft = new Set(alle.filter((p) => p.offerteId && offById.has(p.offerteId)).map((p) => p.offerteId));
+    const satzVon = (p) => (p.saldo ? S.saldo : isNum(p.satz) ? p.satz : null);
 
     const zeilen = alle.map((p) => {
       const o = p.offerteId ? offById.get(p.offerteId) : null;
-      let wert = p.betrag || 0, offeriert = p.offeriert || 0;
-      if (o) {
-        if (o.status === 'offen') offeriert = betragVon(o);
-        else if (o.status === 'abgesagt') { wert = 0; offeriert = 0; }
-        else { wert = betragVon(o); offeriert = 0; }
-      }
-      return { posten: p, offerte: o || null, wert, offeriert, satz: isNum(p.satz) ? p.satz : null };
+      let wert = p.betrag || 0;
+      if (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen')) wert = betragVon(o);
+      else if (o && o.status === 'abgesagt') wert = 0;
+      return { posten: p, offerte: o || null, wert, satz: satzVon(p), zaehlt: true };
     });
-    // Offerten ohne verknüpften Posten als eigene Zeilen
+    // Offerten ohne verknüpften Posten als eigene Zeilen; offene zählen nicht
     const auto = [];
     for (const o of offerten || []) {
       if (verknuepft.has(o.id) || !betragVon(o) || o.status === 'abgesagt') continue;
-      const best = o.status === 'zugesagt' || o.status === 'abgeschlossen';
-      auto.push({ offerte: o, wert: best ? betragVon(o) : 0, offeriert: best ? 0 : betragVon(o) });
+      auto.push({ offerte: o, wert: betragVon(o), zaehlt: o.status === 'zugesagt' || o.status === 'abgeschlossen' });
     }
 
-    const nachBereich = (b) => zeilen.filter((z) => z.posten.bereich === b);
-    const ein = nachBereich('einnahmen');
-    const umsatz = round2(ein.filter((z) => z.satz == null).reduce((s, z) => s + z.wert, 0) + auto.reduce((s, z) => s + z.wert, 0));
-    const basis = round2(umsatz - ein.filter((z) => z.satz == null && z.posten.ohneMwst).reduce((s, z) => s + z.wert, 0));
-    const basisOff = round2(ein.filter((z) => z.satz == null && !z.posten.ohneMwst).reduce((s, z) => s + z.offeriert, 0) + auto.reduce((s, z) => s + z.offeriert, 0));
-    for (const z of zeilen) if (z.satz != null) { z.wert = round2(basis * z.satz / 100); z.offeriert = 0; }
+    const inklVon = (z) => (z.satz != null || (z.posten && z.posten.ohneMwst) ? z.wert : round2(z.wert * (1 + S.mwst / 100)));
+    const ein = zeilen.filter((z) => z.posten.bereich === 'einnahmen');
+    const zaehlend = [...ein.filter((z) => z.satz == null), ...auto.filter((z) => z.zaehlt)];
+    const umsatz = round2(zaehlend.reduce((s, z) => s + z.wert, 0));
+    const basis = round2(zaehlend.filter((z) => !(z.posten && z.posten.ohneMwst)).reduce((s, z) => s + z.wert, 0));
+    for (const z of zeilen) if (z.satz != null) z.wert = round2(basis * z.satz / 100);
+    for (const z of [...zeilen, ...auto]) z.inkl = z.posten && z.posten.bereich !== 'einnahmen' ? null : inklVon(z);
 
     const summe = (l, k) => round2(l.reduce((s, z) => s + (z[k] || 0), 0));
+    const nachBereich = (b) => zeilen.filter((z) => z.posten.bereich === b);
     const ausgaben = summe(nachBereich('ausgaben'), 'wert');
-    const mwstEin = summe(ein.filter((z) => z.satz != null), 'wert');
-    const einnahmen = round2(umsatz + mwstEin);
+    const mwstEin = round2(basis * S.mwst / 100);
+    const satzEin = summe(ein.filter((z) => z.satz != null), 'wert');
+    const einnahmen = round2(umsatz + mwstEin + satzEin);
     const gmbhLohn = round2(einnahmen - ausgaben);
     const anstellungen = summe(nachBereich('lohn'), 'wert');
-    const satzEin = ein.filter((z) => z.satz != null).reduce((s, z) => s + z.satz, 0);
-    const offeriert = round2(summe(ein.filter((z) => z.satz == null), 'offeriert') + auto.reduce((s, z) => s + z.offeriert, 0));
+    const offen = auto.filter((z) => !z.zaehlt);
 
     // Gruppen in der Reihenfolge ihres ersten Postens
     const gruppen = {};
     for (const [b] of BEREICHE) {
       const m = new Map();
       for (const z of nachBereich(b)) { const g = z.posten.gruppe; if (!m.has(g)) m.set(g, []); m.get(g).push(z); }
-      gruppen[b] = [...m.entries()].map(([name, zs]) => ({ name, zeilen: zs, summe: summe(zs, 'wert'), offeriert: summe(zs, 'offeriert') }));
+      gruppen[b] = [...m.entries()].map(([name, zs]) => ({ name, zeilen: zs, summe: summe(zs, 'wert'), inkl: b === 'einnahmen' ? summe(zs, 'inkl') : null }));
     }
     return {
-      zeilen, auto, gruppen, umsatz, basis, mwstEin, einnahmen, ausgaben, gmbhLohn, anstellungen,
+      zeilen, auto, gruppen, umsatz, basis, mwstEin, einnahmen, ausgaben, gmbhLohn, anstellungen, saetze: S,
       lohnTotal: round2(gmbhLohn + anstellungen),
-      offeriert,                                           // ohne MWST
-      offeriertMitMwst: round2(offeriert + basisOff * satzEin / 100),
-      bestaetigt: round2(auto.reduce((s, z) => s + z.wert, 0) + zeilen.filter((z) => z.offerte).reduce((s, z) => s + z.wert, 0)),
+      autoSumme: summe(auto.filter((z) => z.zaehlt), 'wert'), autoInkl: summe(auto.filter((z) => z.zaehlt), 'inkl'),
+      offeriert: summe(offen, 'wert'), offeriertInkl: summe(offen, 'inkl'),
     };
+  }
+
+  /**
+   * Frühere Form des Budgets (wie das Excel) in die heutige bringen:
+   * Gruppe «Aufträge ohne MWST» heisst «Aufträge»; die MWST-Zeile der Einnahmen entfällt (Spalte «inkl. MWST»),
+   * die MWST-Zeile der Ausgaben rechnet mit dem Saldosteuersatz aus den Einstellungen; Sätze wandern in die Einstellungen;
+   * «offeriert» steht in der Notiz. Gibt true zurück, wenn sich etwas geändert hat.
+   */
+  function neueForm(posten, settings) {
+    let anders = false;
+    const sj = settings.mwstJahre || (settings.mwstJahre = {});
+    for (let i = posten.length - 1; i >= 0; i--) {
+      const p = posten[i], j = String(p.jahr);
+      if (p.gruppe === 'Aufträge ohne MWST') { p.gruppe = 'Aufträge'; anders = true; }
+      if (isNum(p.satz) && p.bereich === 'einnahmen') {
+        sj[j] = Object.assign({}, sj[j]); if (!isNum(sj[j].mwst)) sj[j].mwst = p.satz;
+        posten.splice(i, 1); anders = true; continue;
+      }
+      if (isNum(p.satz) && p.bereich === 'ausgaben' && /mehrwertsteuer|mwst/i.test(p.text)) {
+        sj[j] = Object.assign({}, sj[j]); if (!isNum(sj[j].saldo)) sj[j].saldo = p.satz;
+        delete p.satz; p.saldo = true; p.betrag = 0; p.formel = ''; anders = true;
+      }
+      if (p.offeriertFormel != null || p.offeriert != null) {
+        const art = /^noch zu offerieren/i.test(String(p.notiz || '').trim()) ? 'Möglich' : 'Offeriert';
+        const t = isNum(p.offeriert) && p.offeriert ? `${art} ${p.offeriert.toFixed(2).replace(/\.00$/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '’')}` : '';
+        const rest = String(p.notiz || '').replace(/^offeriert\b\s*/i, '');
+        p.notiz = [t, rest].filter(Boolean).join(' · ');
+        delete p.offeriert; delete p.offeriertFormel; anders = true;
+      }
+    }
+    return anders;
   }
 
   /** Posten eines Jahres als Kopie für ein anderes Jahr (ohne Verknüpfung mit Offerten und ohne «offeriert»). */
@@ -143,5 +185,5 @@
     });
   }
 
-  return { BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, rechne, kopieFuer, round2 };
+  return { BEREICHE, STATUS, formelWert, istFormel, normalize, jahresBetraege, offertenNachJahr, saetzeFuer, rechne, neueForm, kopieFuer, round2 };
 });

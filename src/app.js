@@ -1285,6 +1285,18 @@
 
   /* ============ Einstellungen ============ */
 
+  /** MWST-Satz und Saldosteuersatz pro Jahr (für den Reiter Budget). */
+  function mwstJahreHtml() {
+    const m = S().mwstJahre || {};
+    const jahre = [...new Set([...Object.keys(m).map(Number), ...(state.data.budgetPosten || []).map((b) => b.jahr), +heute.slice(0, 4)])].sort((a, b) => a - b);
+    const feld = (j, k) => { const v = m[j] && m[j][k]; return `<input id="mj-${j}-${k}" type="text" inputmode="decimal" class="num r" value="${v == null ? '' : esc(String(v))}" placeholder="${esc(String(window.BudgetDoc.saetzeFuer(S(), j)[k]))}" data-action="mwst-jahr" data-jahr="${j}" data-key="${k}" aria-label="${k === 'mwst' ? 'MWST-Satz' : 'Saldosteuersatz'} ${j}">`; };
+    return `<section class="sec"><h2>Mehrwertsteuer im Budget</h2>
+      <table class="mj-tab"><thead><tr><th>Jahr</th><th class="r">MWST-Satz in %</th><th class="r">Saldosteuersatz in %</th></tr></thead>
+        <tbody>${jahre.map((j) => `<tr><td>${j}</td><td>${feld(j, 'mwst')}</td><td>${feld(j, 'saldo')}</td></tr>`).join('')}</tbody></table>
+      <p class="hint">Der MWST-Satz kommt im Budget auf die Einnahmen (Spalte «inkl. MWST»), der Saldosteuersatz rechnet die Mehrwertsteuer bei den Ausgaben vom Umsatz. Leere Felder übernehmen das Jahr davor. Weitere Jahre erscheinen, sobald es dafür ein Budget gibt.</p>
+    </section>`;
+  }
+
   function viewEinstellungen() {
     const s = S();
     const a = absender();
@@ -1302,6 +1314,7 @@
           ${num('zahlungsfrist', 'Zahlungsfrist in Tagen', 'Danach gilt eine gestellte Rechnung als überfällig.', '1')}
         </div>
       </section>
+      ${mwstJahreHtml()}
       <section class="sec"><h2>Monatliches Soll</h2>
         <div class="cols3">
           ${num('pensum', 'Pensum in %', '', '5')}
@@ -1468,6 +1481,10 @@
       if (alt.length && !confirm(`Für ${jahre.join(' und ')} gibt es schon ${alt.length} Budgetposten. Der Import ersetzt sie durch die ${neu.length} Posten aus der Datei. Fortfahren?`)) return;
       await api.save(state.data, { sicherungErzwingen: true });
       state.data.budgetPosten = (state.data.budgetPosten || []).filter((x) => !jahre.includes(x.jahr)).concat(neu.map((x) => Object.assign(x, { id: uid('bu') })));
+      // Sätze aus der Datei übernehmen, ohne erfasste zu überschreiben; ältere Dateien in die heutige Form bringen
+      const mj = state.data.settings.mwstJahre || (state.data.settings.mwstJahre = {});
+      for (const [j, z] of Object.entries(r.data.mwstJahre || {})) mj[j] = Object.assign({}, z, mj[j]);
+      window.BudgetDoc.neueForm(state.data.budgetPosten, state.data.settings);
       await persist();
       state.year = jahre[0]; state.view = 'budget'; render();
       toast(`Budget ${jahre.join(', ')}: ${neu.length} Posten übernommen`);
@@ -1703,6 +1720,14 @@
       if (k === 'rechnungGeplant') p[k] = el.value || null; else setzeGruppenDatum(p, k, el.value);
       persist(); render();
     }
+    else if (a === 'mwst-jahr') {
+      const t = el.value.trim().replace(',', '.').replace(/%$/, ''), v = t === '' ? null : parseFloat(t);
+      if (t !== '' && (!isFinite(v) || v < 0 || v > 100)) { toast('Bitte einen Prozentsatz eingeben, zum Beispiel 8.1.', { fehler: true }); render(); return; }
+      const m = state.data.settings.mwstJahre || (state.data.settings.mwstJahre = {}), z = Object.assign({}, m[el.dataset.jahr]);
+      if (v == null) delete z[el.dataset.key]; else z[el.dataset.key] = v;
+      if (Object.keys(z).length) m[el.dataset.jahr] = z; else delete m[el.dataset.jahr];
+      persist(); render();
+    }
     else if (a === 'setting') {
       const v = parseFloat(el.value);
       if (!isFinite(v) || v < 0) { toast('Bitte eine Zahl eingeben.', { fehler: true }); render(); return; }
@@ -1756,6 +1781,8 @@
    */
   function einmalig() {
     const st = state.data.settings, m = st.einmalig || {};
+    // budget2: Budget ohne Spalte «Offeriert», MWST-Sätze pro Jahr in den Einstellungen
+    if (!m.budget2) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st); st.einmalig = Object.assign({}, st.einmalig, { budget2: true }); if (m.bebu2710) return true; }
     if (m.bebu2710) return false;
     for (const b of state.data.privatBuchungen || []) {
       if (b.jahr !== 2026 || !/^BEBU 2026:/.test(b.bankText || '') || /Anfangsbestand/.test(b.bankText)) continue;
@@ -1766,7 +1793,7 @@
       const bic = pl.zeilen.filter((z) => z.konto && z.text.trim() === 'BIC');
       for (const z of bic) if (!(state.data.privatBuchungen || []).some((b) => b.soll === z.konto || b.haben === z.konto)) pl.zeilen.splice(pl.zeilen.indexOf(z), 1);
     }
-    st.einmalig = Object.assign({}, m, { bebu2710: true });
+    st.einmalig = Object.assign({}, st.einmalig, { bebu2710: true });
     return true;
   }
 

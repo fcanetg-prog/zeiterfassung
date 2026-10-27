@@ -281,11 +281,10 @@ console.log('Alle Prüfungen bestanden.');
   const P = (o) => B.normalize(Object.assign({ id: 'x' + Math.random(), jahr: 2027 }, o));
   const posten = [
     P({ bereich: 'ausgaben', gruppe: 'Software', text: 'Libsyn', formel: '12*24', pos: 1 }),
-    P({ bereich: 'ausgaben', gruppe: 'Steuern', text: 'MWST', satz: 6.2, pos: 2 }),
+    P({ bereich: 'ausgaben', gruppe: 'Steuern', text: 'Mehrwertsteuer', saldo: true, pos: 2 }),
     P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'SWD Abo', betrag: 5000, ohneMwst: true, pos: 3 }),
-    P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'Moderation', betrag: 1000, offeriertFormel: '3750', pos: 4 }),
+    P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'Moderation', betrag: 1000, pos: 4 }),
     P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'Verknüpft', betrag: 999, offerteId: 'o2', pos: 5 }),
-    P({ bereich: 'einnahmen', gruppe: 'MWST', text: 'MWST', satz: 8.1, pos: 6 }),
     P({ bereich: 'lohn', gruppe: 'Anstellungen', text: 'Uni', betrag: 10090, pos: 7 }),
     P({ bereich: 'lohn', gruppe: 'Anstellungen', text: 'anderes Jahr', betrag: 1, pos: 1, jahr: 2026 }),
   ];
@@ -296,20 +295,33 @@ console.log('Alle Prüfungen bestanden.');
     { id: 'o4', status: 'abgesagt', kunde: 'D', jahresBetraege: { 2027: 7000 } },
     { id: 'o5', status: 'abgeschlossen', kunde: 'E', jahresBetraege: { 2026: 100 } },
   ];
-  const r = B.rechne(posten, off, 2027);
+  const sz = B.saetzeFuer({ mwstSatz: 8.1, mwstJahre: { 2026: { mwst: 8.1, saldo: 6.2 } } }, 2027);
+  assert.deepStrictEqual(sz, { mwst: 8.1, saldo: 6.2, erfasst: false });
+  assert.deepStrictEqual(B.saetzeFuer({ mwstSatz: 7.7 }, 2027), { mwst: 7.7, saldo: 0, erfasst: false });
+  const r = B.rechne(posten, off, 2027, sz);
   // Umsatz: 5000 + 1000 + 3000 (verknüpft statt 999) + 2000 (bestätigte Offerte) = 11000; MWST-Basis ohne Abo 6000
   assert.strictEqual(r.umsatz, 11000); assert.strictEqual(r.basis, 6000);
   assert.strictEqual(r.mwstEin, 486); assert.strictEqual(r.einnahmen, 11486);
   assert.strictEqual(r.ausgaben, 288 + 372); assert.strictEqual(r.gmbhLohn, 11486 - 660); assert.strictEqual(r.lohnTotal, 11486 - 660 + 10090);
-  assert.strictEqual(r.offeriert, 3750 + 4000);   // offerierter Posten + offene Offerte; abgesagte zählt nirgends
-  assert.deepStrictEqual(r.auto.map((z) => z.offerte.id), ['o1', 'o3']);
+  assert.strictEqual(r.zeilen.find((z) => z.posten.text === 'Moderation').inkl, 1081);
+  assert.strictEqual(r.zeilen.find((z) => z.posten.text === 'SWD Abo').inkl, 5000);
+  assert.strictEqual(r.gruppen.einnahmen[0].inkl, 5000 + 1081 + 3243);
+  assert.strictEqual(r.offeriert, 4000);   // offene Offerte zählt nicht; abgesagte gar nicht
+  assert.deepStrictEqual(r.auto.map((z) => [z.offerte.id, z.zaehlt]), [['o1', true], ['o3', false]]);
   assert.deepStrictEqual(B.offertenNachJahr(off), { 2026: { offen: 0, zugesagt: 0, abgeschlossen: 100, abgesagt: 0 }, 2027: { offen: 4000, zugesagt: 5000, abgeschlossen: 0, abgesagt: 7000 }, 2028: { offen: 0, zugesagt: 500, abgeschlossen: 0, abgesagt: 0 } });
   // Abgesagte verknüpfte Offerte zählt nicht
-  const r2 = B.rechne(posten, off.map((o) => (o.id === 'o2' ? { ...o, status: 'abgesagt' } : o)), 2027);
+  const r2 = B.rechne(posten, off.map((o) => (o.id === 'o2' ? { ...o, status: 'abgesagt' } : o)), 2027, sz);
   assert.strictEqual(r2.umsatz, 8000);
+  // Frühere Form (wie im Excel) umstellen
+  const alt = [P({ bereich: 'einnahmen', gruppe: 'Aufträge ohne MWST', text: 'X', betrag: 1, offeriertFormel: '15463', notiz: 'offeriert' }), P({ bereich: 'einnahmen', gruppe: 'MWST', text: 'Mehrwertsteuer', satz: 8.1 }), P({ bereich: 'ausgaben', gruppe: 'Steuern', text: 'Mehrwertsteuer', satz: 6.2 })];
+  const st = {};
+  assert.ok(B.neueForm(alt, st));
+  assert.deepStrictEqual(alt.map((x) => [x.gruppe, x.notiz, !!x.saldo, x.satz, x.offeriert]), [['Aufträge', 'Offeriert 15’463', false, undefined, undefined], ['Steuern', '', true, undefined, undefined]]);
+  assert.deepStrictEqual(st.mwstJahre, { 2027: { mwst: 8.1, saldo: 6.2 } });
+  assert.ok(!B.neueForm(alt, st));
   // Kopie für das nächste Jahr ohne Verknüpfungen
   let n = 0; const k = B.kopieFuer(posten, 2027, 2028, () => 'n' + n++);
-  assert.strictEqual(k.length, 7); assert.ok(k.every((x) => x.jahr === 2028 && !x.offerteId && x.offeriert == null));
+  assert.strictEqual(k.length, 6); assert.ok(k.every((x) => x.jahr === 2028 && !x.offerteId));
   assert.deepStrictEqual(B.jahresBetraege({ 2026: 1.005, x: 3, 2027: 'a' }), { 2026: 1.01 });
   // Zusammenführen zweier Rechner: Posten einzeln
   const a = posten[0], b = posten[1];
