@@ -49,7 +49,6 @@
     if (p.saldo) o.saldo = true;                   // Saldosteuersatz des Jahres (Einstellungen) vom Umsatz
     // Offerierter Betrag (zählt nicht ins Total), z. B. «offeriert» oder «noch zu offerieren» aus dem Excel
     if (String(p.offeriertFormel || '').trim()) { o.offeriertFormel = String(p.offeriertFormel); o.offeriert = formelWert(p.offeriertFormel) || 0; }
-    if (p.ohneMwst) o.ohneMwst = true;             // z. B. Abo-Beiträge: nicht mehrwertsteuerpflichtig
     if (p.offerteId) o.offerteId = String(p.offerteId);
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
     return o;
@@ -113,18 +112,21 @@
       auto.push({ offerte: o, wert: betragVon(o), zaehlt: o.status === 'zugesagt' || o.status === 'abgeschlossen' });
     }
 
-    const inklVon = (z) => (z.satz != null || (z.posten && z.posten.ohneMwst) ? z.wert : round2(z.wert * (1 + S.mwst / 100)));
+    const inklVon = (z) => (z.satz != null ? z.wert : round2(z.wert * (1 + S.mwst / 100)));   // alle Einnahmen sind mehrwertsteuerpflichtig
     const ein = zeilen.filter((z) => z.posten.bereich === 'einnahmen');
     const zaehlend = [...ein.filter((z) => z.satz == null), ...auto.filter((z) => z.zaehlt)];
     const umsatz = round2(zaehlend.reduce((s, z) => s + z.wert, 0));
-    const basis = round2(zaehlend.filter((z) => !(z.posten && z.posten.ohneMwst)).reduce((s, z) => s + z.wert, 0));
-    for (const z of zeilen) if (z.satz != null) z.wert = round2(basis * z.satz / 100);
+    const basis = umsatz;
+    const mwstEin0 = round2(basis * S.mwst / 100);
+    // Saldosteuersatz auf dem Umsatz inklusive MWST (wie die ESTV rechnet); eigene Prozentsätze auf dem Umsatz ohne MWST
+    const basisSaldo = round2(umsatz + mwstEin0);
+    for (const z of zeilen) if (z.satz != null) z.wert = round2((z.posten.saldo ? basisSaldo : basis) * z.satz / 100);
     for (const z of [...zeilen, ...auto]) z.inkl = z.posten && z.posten.bereich !== 'einnahmen' ? null : inklVon(z);
 
     const summe = (l, k) => round2(l.reduce((s, z) => s + (z[k] || 0), 0));
     const nachBereich = (b) => zeilen.filter((z) => z.posten.bereich === b);
     const ausgaben = summe(nachBereich('ausgaben'), 'wert');
-    const mwstEin = round2(basis * S.mwst / 100);
+    const mwstEin = mwstEin0;
     const satzEin = summe(ein.filter((z) => z.satz != null), 'wert');
     const einnahmen = round2(umsatz + mwstEin + satzEin);
     const gmbhLohn = round2(einnahmen - ausgaben);
@@ -140,7 +142,7 @@
       gruppen[b] = [...m.entries()].map(([name, zs]) => ({ name, zeilen: zs, summe: summe(zs, 'wert'), inkl: b === 'einnahmen' ? summe(zs, 'inkl') : null }));
     }
     return {
-      zeilen, auto, gruppen, umsatz, basis, mwstEin, einnahmen, ausgaben, gmbhLohn, anstellungen, saetze: S,
+      zeilen, auto, gruppen, umsatz, basis, basisSaldo, mwstEin, einnahmen, ausgaben, gmbhLohn, anstellungen, saetze: S,
       lohnTotal: round2(gmbhLohn + anstellungen),
       privat, spielraum: round2(gmbhLohn + anstellungen - privat),   // Lohneinnahmen minus privater Budgetrahmen
       autoSumme: summe(auto.filter((z) => z.zaehlt), 'wert'), autoInkl: summe(auto.filter((z) => z.zaehlt), 'inkl'),
@@ -176,6 +178,8 @@
         delete p.offeriert; delete p.offeriertFormel; anders = true;
       }
     }
+    // Alle Einnahmen sind mehrwertsteuerpflichtig: frühere Markierung «ohne MWST» entfällt
+    for (const p of posten) if (p.ohneMwst) { delete p.ohneMwst; anders = true; }
     // Umbau Oktober 2026: Gruppen der Ausgaben umbenannt, Buchhaltung zu den Subcontracts; Einnahmen und Lohneinnahmen ohne Untergruppen
     const UMB = { Angestellte: 'Subcontracts', Buchhaltung: 'Subcontracts', Anderes: 'Übrige Ausgaben' };
     const jahre = new Set(), letzteAngestellte = {};

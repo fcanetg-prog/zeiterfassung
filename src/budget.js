@@ -84,12 +84,6 @@
       const tag = Math.floor((h - new Date(j, 0, 1)) / 864e5) + 1, tage = (j % 4 === 0 && (j % 100 !== 0 || j % 400 === 0)) ? 366 : 365;
       return Math.round(ist * tage / tag);
     }
-    function kontoWahl(p) {
-      const k = kontoVon(p), ks = aufwandKonten();
-      if (!ks.length) return '';
-      return `<select class="bu-wahl bu-kwahl ${k ? 'gesetzt' : ''}" data-bu="konto" data-id="${p.id}" aria-label="Konto der Buchhaltung privat" title="Konto der Buchhaltung privat, aus dem «Ist bisher» kommt">
-        <option value="">Konto …</option>${ks.map((z) => `<option value="${esc(z.konto)}" ${z.konto === k ? 'selected' : ''}>${esc(z.konto)} ${esc(z.text)}</option>`).join('')}</select>`;
-    }
 
     /** Bereiche mit nur einem Betrag (Ausgaben, Lohneinnahmen) zeigen ihn in der rechten Spalte, bündig mit «inkl. MWST». */
     const EINSPALTIG = new Set(['ausgaben', 'lohn', 'privat']);
@@ -101,12 +95,10 @@
     function postenZeilen(z) {
       const p = z.posten, o = z.offerte, ein = p.bereich === 'einnahmen', S = saetze();
       const fest = p.saldo || (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen' || o.status === 'abgesagt'));
-      const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) von ${fr(z.wert && S.saldo ? z.wert * 100 / S.saldo : 0)}` : o ? 'Betrag aus der verknüpften Offerte' : '';
+      const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) vom Umsatz inkl. MWST` : o ? 'Betrag aus der verknüpften Offerte' : '';
       const betrag = fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
       const notizAuf = state.bu.notiz.has(p.id);
-      const priv = p.bereich === 'privat';
-      const akt = `${priv ? kontoWahl(p) : ''}${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
-        ${ein && p.satz == null && !o ? `<label class="bu-om ${p.ohneMwst ? 'an' : ''}" title="Ohne MWST: nicht mehrwertsteuerpflichtig (z. B. Abo-Beiträge). Zählt zum Umsatz, aber ohne MWST-Zuschlag."><input type="checkbox" data-bu="ohneMwst" data-id="${p.id}"${p.ohneMwst ? ' checked' : ''}>o. MWST</label>` : ''}
+      const akt = `${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
         <button class="bu-nz ${p.notiz ? 'hat' : ''} ${notizAuf ? 'auf' : ''}" data-bu="notiz" data-id="${p.id}" title="${p.notiz ? esc(p.notiz) : 'Notiz hinzufügen'}" aria-label="Notiz" aria-expanded="${notizAuf}">${p.notiz ? 'Notiz' : '+ Notiz'}</button>
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
       return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''}" data-id="${p.id}">
@@ -282,7 +274,7 @@
       if (key === 'formel' && /%\s*$/.test(s) && p.bereich !== 'lohn') {
         const v = BD.formelWert(s.replace(/%\s*$/, ''));
         if (v == null) return 'Bitte einen Prozentsatz eingeben, zum Beispiel 8.1 %.';
-        p.satz = v; p.formel = ''; p.betrag = 0; delete p.ohneMwst; return null;
+        p.satz = v; p.formel = ''; p.betrag = 0; return null;
       }
       const v = s === '' ? 0 : BD.formelWert(s);
       if (v == null) return 'Bitte einen Betrag oder eine Rechnung eingeben, zum Beispiel 4500 oder 12*24.';
@@ -357,9 +349,7 @@
           if (f) { toast(f, { fehler: true }); return; }
         } else p[key] = el.value;
         persist(); render();
-      } else if (a === 'ohneMwst') { if (el.checked) p.ohneMwst = true; else delete p.ohneMwst; persist(); render(); }
-      else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
-      else if (a === 'konto') { if (el.value) p.konto = el.value; else delete p.konto; persist(); render(); }
+      } else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
     });
 
     return { view };
