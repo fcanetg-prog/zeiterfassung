@@ -19,11 +19,11 @@
     const STATUS_KL = { offen: 's-offen', zugesagt: 's-bezahlt', abgeschlossen: 's-gestellt', abgesagt: 's-intern' };
     const pill = (o) => `<span class="pill ${STATUS_KL[o.status] || ''}">${esc(STATUS_TEXT[o.status] || o.status)}</span>`;
 
-    /** Franken mit Hochkomma; ganze Beträge ohne Rappen (wie im Excel). */
+    /** Franken mit Hochkomma und immer zwei Nachkommastellen. */
     function fr(x, leerBeiNull) {
       if (x == null || !isFinite(x) || (leerBeiNull && Math.abs(x) < 0.005)) return '';
       const [g, r] = Math.abs(x).toFixed(2).split('.');
-      return (x < -0.004 ? '-' : '') + g.replace(/\B(?=(\d{3})+(?!\d))/g, '’') + (r === '00' ? '' : '.' + r);
+      return (x < -0.004 ? '-' : '') + g.replace(/\B(?=(\d{3})+(?!\d))/g, '’') + '.' + r;
     }
     const nummerieren = () => imJahr().forEach((p, i) => { p.pos = i + 1; });
 
