@@ -368,6 +368,9 @@
     const tscroll = tw ? [tw.scrollLeft, tw.scrollTop] : null;
     const db = $('.dbody');
     const dscroll = db ? db.scrollTop : 0;
+    // Liste der Buchhaltung (eigener Scrollbereich): Position behalten, solange Reiter, Jahr und Unterreiter gleich bleiben
+    const bhKey = () => { const t = $('.bh-bar .seg .on'); return `${state.view}|${state.year}|${t ? t.dataset.tab : ''}`; };
+    const bw = $('.bh-wrap'), bwScroll = bw ? { key: bhKey(), top: bw.scrollTop, left: bw.scrollLeft } : null;
 
     if (!state.geladen) { $('#app').innerHTML = '<div class="leer"><p>Daten werden geladen …</p></div>'; return; }
     if (!state.data) { $('#app').innerHTML = viewStart(); return; }
@@ -399,6 +402,7 @@
     $('#drawer-root').innerHTML = state.drawer ? drawerHtml() : PD.istOffen() ? PD.drawerHtml() : '';
     const m2 = $('.main'); if (m2) m2.scrollTop = scroll;
     const db2 = $('.dbody'); if (db2) db2.scrollTop = dscroll;
+    const bw2 = $('.bh-wrap'); if (bw2 && bwScroll && bwScroll.key === bhKey()) { bw2.scrollTop = bwScroll.top; bw2.scrollLeft = bwScroll.left; }
     const tw2 = $('.table-wrap'); if (tw2 && tscroll) { tw2.scrollLeft = tscroll[0]; tw2.scrollTop = tscroll[1]; }
     if (keep) {
       const el = document.getElementById(keep.id);
