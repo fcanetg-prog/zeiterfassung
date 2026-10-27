@@ -391,10 +391,20 @@ console.log('Alle Prüfungen bestanden.');
   const P = (o) => B.normalize(Object.assign({ id: 'o' + Math.random(), jahr: 2027, bereich: 'einnahmen', gruppe: '' }, o));
   const ps = [P({ text: 'A', betrag: 1000, pos: 1 }), P({ text: 'B', betrag: 0, notiz: 'Offeriert 15’463', pos: 2 }), P({ text: 'C', betrag: 2500, notiz: 'Offeriert 6’910 · (bei 2 Aufnahmen)', pos: 3 }), P({ text: 'D', betrag: 0, notiz: 'Möglich 3’895 · noch zu offerieren', pos: 4 })];
   let n = 0; assert.ok(B.offerierteUebernehmen(ps, () => 'n' + n++));
-  assert.deepStrictEqual(ps.sort((a, b) => a.pos - b.pos).map((p) => [p.text, p.betrag, !!p.offen, p.notiz]), [['A', 1000, false, ''], ['B', 15463, true, ''], ['C', 2500, false, ''], ['C (offeriert)', 6910, true, ''], ['D', 3895, true, '']]);
+  assert.deepStrictEqual(ps.sort((a, b) => a.pos - b.pos).map((p) => [p.text, p.betrag, p.status || "", p.notiz]), [["A", 1000, "", ""], ["B", 15463, "offeriert", ""], ["C", 2500, "", ""], ["C (offeriert)", 6910, "offeriert", ""], ["D", 3895, "offerieren", ""]]);
   const r = B.rechne(ps, [{ id: 'x', status: 'offen', jahresBetraege: { 2027: 100 } }], 2027, { mwst: 10, saldo: 0 });
   assert.strictEqual(r.umsatz, 3500); assert.strictEqual(r.gruppen.einnahmen[0].summe, 3500);
   assert.strictEqual(r.offeriert, 15463 + 6910 + 3895 + 100); assert.strictEqual(r.offeriertInkl, B.round2((15463 + 6910 + 3895 + 100) * 1.1));
   assert.ok(!B.offerierteUebernehmen(ps, () => 'y'));
   console.log('Noch nicht bestätigte Einnahmen bestanden.');
+}
+{
+  const B = require('../src/budgetdoc.js');
+  // Frühere Markierung «offen» wird zu «offeriert»; Summe der offerierten Beträge nach Stand
+  const a = B.normalize({ id: 'a', jahr: 2027, bereich: 'einnahmen', gruppe: '', text: 'X', betrag: 100, offen: true });
+  assert.strictEqual(a.status, 'offeriert'); assert.strictEqual(a.offen, undefined);
+  const b = B.normalize({ id: 'b', jahr: 2027, bereich: 'einnahmen', gruppe: '', text: 'Y', betrag: 50, status: 'offerieren' });
+  const r = B.rechne([a, b], [], 2027, { mwst: 10, saldo: 0 });
+  assert.deepStrictEqual(r.offeriertNach, { offeriert: 110, offerieren: 55 }); assert.strictEqual(r.umsatz, 0);
+  console.log('Stand der Einnahmen bestanden.');
 }

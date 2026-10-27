@@ -900,7 +900,9 @@ select.bu-wahl { width: 110px; font-size: 12px; padding: 2px 4px; }
 .bu-link .pill { font-size: 10px; padding: 0 5px; }
 .bu-otitel { font-size: var(--k-schrift); }
 tr.bu-auto .pill { font-size: 10px; padding: 0 5px; margin-left: 4px; }
-tr.bu-nicht td { color: var(--muted); }
+/* Noch nicht bestätigte Einnahmen: hellgelb hinterlegt */
+.list.bu tr.bu-nicht > td, .list.bu tr.bu-nicht.zebra > td { background: #fff4c7; }
+.list.bu tr.bu-nicht:hover > td { background: #ffeeb0; }
 .bu-zn { font-size: 11px; margin-left: 4px; }
 tr.bu-weg td { color: var(--muted); text-decoration: line-through; }
 tr.bu-weg td input { text-decoration: line-through; }
@@ -984,6 +986,8 @@ select.bu-kwahl.gesetzt { opacity: .55; }
 .bv-legende i.voll { width: 0; height: 12px; border-left: 2px dotted #7d8f8f; border-radius: 0; vertical-align: -2px; }
 .bv-mehr { position: absolute; right: -12px; line-height: 1; top: 50%; transform: translateY(-50%); font-size: 9px; color: #c0392b; }
 .bv-leer { font-size: 11px; color: var(--muted); }
-.bu-om.bu-offen-t { width: 124px; }
-tr.bu-nicht td.bu-wert input.bu-betrag { color: var(--muted); font-style: italic; }
-tr.bu-nicht td.bu-inkl { font-style: italic; }
+select.bu-stand { width: 140px; font-size: 12px; padding: 2px 4px; opacity: .3; }
+tr.bu-z:hover select.bu-stand, select.bu-stand:focus, select.bu-stand.an { opacity: 1; }
+select.bu-stand.an { border-color: #d9b44a; background: #fffbe8; color: #7a5a00; font-weight: 600; }
+.bu-op-leer { width: 18px; }
+.bu-fk.bu-fk-off { background: #fff4c7; border-color: #e6cf7a; }

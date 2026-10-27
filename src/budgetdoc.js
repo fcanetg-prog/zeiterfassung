@@ -53,7 +53,9 @@
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
     if (p.serie) o.serie = String(p.serie);         // derselbe Posten in allen Jahren (Änderungen gelten für die folgenden Jahre)
     if (p.jahresausgabe) o.jahresausgabe = true;
-    if (p.offen) o.offen = true;                     // Einnahme noch nicht bestätigt (offeriert): zählt nicht ins Budget     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
+    // Stand einer Einnahme: bestätigt (Standard, zählt), offeriert oder noch zu offerieren (zählen nicht). Früher: «offen» = offeriert.
+    const st = ['offeriert', 'offerieren'].includes(p.status) ? p.status : p.offen ? 'offeriert' : '';
+    if (st) o.status = st;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
     return o;
   }
 
@@ -107,7 +109,7 @@
       if (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen')) wert = betragVon(o);
       else if (o && o.status === 'abgesagt') wert = 0;
       // Noch nicht bestätigt: zählt nicht (ausser die verknüpfte Offerte ist bestätigt)
-      const zaehlt = !(p.offen && p.bereich === 'einnahmen' && !(o && (o.status === 'zugesagt' || o.status === 'abgeschlossen')));
+      const zaehlt = !(p.status && p.bereich === 'einnahmen' && !(o && (o.status === 'zugesagt' || o.status === 'abgeschlossen')));
       return { posten: p, offerte: o || null, wert, satz: satzVon(p), zaehlt };
     });
     // Offerten ohne verknüpften Posten als eigene Zeilen; offene zählen nicht
@@ -137,6 +139,7 @@
     const gmbhLohn = round2(einnahmen - ausgaben);
     const anstellungen = summe(nachBereich('lohn'), 'wert');
     const offen = [...ein.filter((z) => !z.zaehlt), ...auto.filter((z) => !z.zaehlt)];
+    const nichtGezaehlt = ein.filter((z) => !z.zaehlt);
     const privat = summe(nachBereich('privat'), 'wert');
 
     // Gruppen in der Reihenfolge ihres ersten Postens
@@ -151,6 +154,7 @@
       lohnTotal: round2(gmbhLohn + anstellungen),
       privat, spielraum: round2(gmbhLohn + anstellungen - privat),   // Lohneinnahmen minus privater Budgetrahmen
       autoSumme: summe(auto.filter((z) => z.zaehlt), 'wert'), autoInkl: summe(auto.filter((z) => z.zaehlt), 'inkl'),
+      offeriertNach: { offeriert: summe([...nichtGezaehlt.filter((z) => z.posten.status === 'offeriert'), ...auto.filter((z) => !z.zaehlt)], 'inkl'), offerieren: summe(nichtGezaehlt.filter((z) => z.posten.status === 'offerieren'), 'inkl') },
       offeriert: summe(offen, 'wert'), offeriertInkl: summe(offen, 'inkl'),
     };
   }
@@ -257,8 +261,9 @@
       if (!m) continue;
       const v = formelWert(m[2]);
       if (v == null) continue;
-      if (Math.abs(p.betrag || 0) < 0.005 && !p.offerteId) { p.betrag = v; p.formel = ''; p.offen = true; }
-      else posten.push(normalize({ id: uid(), jahr: p.jahr, bereich: p.bereich, gruppe: p.gruppe, text: `${p.text} (offeriert)`, formel: '', betrag: v, pos: (p.pos || 0) + 0.5, offen: true }));
+      const status = /^m/i.test(m[1]) ? 'offerieren' : 'offeriert';   // «Möglich» = noch zu offerieren
+      if (Math.abs(p.betrag || 0) < 0.005 && !p.offerteId) { p.betrag = v; p.formel = ''; p.status = status; }
+      else posten.push(normalize({ id: uid(), jahr: p.jahr, bereich: p.bereich, gruppe: p.gruppe, text: `${p.text} (${status === 'offeriert' ? 'offeriert' : 'noch zu offerieren'})`, formel: '', betrag: v, pos: (p.pos || 0) + 0.5, status }));
       p.notiz = ''; anders = true;
     }
     if (anders) for (const j of new Set(posten.map((x) => x.jahr))) posten.filter((x) => x.jahr === j).sort((a, b) => (a.pos || 0) - (b.pos || 0)).forEach((x, i) => { x.pos = i + 1; });
