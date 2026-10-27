@@ -285,7 +285,15 @@
     }
     // Sammelzahlungen werden immer einzeln verbucht: kein Vorschlag als Ganzes.
     if (/^sammel(zahlung|auftrag)/i.test(zeile.text.trim())) return Object.assign(fertig('Sammelzahlung', '', false), { sammel: true });
-    if (!bsp.length) return fertig(zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '').slice(0, 90), '', false);
+    const kurz = zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '').slice(0, 90);
+    if (!bsp.length) {
+      // Ohne frühere gleiche Buchung: Hinweise im Bank-Text (z. B. Kleiderladen → Kleider), sonst das Standardkonto des Bankkontos.
+      const richtung = zeile.betrag > 0 ? 'ein' : 'aus';
+      const h = ((opt && opt.hinweise) || []).find((x) => (x.richtung || 'aus') === richtung && x.gegen && x.re.test(zeile.text));
+      if (h) return fertig(h.text || kurz, h.gegen, false);
+      const std = opt && opt.standard && opt.standard[richtung];
+      return fertig(kurz, std || '', false);
+    }
     // Gleicher Betrag wie früher schlägt alles; sonst die häufigste Kombination, bei Gleichstand die jüngste.
     const gleich = bsp.filter((x) => x.betrag === zeile.betrag).sort((a, b) => (a.datum < b.datum ? 1 : -1))[0];
     if (gleich) return fertig(gleich.text, gleich.gegen, true);

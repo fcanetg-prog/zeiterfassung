@@ -329,3 +329,23 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(m.budgetPosten.map((x) => x.text), ['neu']);
   console.log('Budget bestanden.');
 }
+
+// Budget privat und Vorschlagsregeln der Buchhaltung privat
+{
+  const B = require('../src/budgetdoc.js'), L = require('../src/ledger.js');
+  const P = (o) => B.normalize(Object.assign({ id: 'y' + Math.random(), jahr: 2027 }, o));
+  const ps = [P({ bereich: 'lohn', gruppe: 'Anstellungen', text: 'Uni', betrag: 10000 }), P({ bereich: 'privat', gruppe: 'Leben', text: 'Essen', formel: '700*12', konto: '4040' }), P({ bereich: 'einnahmen', gruppe: 'Aufträge', text: 'A', betrag: 50000 }), P({ bereich: 'ausgaben', gruppe: 'X', text: 'B', betrag: 4050 })];
+  const r = B.rechne(ps, [], 2027, { mwst: 8.1, saldo: 0 });
+  assert.strictEqual(r.gmbhLohn, 54050 - 4050); assert.strictEqual(r.lohnTotal, 60000); assert.strictEqual(r.privat, 8400); assert.strictEqual(r.spielraum, 51600);
+  assert.strictEqual(ps[1].konto, '4040');
+  const z = (t, b) => ({ text: t, betrag: b, datum: '2026-10-20', schluessel: 'k' + t, nr: 1 });
+  const opt = { regeln: false, hinweise: [{ re: /zara/i, gegen: '4060' }, { re: /janna/i, gegen: '4000', text: 'Wohnungsmiete Anteil Janna', richtung: 'ein' }], standard: { aus: '4030' } };
+  const v = (t, b, paare) => { const x = L.bankVorschlag(z(t, b), paare || [], '1000', opt); return [x.soll, x.haben, x.text]; };
+  assert.deepStrictEqual(v('Zara Bern', -79.9), ['4060', '1000', 'Zara Bern']);
+  assert.deepStrictEqual(v('Migros Bern', -23.5), ['4030', '1000', 'Migros Bern']);
+  assert.deepStrictEqual(v('Gutschrift Janna M.', 700), ['1000', '4000', 'Wohnungsmiete Anteil Janna']);
+  // Eine frühere gleiche Buchung geht den Hinweisen vor
+  const frueher = [{ zeile: z('Zara Bern', -50), buchungen: [{ text: 'Geschenk', soll: '4190', haben: '1000', datum: '2026-09-01' }] }];
+  assert.deepStrictEqual(v('Zara Bern', -79.9, frueher), ['4190', '1000', 'Geschenk']);
+  console.log('Budget privat und Vorschlagsregeln bestanden.');
+}

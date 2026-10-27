@@ -322,6 +322,7 @@
   /* ============ Rahmen ============ */
 
   const NAV = [
+    ['budget', 'Budget'],
     ['erfassen', 'Zeiterfassung'],
     ['offerten', 'Offerten'],
     ['pendenzen', 'Pendenzen'],
@@ -329,7 +330,6 @@
     ['rechnungen', 'Rechnungen'],
     ['buchhaltung', 'Buchhaltung GmbH'],
     ['buchhaltungPrivat', 'Buchhaltung privat'],
-    ['budget', 'Budget'],
     ['einstellungen', 'Einstellungen'],
   ];
 
@@ -1477,10 +1477,12 @@
       const neu = (r.data.posten || []).map(window.BudgetDoc.normalize).filter(Boolean);
       if (!neu.length) { toast('Die Datei enthält keine Budgetposten.', { fehler: true }); return; }
       const jahre = [...new Set(neu.map((x) => x.jahr))].sort();
-      const alt = (state.data.budgetPosten || []).filter((x) => jahre.includes(x.jahr));
-      if (alt.length && !confirm(`Für ${jahre.join(' und ')} gibt es schon ${alt.length} Budgetposten. Der Import ersetzt sie durch die ${neu.length} Posten aus der Datei. Fortfahren?`)) return;
+      // Ersetzt werden nur die Bereiche (z. B. «Private Ausgaben»), die die Datei für ein Jahr enthält.
+      const teile = new Set(neu.map((x) => `${x.jahr}|${x.bereich}`)), betroffen = (x) => teile.has(`${x.jahr}|${x.bereich}`);
+      const alt = (state.data.budgetPosten || []).filter(betroffen);
+      if (alt.length && !confirm(`Für ${jahre.join(' und ')} gibt es in diesen Bereichen schon ${alt.length} Budgetposten. Der Import ersetzt sie durch die ${neu.length} Posten aus der Datei. Fortfahren?`)) return;
       await api.save(state.data, { sicherungErzwingen: true });
-      state.data.budgetPosten = (state.data.budgetPosten || []).filter((x) => !jahre.includes(x.jahr)).concat(neu.map((x) => Object.assign(x, { id: uid('bu') })));
+      state.data.budgetPosten = (state.data.budgetPosten || []).filter((x) => !betroffen(x)).concat(neu.map((x) => Object.assign(x, { id: uid('bu') })));
       // Sätze aus der Datei übernehmen, ohne erfasste zu überschreiben; ältere Dateien in die heutige Form bringen
       const mj = state.data.settings.mwstJahre || (state.data.settings.mwstJahre = {});
       for (const [j, z] of Object.entries(r.data.mwstJahre || {})) mj[j] = Object.assign({}, z, mj[j]);
@@ -1776,24 +1778,34 @@
   }
 
   /**
-   * Einmalige Bereinigungen, die über den Merker in den Einstellungen nur einmal laufen (auf beiden Rechnern gleich):
-   * - bebu2710: Aus dem Excel übernommene private Buchungen 2026 tragen das Datum 27.10.2026 (ausser den Anfangsbeständen); Konto «BIC» entfällt.
+   * Einmalige Bereinigungen, die über Merker in den Einstellungen nur einmal laufen (auf beiden Rechnern gleich):
+   * - budget2: Budget ohne Spalte «Offeriert», MWST-Sätze pro Jahr in den Einstellungen
+   * - bebu2710: Konto «BIC» in der privaten Buchhaltung 2026 entfällt
+   * - bebu1610: Aus dem Excel übernommene private Buchungen 2026 tragen das Datum 16.10.2026 (ausser den Anfangsbeständen);
+   *   «Wohnungsmiete (Rückerstattung)» heisst «Wohnungsmiete Anteil Janna»
    */
   function einmalig() {
-    const st = state.data.settings, m = st.einmalig || {};
-    // budget2: Budget ohne Spalte «Offeriert», MWST-Sätze pro Jahr in den Einstellungen
-    if (!m.budget2) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st); st.einmalig = Object.assign({}, st.einmalig, { budget2: true }); if (m.bebu2710) return true; }
-    if (m.bebu2710) return false;
-    for (const b of state.data.privatBuchungen || []) {
-      if (b.jahr !== 2026 || !/^BEBU 2026:/.test(b.bankText || '') || /Anfangsbestand/.test(b.bankText)) continue;
-      b.datum = '2026-10-27'; b.bankText = b.bankText.replace(/ · Datum geschätzt$/, '');
+    const st = state.data.settings, m = Object.assign({}, st.einmalig);
+    const vorher = JSON.stringify(m);
+    if (!m.budget2) { window.BudgetDoc.neueForm(state.data.budgetPosten || [], st); m.budget2 = true; }
+    if (!m.bebu2710) {
+      const pl = (state.data.privatKontenplaene || {})['2026'];
+      if (pl) for (const z of pl.zeilen.filter((x) => x.konto && x.text.trim() === 'BIC')) {
+        if (!(state.data.privatBuchungen || []).some((b) => b.soll === z.konto || b.haben === z.konto)) pl.zeilen.splice(pl.zeilen.indexOf(z), 1);
+      }
+      m.bebu2710 = true;
     }
-    const pl = (state.data.privatKontenplaene || {})['2026'];
-    if (pl) {
-      const bic = pl.zeilen.filter((z) => z.konto && z.text.trim() === 'BIC');
-      for (const z of bic) if (!(state.data.privatBuchungen || []).some((b) => b.soll === z.konto || b.haben === z.konto)) pl.zeilen.splice(pl.zeilen.indexOf(z), 1);
+    if (!m.bebu1610) {
+      for (const b of state.data.privatBuchungen || []) {
+        if (b.jahr !== 2026 || !/^BEBU 2026:/.test(b.bankText || '')) continue;
+        if (b.text === 'Wohnungsmiete (Rückerstattung)') b.text = 'Wohnungsmiete Anteil Janna';
+        if (/Anfangsbestand/.test(b.bankText)) continue;
+        b.datum = '2026-10-16'; b.bankText = b.bankText.replace(/ · Datum geschätzt$/, '');
+      }
+      m.bebu1610 = true;
     }
-    st.einmalig = Object.assign({}, st.einmalig, { bebu2710: true });
+    if (JSON.stringify(m) === vorher) return false;
+    st.einmalig = m;
     return true;
   }
 

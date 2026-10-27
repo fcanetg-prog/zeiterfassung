@@ -94,6 +94,43 @@
       return geaendert;
     }
 
+    /**
+     * Privat: Vorschlagsregeln für E-Banking-Bewegungen ohne frühere gleiche Buchung.
+     * Hinweise im Bank-Text führen zum passenden Aufwandkonto (gesucht über den Kontonamen); sonst gilt das Standardkonto
+     * des Bankkontos: Ausgaben über die Kantonalbank (GKB) sind Alltag, über das Raiffeisen-Privatkonto Essen.
+     */
+    const HINWEISE = [
+      [/kleider|\bmode\b|zara|h ?& ?m\b|uniqlo|zalando|\bc ?& ?a\b|mango|bershka|globus|manor|dosenbach|vögele|tally ?weijl|massimo dutti|\bcos\b|esprit|levi'?s|schuh/i, /^kleider/i],
+      [/decathlon|transa|bächli|ochsner sport|sportx|intersport|unisport|fitness|\bsport/i, /^sport/i],
+      [/\bsbb\b|easyride|billett|\bbls\b|postauto|halbtax/i, /^sbb/i],
+      [/orell f|thalia|ex ?libris|stauffacher|buchhandlung|weltbild/i, /^bücher/i],
+      [/krankenkasse|\bcss\b|helsana|swica|sanitas|concordia|visana|\bkpt\b|assura|groupe mutuel|sympany|atupri/i, /^krankenkasse/i],
+      [/apotheke|amavita|sun ?store|zahnarzt|arztpraxis|praxis|spital|medbase|dr\.? ?med/i, /^arzt/i],
+      [/massage|physio/i, /^massage/i],
+      [/fielmann|kochoptik|visilab|mcoptik|optik|lensbest|kontaktlinsen/i, /^linsen/i],
+      [/steuerverwaltung|steueramt|gemeindesteuer|staatssteuer/i, /^steuern/i],
+      [/mobiliar|\baxa\b|helvetia|generali|baloise|allianz|versicherung/i, /^versicherung privat/i],
+      [/\bewb\b|\bbkw\b|serafe|swisscom|\bsalt\b|sunrise|kaminfeger/i, /^nebenkosten/i],
+      [/ikea|interio|pfister|\blandi\b|jumbo|hornbach|bauhaus|micasa|möbel|garten/i, /^möbel/i],
+      [/tankstelle|migrol|\bsocar\b|\bavia\b|garage|parkhaus|parking|mobility|vignette|\btcs\b/i, /^auto/i],
+      [/hotel|booking\.com|airbnb|easyjet|lufthansa|edelweiss|ryanair|expedia/i, /^reisen/i],
+      [/digitec|interdiscount|media ?markt|apple\.com|\bfust\b|brack\.ch/i, /^multimedia/i],
+      [/gurten|kilbi|ticketcorner|eventfrog/i, /^gurten/i],
+      [/kiosk|unihockey|saiten/i, /^zeitschriften/i],
+    ];
+    function privatRegeln() {
+      const aufwand = konten().filter((z) => String(z.bklasse) === '3');
+      const kontoNach = (re) => { const k = aufwand.find((z) => re.test(z.text.trim())); return k ? k.konto : ''; };
+      const hinweise = HINWEISE.map(([re, name]) => ({ re, gegen: kontoNach(name) })).filter((h) => h.gegen);
+      // Eingang mit «Janna» im Text: ihr Anteil an der Wohnungsmiete
+      const miete = kontoNach(/^wohnungsmiete/i);
+      if (miete) hinweise.push({ re: /janna/i, gegen: miete, text: 'Wohnungsmiete Anteil Janna', richtung: 'ein' });
+      const bank = (konten().find((z) => z.konto === BANK_()) || {}).text || '';
+      const aus = /kantonalbank|\bgkb\b/i.test(bank) ? kontoNach(/^alltag/i) : /raiffeisen.*privat/i.test(bank) ? kontoNach(/^essen/i) : '';
+      return { regeln: false, hinweise, standard: { aus } };
+    }
+    const vorschlagOpt = () => (PRIVAT ? privatRegeln() : { regeln: true });
+
     /** Bankkonto, gegen das die E-Banking-Bewegungen gebucht werden: im Geschäft 1010 (Raiffeisen), privat das zuletzt gewählte. */
     function BANK_() {
       if (!PRIVAT) return '1010';
@@ -150,7 +187,14 @@
       return `
       <header class="head">
         <h1>${TITEL} ${jahr()}</h1>
-        <div class="bignum"><b class="${gewinn < 0 ? 'neg' : ''}">${chf(gewinn)}</b><span>${PRIVAT ? (gewinn < 0 ? 'Mehrausgaben' : 'Überschuss') : gewinn < 0 ? 'Jahresverlust' : 'Jahresgewinn'} bisher</span></div>
+        ${PRIVAT ? (() => {
+          // Anlageerfolg: Erfolgskonten der Wertschriften (Anlagegewinn, Kursgewinne, Dividenden, Zinsen)
+          const sal = L.saldi(buchungen());
+          const anlage = -konten().filter((z) => ['3', '4'].includes(String(z.bklasse)) && /anlage|wertschrift|kurs(gewinn|verlust)|dividend|zins/i.test(z.text)).reduce((x, z) => x + (sal.has(z.konto) ? sal.get(z.konto).saldo : 0), 0);
+          const ohne = gewinn - anlage, wort = (v) => (v < 0 ? 'Mehrausgaben' : 'Überschuss');
+          return `<div class="bignum"><b class="${ohne < 0 ? 'neg' : ''}">${chf(ohne)}</b><span>${wort(ohne)} bisher ohne Anlageerfolg</span></div>
+            <div class="bignum"><b class="${gewinn < 0 ? 'neg' : ''}">${chf(gewinn)}</b><span>${wort(gewinn)} bisher inkl. Anlageerfolg</span></div>`;
+        })() : `<div class="bignum"><b class="${gewinn < 0 ? 'neg' : ''}">${chf(gewinn)}</b><span>${gewinn < 0 ? 'Jahresverlust' : 'Jahresgewinn'} bisher</span></div>`}
       </header>
       <div class="bh-bar">
         <div class="seg">${TABS.map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-bh="tab" data-tab="${k}">${l}${k === 'buchungen' && vorschlaege().length ? ` <span class="bh-zahl">${vorschlaege().length}</span>` : ''}</button>`).join('')}</div>
@@ -193,7 +237,9 @@
     }
 
     function viewBuchungen() {
-      const alle = L.bankSortiert(buchungen(), plaetze());
+      // Privat: nach Datum, am selben Tag nach Belegnummer (neuste zuoberst); im Geschäft in der Reihenfolge der Bank.
+      const belegNr = (b) => { const n = parseInt(String(b.beleg).replace(/\D/g, ''), 10); return isFinite(n) ? n : 0; };
+      const alle = PRIVAT ? buchungen().slice().sort((a, b) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : belegNr(a) - belegNr(b) || (a.pos || 0) - (b.pos || 0))) : L.bankSortiert(buchungen(), plaetze());
       const q = S.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const liste = alle.filter((b) => !q.length || q.every((t) => `${fmtDate(b.datum)} ${b.beleg} ${b.text} ${b.soll} ${b.haben} ${b.betrag.toFixed(2)}`.toLowerCase().includes(t))).reverse();
       const texte = [...new Set(alle.map((b) => b.text))].sort();
@@ -419,7 +465,7 @@
       if (S.zahl) for (const e of S.zahl.fast) zuRechnung.set(e.schluessel, { ids: e.projekte, eindeutig: false });
       const beispiele = zuRechnung.size ? rechnungsBeispiele(lern) : [];
       const vorschlag = (zeile) => {
-        const v = L.bankVorschlag(zeile, lern, BANK_(), { regeln: !PRIVAT }), r = zuRechnung.get(zeile.schluessel);
+        const v = L.bankVorschlag(zeile, lern, BANK_(), vorschlagOpt()), r = zuRechnung.get(zeile.schluessel);
         return r ? mitRechnung(v, r.ids, r.eindeutig, beispiele) : v;
       };
       let geaendert = 0;
@@ -432,7 +478,7 @@
       for (const paar of a.paare) {
         const b = paar.buchungen[0];
         if (paar.buchungen.length !== 1 || !b.vorschlag || !zuRechnung.has(paar.zeile.schluessel)) continue;
-        const roh = L.bankVorschlag(paar.zeile, lern, BANK_(), { regeln: !PRIVAT });
+        const roh = L.bankVorschlag(paar.zeile, lern, BANK_(), vorschlagOpt());
         if (b.text !== roh.text || b.soll !== roh.soll || b.haben !== roh.haben) continue;
         const neu = vorschlag(paar.zeile);
         if (neu.text !== b.text || neu.haben !== b.haben) { Object.assign(b, { text: neu.text, haben: neu.haben, sicher: neu.sicher }); geaendert++; }
@@ -671,7 +717,7 @@
         const k = ign.indexOf(z.schluessel); if (k >= 0) ign.splice(k, 1);
         const lern = L.bankAbgleich(bz.zeilen, alle, BANK_(), []).paare.filter((x) => x.zeile.schluessel !== z.schluessel && x.buchungen.every((b) => !b.vorschlag));
         const pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
-        DB().push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos, vorschlag: true }, L.bankVorschlag(z, lern, BANK_(), { regeln: !PRIVAT })));
+        DB().push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos, vorschlag: true }, L.bankVorschlag(z, lern, BANK_(), vorschlagOpt())));
         S.tab = 'buchungen'; persist(); render(); toast('Als Vorschlag angelegt');
       }
       else if (a === 'z-zu') { S.zahl = null; render(); }

@@ -9,7 +9,7 @@
   const isNum = (x) => typeof x === 'number' && isFinite(x);
 
   /** Bereiche des Budgets in der Reihenfolge des Excels. */
-  const BEREICHE = [['ausgaben', 'Ausgaben'], ['einnahmen', 'Einnahmen'], ['lohn', 'Lohnauszahlungen']];
+  const BEREICHE = [['ausgaben', 'Ausgaben GmbH'], ['einnahmen', 'Einnahmen GmbH'], ['lohn', 'Lohneinnahmen'], ['privat', 'Private Ausgaben']];
   /** Status der Offerten (intern «zugesagt» = bestätigt) in der Reihenfolge der Übersicht. */
   const STATUS = [['offen', 'Offeriert'], ['zugesagt', 'Bestätigt'], ['abgeschlossen', 'Abgeschlossen'], ['abgesagt', 'Abgesagt']];
 
@@ -51,6 +51,7 @@
     if (String(p.offeriertFormel || '').trim()) { o.offeriertFormel = String(p.offeriertFormel); o.offeriert = formelWert(p.offeriertFormel) || 0; }
     if (p.ohneMwst) o.ohneMwst = true;             // z. B. Abo-Beiträge: nicht mehrwertsteuerpflichtig
     if (p.offerteId) o.offerteId = String(p.offerteId);
+    if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
     return o;
   }
 
@@ -129,6 +130,7 @@
     const gmbhLohn = round2(einnahmen - ausgaben);
     const anstellungen = summe(nachBereich('lohn'), 'wert');
     const offen = auto.filter((z) => !z.zaehlt);
+    const privat = summe(nachBereich('privat'), 'wert');
 
     // Gruppen in der Reihenfolge ihres ersten Postens
     const gruppen = {};
@@ -140,6 +142,7 @@
     return {
       zeilen, auto, gruppen, umsatz, basis, mwstEin, einnahmen, ausgaben, gmbhLohn, anstellungen, saetze: S,
       lohnTotal: round2(gmbhLohn + anstellungen),
+      privat, spielraum: round2(gmbhLohn + anstellungen - privat),   // Lohneinnahmen minus privater Budgetrahmen
       autoSumme: summe(auto.filter((z) => z.zaehlt), 'wert'), autoInkl: summe(auto.filter((z) => z.zaehlt), 'inkl'),
       offeriert: summe(offen, 'wert'), offeriertInkl: summe(offen, 'inkl'),
     };

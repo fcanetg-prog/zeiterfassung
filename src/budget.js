@@ -58,20 +58,59 @@
     }
     const textFeld = (p) => `<input id="bu-${p.id}-text" class="inline" type="text" value="${esc(p.text)}" placeholder="Posten" data-bu="feld" data-id="${p.id}" data-key="text">`;
 
+    /* ---------- Privates Budget: Ist aus der Buchhaltung privat ---------- */
+    const privatPlan = () => { const pl = (state.data.privatKontenplaene || {})[jahr()]; return pl ? pl.zeilen : []; };
+    const aufwandKonten = () => privatPlan().filter((z) => z.konto && String(z.bklasse) === '3');
+    /** Konto eines privaten Budgetpostens: gewählt, sonst das Aufwandkonto mit gleichem Namen. */
+    function kontoVon(p) {
+      if (p.konto && aufwandKonten().some((z) => z.konto === p.konto)) return p.konto;
+      const t = String(p.text || '').trim().toLowerCase();
+      const k = aufwandKonten().find((z) => z.text.trim().toLowerCase() === t || z.text.trim().toLowerCase().replace(/\s*\(.*\)$/, '') === t);
+      return k ? k.konto : '';
+    }
+    let istMemo = { sig: '', map: new Map() };
+    function istVon(konto) {
+      if (!konto) return null;
+      const pb = state.data.privatBuchungen || [];
+      const sig = `${jahr()}|${pb.length}|${pb.reduce((m, b) => Math.max(m, b.mod || 0), 0)}`;
+      if (istMemo.sig !== sig) istMemo = { sig, map: window.Ledger.saldi(pb.filter((b) => b.jahr === jahr() && !b.vorschlag)) };
+      const x = istMemo.map.get(konto);
+      return x ? x.saldo : 0;
+    }
+    /** Hochrechnung aufs ganze Jahr (nur im laufenden Jahr). */
+    function hochrechnung(ist) {
+      const h = new Date(), j = jahr();
+      if (h.getFullYear() !== j) return null;
+      const tag = Math.floor((h - new Date(j, 0, 1)) / 864e5) + 1, tage = (j % 4 === 0 && (j % 100 !== 0 || j % 400 === 0)) ? 366 : 365;
+      return Math.round(ist * tage / tag);
+    }
+    function istZelle(budget, ist, mitTitel) {
+      if (ist == null) return '<span class="dim" title="Kein Konto in der Buchhaltung privat verknüpft">–</span>';
+      const hr = hochrechnung(ist), ueber = ist > budget + 0.004, knapp = !ueber && hr != null && hr > budget + 0.004;
+      return `<span class="bu-ist ${ueber ? 'ueber' : knapp ? 'knapp' : ''}" title="${mitTitel !== false ? `${budget ? Math.round(ist / budget * 100) + ' % des Budgetrahmens' : ''}${hr != null ? `${budget ? ' · ' : ''}Hochrechnung aufs Jahr: ${fr(hr)}` : ''}` : ''}">${fr(ist)}</span>`;
+    }
+    function kontoWahl(p) {
+      const k = kontoVon(p), ks = aufwandKonten();
+      if (!ks.length) return '';
+      return `<select class="bu-wahl bu-kwahl ${k ? 'gesetzt' : ''}" data-bu="konto" data-id="${p.id}" aria-label="Konto der Buchhaltung privat" title="Konto der Buchhaltung privat, aus dem «Ist bisher» kommt">
+        <option value="">Konto …</option>${ks.map((z) => `<option value="${esc(z.konto)}" ${z.konto === k ? 'selected' : ''}>${esc(z.konto)} ${esc(z.text)}</option>`).join('')}</select>`;
+    }
+
     function postenZeilen(z) {
       const p = z.posten, o = z.offerte, ein = p.bereich === 'einnahmen', S = saetze();
       const fest = p.saldo || (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen' || o.status === 'abgesagt'));
       const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) von ${fr(z.wert && S.saldo ? z.wert * 100 / S.saldo : 0)}` : o ? 'Betrag aus der verknüpften Offerte' : '';
       const betrag = fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
       const notizAuf = state.bu.notiz.has(p.id);
-      const akt = `${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
+      const priv = p.bereich === 'privat', ist = priv ? istVon(kontoVon(p)) : null;
+      const akt = `${priv ? kontoWahl(p) : ''}${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}
         ${ein && p.satz == null && !o ? `<label class="bu-om ${p.ohneMwst ? 'an' : ''}" title="Ohne MWST: nicht mehrwertsteuerpflichtig (z. B. Abo-Beiträge). Zählt zum Umsatz, aber ohne MWST-Zuschlag."><input type="checkbox" data-bu="ohneMwst" data-id="${p.id}"${p.ohneMwst ? ' checked' : ''}>o. MWST</label>` : ''}
         <button class="bu-nz ${p.notiz ? 'hat' : ''} ${notizAuf ? 'auf' : ''}" data-bu="notiz" data-id="${p.id}" title="${p.notiz ? esc(p.notiz) : 'Notiz hinzufügen'}" aria-label="Notiz" aria-expanded="${notizAuf}">${p.notiz ? 'Notiz' : '+ Notiz'}</button>
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
       return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''}" data-id="${p.id}">
         <td class="bu-po">${textFeld(p)}</td>
         <td class="bu-wert">${betrag}</td>
-        <td class="num r bu-inkl">${ein ? fr(z.inkl) : ''}</td>
+        <td class="num r bu-inkl">${ein ? fr(z.inkl) : priv ? istZelle(z.wert, ist) : ''}</td>
         <td class="r bu-akt">${akt}</td></tr>
         ${notizAuf ? `<tr class="bu-nzz"><td colspan="4"><input id="bu-${p.id}-notiz" class="inline bu-notiz" type="text" value="${esc(p.notiz)}" placeholder="Notiz zu diesem Posten" data-bu="feld" data-id="${p.id}" data-key="notiz"></td></tr>` : ''}`;
     }
@@ -91,13 +130,14 @@
       const auf = gOffen(bereich, name);
       return `<tr class="bu-g ${auf ? 'auf' : ''}" data-bu="g-auf" data-bereich="${bereich}" data-gruppe="${esc(name)}" tabindex="0" role="button" aria-expanded="${auf}">
         <td class="bu-gt"><span class="klapp-chev">${auf ? '▾' : '▸'}</span>${fest ? `<span class="bu-gname-fix">${esc(name)}</span>` : `<input class="inline bu-gname" id="${gId(bereich, name)}" type="text" size="${Math.max(8, name.length + 2)}" value="${esc(name)}" placeholder="Gruppe" data-bu="gruppe" data-bereich="${bereich}" data-alt="${esc(name)}" title="Name der Gruppe ändern">`}<span class="klapp-zahl">${anzahl}</span></td>
-        <td class="num r">${fr(summe)}</td><td class="num r">${inkl == null ? '' : fr(inkl)}</td><td></td></tr>`;
+        <td class="num r">${fr(summe)}</td><td class="num r">${inkl == null ? '' : typeof inkl === 'string' ? inkl : fr(inkl)}</td><td></td></tr>`;
     }
 
     function gruppenZeilen(bereich, r) {
       let html = '';
       for (const g of r.gruppen[bereich]) {
-        html += gruppeKopf(bereich, g.name, g.summe, g.inkl, g.zeilen.length);
+        const istG = bereich === 'privat' ? g.zeilen.reduce((s, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? s : s + i; }, 0) : null;
+        html += gruppeKopf(bereich, g.name, g.summe, bereich === 'privat' ? istZelle(g.summe, istG) : g.inkl, g.zeilen.length);
         if (!gOffen(bereich, g.name)) continue;
         for (const z of g.zeilen) html += postenZeilen(z);
         html += `<tr class="bu-add"><td colspan="4"><button class="link" data-bu="neu" data-bereich="${bereich}" data-gruppe="${esc(g.name)}">+ Posten${g.name ? ' in ' + esc(g.name) : ''}</button></td></tr>`;
@@ -109,8 +149,10 @@
 
     function bereich([key, titel], r) {
       const zu = state.bu.zu.has(key);
-      const kopfSumme = { ausgaben: [r.ausgaben, null], einnahmen: [r.umsatz, r.einnahmen], lohn: [r.lohnTotal, null] }[key];
+      const istP = key === 'privat' ? r.gruppen.privat.reduce((s, g) => s + g.zeilen.reduce((t, z) => { const i = istVon(kontoVon(z.posten)); return i == null ? t : t + i; }, 0), 0) : null;
+      const kopfSumme = { ausgaben: [r.ausgaben, null], einnahmen: [r.umsatz, r.einnahmen], lohn: [r.lohnTotal, null], privat: [r.privat, istZelle(r.privat, istP)] }[key];
       let inhalt = '';
+      if (key === 'privat') inhalt += `<tr class="bu-sub"><td>Budgetrahmen, den du dir selber gibst</td><td class="r">Budgetrahmen</td><td class="r" title="Saldo der Konten in der Buchhaltung privat ${jahr()}">Ist bisher</td><td></td></tr>`;
       if (key === 'lohn') inhalt += `<tr class="bu-g bu-fix"><td class="bu-gt"><span class="klapp-chev"></span><span class="bu-gname-fix" title="Total Einnahmen inkl. MWST minus Total Ausgaben">Aus der GmbH (netto)</span></td><td class="num r">${fr(r.gmbhLohn)}</td><td></td><td></td></tr>`;
       inhalt += gruppenZeilen(key, r);
       if (key === 'einnahmen' && r.auto.length) {
@@ -129,9 +171,24 @@
         if (r.offeriert) inhalt += summeZeile('Offene Offerten (zählen noch nicht)', r.offeriert, r.offeriertInkl, 'bu-offen');
       }
       if (key === 'lohn') inhalt += summeZeile('Total Lohneinnahmen', r.lohnTotal, null, 'bu-total');
+      if (key === 'privat') {
+        inhalt += `<tr class="bu-sum bu-total"><td>Total private Ausgaben</td><td class="num r">${fr(r.privat)}</td><td class="num r">${istZelle(r.privat, istP)}</td><td></td></tr>`;
+        inhalt += summeZeile('Total Lohneinnahmen (oben)', r.lohnTotal, null, 'bu-mwst');
+        inhalt += `<tr class="bu-sum bu-total bu-spiel ${r.spielraum < 0 ? 'neg' : 'pos'}"><td title="Lohneinnahmen minus private Ausgaben gemäss Budgetrahmen">${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum (Sparen)'}</td><td class="num r">${fr(r.spielraum)}</td><td></td><td></td></tr>`;
+      }
       return `<tbody class="bu-ab" data-zebra>
-        <tr class="klapp-kopf" data-bu="auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${!zu}"><td><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${titel}</td><td class="num r">${fr(kopfSumme[0])}</td><td class="num r">${kopfSumme[1] == null ? '' : fr(kopfSumme[1])}</td><td></td></tr>
+        <tr class="klapp-kopf" data-bu="auf" data-key="${key}" tabindex="0" role="button" aria-expanded="${!zu}"><td><span class="klapp-chev">${zu ? '▸' : '▾'}</span>${titel}</td><td class="num r">${fr(kopfSumme[0])}</td><td class="num r">${kopfSumme[1] == null ? '' : typeof kopfSumme[1] === 'string' ? kopfSumme[1] : fr(kopfSumme[1])}</td><td></td></tr>
         ${zu ? '' : inhalt}</tbody>`;
+    }
+
+    /** Die Rechnung des Jahres auf einen Blick: GmbH → Lohn → privates Budget → Spielraum. */
+    function fluss(r) {
+      const k = (titel, wert, kl, ziel) => `<button class="bu-fk ${kl || ''}" data-bu="springe" data-key="${ziel}" title="Zum Abschnitt ${esc(titel)}"><span>${titel}</span><b>${fr(wert)}</b></button>`;
+      const op = (z) => `<span class="bu-op" aria-hidden="true">${z}</span>`;
+      return `<section class="bu-fluss" aria-label="Rechnung ${jahr()}">
+        <div class="bu-fg"><div class="bu-fgt">GmbH</div><div class="bu-fz">${k('Einnahmen inkl. MWST', r.einnahmen, '', 'einnahmen')}${op('−')}${k('Ausgaben', r.ausgaben, '', 'ausgaben')}${op('=')}${k('Netto-Lohn aus GmbH', r.gmbhLohn, 'zw', 'lohn')}</div></div>
+        <div class="bu-fg"><div class="bu-fgt">Ich</div><div class="bu-fz">${op('+')}${k('Anstellungen', r.anstellungen, '', 'lohn')}${op('=')}${k('Lohneinnahmen', r.lohnTotal, 'zw', 'lohn')}${op('−')}${k('Private Ausgaben (Budget)', r.privat, '', 'privat')}${op('=')}${k(r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum', r.spielraum, r.spielraum < 0 ? 'end neg' : 'end pos', 'privat')}</div></div>
+      </section>`;
     }
 
     function view() {
@@ -141,10 +198,9 @@
       const vorjahre = [...new Set(posten().map((p) => p.jahr))].filter((x) => x < j).sort((a, b) => b - a);
       return `
       <header class="head"><h1>Budget ${j}</h1>
-        <div class="bignum"><b>${fr(r.einnahmen)}</b><span>Total Einnahmen inkl. MWST</span></div>
-        <div class="bignum"><b>${fr(r.ausgaben)}</b><span>Total Ausgaben</span></div>
-        <div class="bignum"><b class="${r.gmbhLohn < 0 ? 'neg' : ''}">${fr(r.gmbhLohn)}</b><span>Netto-Lohn aus GmbH</span></div>
+        <div class="bignum"><b class="${r.spielraum < 0 ? 'neg' : 'pos'}">${fr(r.spielraum)}</b><span>${r.spielraum < 0 ? 'Fehlbetrag' : 'Spielraum'} nach privatem Budget</span></div>
       </header>
+      ${fluss(r)}
       ${uebersicht()}
       ${leer ? `<div class="pane bu-leer"><p>Für ${j} gibt es noch kein Budget.${vorjahre.length ? ` Du kannst die Posten von ${vorjahre[0]} übernehmen (ohne Verknüpfungen mit Offerten) oder unten Gruppen und Posten von Hand anlegen.` : ' Lege unten Gruppen und Posten an.'}</p>
         <div class="row">${vorjahre.length ? `<button class="btn primary" data-bu="kopie" data-von="${vorjahre[0]}">Posten von ${vorjahre[0]} übernehmen</button>` : ''}
@@ -193,6 +249,7 @@
       switch (a) {
         case 'auf': { const k = el.dataset.key; if (state.bu.zu.has(k)) state.bu.zu.delete(k); else state.bu.zu.add(k); render(); break; }
         case 'offerte': zeigeOfferte(el.dataset.id); break;
+        case 'springe': { state.bu.zu.delete(el.dataset.key); render(); const t = document.querySelector(`tr.klapp-kopf[data-key="${el.dataset.key}"]`); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
         case 'neu': { const n = neuerPosten(el.dataset.bereich, el.dataset.gruppe); persist(); render(); const f = document.getElementById(`bu-${n.id}-text`); if (f) f.focus(); break; }
         case 'neu-gruppe': {
           let name = 'Neue Gruppe', k = 2; while (imJahr().some((x) => x.bereich === el.dataset.bereich && x.gruppe === name)) name = `Neue Gruppe ${k++}`;
@@ -254,6 +311,7 @@
         persist(); render();
       } else if (a === 'ohneMwst') { if (el.checked) p.ohneMwst = true; else delete p.ohneMwst; persist(); render(); }
       else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
+      else if (a === 'konto') { if (el.value) p.konto = el.value; else delete p.konto; persist(); render(); }
     });
 
     return { view };
