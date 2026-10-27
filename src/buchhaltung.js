@@ -39,12 +39,17 @@
       if (!bz || !bz.zeilen.length) return null;
       const alle = DB().filter((b) => b.jahr === jahr());
       const sig = `${jahr()}|${bz.zeilen.length}|${bz.mod}|${alle.map((b) => `${b.id}:${b.datum}:${b.betrag}:${b.soll}:${b.haben}:${b.bankSchluessel || ''}`).join(',')}`;
-      if (platzMemo.sig !== sig) platzMemo = { sig, map: L.bankPlaetze(bz.zeilen, alle, BANK_()) };
+      if (platzMemo.sig !== sig) platzMemo = { sig, map: L.bankPlaetze(bz.zeilen, abgleichbar(alle), BANK_()) };
       return platzMemo.map;
     }
     const vorschlaege = () => L.bankSortiert(DB().filter((b) => b.jahr === jahr() && b.vorschlag), plaetze()).reverse();
     /** Privat: Bankkonten für den E-Banking-Import (Aktiven mit Bank im Namen, ohne Wertschriften und GmbH). */
     const bankKonten = () => konten().filter((z) => String(z.bklasse) === '1' && /bank|konto|raiffeisen|post|ubs|zkb|bekb/i.test(z.text) && !/wertschrift|depot|gmbh/i.test(z.text));
+    /**
+     * Buchungen, die mit E-Banking-Bewegungen abgeglichen werden dürfen. Aus dem Excel übernommene Buchungen («BEBU …»)
+     * tragen kein echtes Bankdatum (alle auf demselben Tag) und würden sonst neue Bewegungen mit gleichem Betrag fälschlich als verbucht erkennen.
+     */
+    const abgleichbar = (liste) => liste.filter((b) => !/^BEBU \d{4}:/.test(b.bankText || ''));
     const kontoMit = (zeilen, re, bk) => zeilen.find((z) => z.konto && String(z.bklasse) === bk && re.test(z.text));
     const wertKonto = (zeilen) => kontoMit(zeilen, /wertschrift|depot/i, '1');
 
@@ -101,8 +106,8 @@
      */
     const HINWEISE = [
       [/kleider|\bmode\b|zara|h ?& ?m\b|uniqlo|zalando|\bc ?& ?a\b|mango|bershka|globus|manor|dosenbach|vögele|tally ?weijl|massimo dutti|\bcos\b|esprit|levi'?s|schuh/i, /^kleider/i],
-      [/decathlon|transa|bächli|ochsner sport|sportx|intersport|unisport|fitness|\bsport/i, /^sport/i],
-      [/\bsbb\b|easyride|billett|\bbls\b|postauto|halbtax/i, /^sbb/i],
+      [/decathlon|transa|bächli|ochsner sport|sportx|intersport|unisport|universit(ä|a)tssport|fitness|\bsport/i, /^sport/i],
+      [/\bsbb (cff|mobile|ticket|reisezentrum)|sbb cff ffs|easyride|billett|postauto|halbtax/i, /^sbb/i],
       [/orell f|thalia|ex ?libris|stauffacher|buchhandlung|weltbild/i, /^bücher/i],
       [/krankenkasse|\bcss\b|helsana|swica|sanitas|concordia|visana|\bkpt\b|assura|groupe mutuel|sympany|atupri/i, /^krankenkasse/i],
       [/apotheke|amavita|sun ?store|zahnarzt|arztpraxis|praxis|spital|medbase|dr\.? ?med/i, /^arzt/i],
@@ -125,6 +130,13 @@
       // Eingang mit «Janna» im Text: ihr Anteil an der Wohnungsmiete
       const miete = kontoNach(/^wohnungsmiete/i);
       if (miete) hinweise.push({ re: /janna/i, gegen: miete, text: 'Wohnungsmiete Anteil Janna', richtung: 'ein' });
+      // Dauerauftrag an Janna: 3a-Beitrag (Versicherung Janna)
+      const vj = kontoNach(/^versicherung janna/i); if (vj) hinweise.push({ re: /janna/i, gegen: vj, text: 'Versicherung Janna', richtung: 'aus' });
+      // Lohn: GmbH, Universitäten und Medien
+      const ertrag = (re) => (konten().find((z) => String(z.bklasse) === '4' && re.test(z.text.trim())) || {}).konto;
+      const lohnGmbH = ertrag(/lohnarbeit gmbh/i), lohn = ertrag(/^ertrag lohnarbeit$/i);
+      if (lohnGmbH) hinweise.push({ re: /canetg gmbh/i, gegen: lohnGmbH, text: 'Lohn Fabio Canetg GmbH', richtung: 'ein' });
+      if (lohn) hinweise.push({ re: /universit|radio- und fern|\bsrf\b|swissinfo/i, gegen: lohn, richtung: 'ein' });
       const bank = (konten().find((z) => z.konto === BANK_()) || {}).text || '';
       const aus = /kantonalbank|\bgkb\b/i.test(bank) ? kontoNach(/^alltag/i) : /raiffeisen.*privat/i.test(bank) ? kontoNach(/^essen/i) : '';
       return { regeln: false, hinweise, standard: { aus } };
@@ -397,7 +409,7 @@
       if (!S.abgl || !bz) return '';
       const alle = DB().filter((b) => b.jahr === jahr());
       const ign = new Set(state.data.settings[K.ign] || []);
-      const a = L.bankAbgleich(bz.zeilen, alle, BANK_(), [...ign]);
+      const a = L.bankAbgleich(bz.zeilen, abgleichbar(alle), BANK_(), [...ign]);
       const zu = new Map(a.paare.map((p) => [p.zeile.schluessel, p.buchungen]));
       const n = S.abglAlle ? bz.zeilen.length : 20;
       const zeilen = bz.zeilen.slice(-n).reverse();
@@ -455,7 +467,7 @@
       const zusammen = L.bankZeilenMerge(gemerkt.zeilen, z.filter((x) => Math.abs(x.betrag) > 0.004));
       const zeilenNeu = JSON.stringify(zusammen) !== JSON.stringify(gemerkt.zeilen);
       BZ_()[bzKey(jahr())] = { mod: gemerkt.mod, zeilen: zusammen };
-      const a = L.bankAbgleich(z, alle, BANK_(), state.data.settings[K.ign] || []);
+      const a = L.bankAbgleich(z, abgleichbar(alle), BANK_(), state.data.settings[K.ign] || []);
       // Gelernt wird nur aus bestätigten Buchungen.
       const lern = a.paare.filter((x) => x.buchungen.every((b) => !b.vorschlag));
       let pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0);
@@ -715,7 +727,7 @@
         const alle = DB().filter((b) => b.jahr === jahr());
         const ign = state.data.settings[K.ign] || [];
         const k = ign.indexOf(z.schluessel); if (k >= 0) ign.splice(k, 1);
-        const lern = L.bankAbgleich(bz.zeilen, alle, BANK_(), []).paare.filter((x) => x.zeile.schluessel !== z.schluessel && x.buchungen.every((b) => !b.vorschlag));
+        const lern = L.bankAbgleich(bz.zeilen, abgleichbar(alle), BANK_(), []).paare.filter((x) => x.zeile.schluessel !== z.schluessel && x.buchungen.every((b) => !b.vorschlag));
         const pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0) + 1;
         DB().push(Object.assign({ id: uid('b'), jahr: jahr(), beleg: '', pos, vorschlag: true }, L.bankVorschlag(z, lern, BANK_(), vorschlagOpt())));
         S.tab = 'buchungen'; persist(); render(); toast('Als Vorschlag angelegt');

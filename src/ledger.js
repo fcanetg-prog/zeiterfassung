@@ -157,6 +157,7 @@
     let m;
     if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
     if ((m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/))) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    if ((m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2})(?!\d)/))) return `20${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;   // GKB: 27.10.26
     return null;
   }
   function zahl(t) {
@@ -181,7 +182,10 @@
 
   /** Liest den CSV-Export der Kontobewegungen (Raiffeisen, altes und neues Format). */
   function parseBankCsv(text) {
-    const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+    const alle = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+    // Manche Banken (z. B. GKB) schreiben vor die Tabelle Angaben zum Konto: Die Kopfzeile ist die erste Zeile mit Datum und Betrag.
+    const kopfNr = Math.max(0, alle.findIndex((l) => /(^|[;,"])\s*(datum|buchungsdatum|booked at)\s*([;,"]|$)/i.test(l) && /betrag|amount/i.test(l)));
+    const vorspann = alle.slice(0, kopfNr), lines = alle.slice(kopfNr);
     if (lines.length < 2) return { fehler: 'Die Datei enthält keine Bewegungen.' };
     const trenner = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
     const kopf = csvZeile(lines[0], trenner).map((h) => h.trim().toLowerCase());
@@ -199,6 +203,11 @@
       const n = (zaehler.get(basis) || 0) + 1; zaehler.set(basis, n);
       zeilen.push({ datum, text: txt, betrag: round2(betrag), saldo: iS >= 0 ? zahl(f[iS]) : null, schluessel: `${basis}|${n}`, nr: zeilen.length });
     }
+    // Neuste zuerst (GKB): umdrehen, damit die Reihenfolge wie bei den anderen Banken vom ältesten zum neusten läuft.
+    if (zeilen.length > 1 && zeilen[0].datum > zeilen[zeilen.length - 1].datum) { zeilen.reverse(); zeilen.forEach((z, i) => { z.nr = i; }); }
+    // Saldo aus dem Vorspann («Saldo: CHF 46292.43») gilt nach der neusten Bewegung.
+    const sv = vorspann.map((l) => /^\s*saldo\s*:?\s*(?:chf)?\s*([-\d'’.,]+)/i.exec(l.replace(/;+\s*$/, ''))).find(Boolean);
+    if (sv && zeilen.length && zeilen[zeilen.length - 1].saldo == null) zeilen[zeilen.length - 1].saldo = zahl(sv[1]);
     return { zeilen };
   }
 
@@ -285,7 +294,10 @@
     }
     // Sammelzahlungen werden immer einzeln verbucht: kein Vorschlag als Ganzes.
     if (/^sammel(zahlung|auftrag)/i.test(zeile.text.trim())) return Object.assign(fertig('Sammelzahlung', '', false), { sammel: true });
-    const kurz = zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '').slice(0, 90);
+    const kurz = zeile.text.replace(/,?\s*Debit Mastercard-Nr\.?.*$/i, '')
+      // GKB: «Debitkarte-Einkauf 23.10.2026 09:47 Adrianos Coffee SBB Karte: 5559…» → «Adrianos Coffee SBB»; «Belastung TWINT Ticketpark 0400…» → «TWINT Ticketpark»
+      .replace(/^Debitkarte-Einkauf\s+\d{1,2}\.\d{1,2}\.\d{4}\s+\d{1,2}:\d{2}\s+/i, '').replace(/\s+Karte:\s*\S+\s*$/i, '')
+      .replace(/^Belastung\s+(TWINT)\s+,?\s*/i, '$1 ').replace(/\s+0\d{12,}\s*$/, '').replace(/\s+/g, ' ').trim().slice(0, 90);
     if (!bsp.length) {
       // Ohne frühere gleiche Buchung: Hinweise im Bank-Text (z. B. Kleiderladen → Kleider), sonst das Standardkonto des Bankkontos.
       const richtung = zeile.betrag > 0 ? 'ein' : 'aus';

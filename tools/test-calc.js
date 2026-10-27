@@ -355,3 +355,19 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(v('Zara Bern', -79.9, frueher), ['4190', '1000', 'Geschenk']);
   console.log('Budget privat und Vorschlagsregeln bestanden.');
 }
+
+// E-Banking-Export der GKB: Vorspann mit Saldo, Datum mit zweistelligem Jahr, neuste Bewegung zuerst
+{
+  const L = require('../src/ledger.js');
+  const csv = 'Kontoauszug bis: 27.10.2026 ;;;\n;;;\nKontonummer: CK 1;;;\nSaldo: CHF 46292.43;;;\n;;;\nDatum;Buchungstext;Betrag;Valuta\n'
+    + '27.10.26;Belastung TWINT Ticketpark 0400005051572557;-60.00;27.10.26\n'
+    + '26.10.26;Debitkarte-Einkauf 23.10.2026 09:47 Adrianos Coffee  SBB Karte: 555968******6247;-10.50;23.10.26\n'
+    + '16.10.26;Gutschrift Fabio Canetg GmbH;30000.00;16.10.26\n';
+  const p = L.parseBankCsv(csv);
+  assert.deepStrictEqual(p.zeilen.map((z) => [z.datum, z.betrag, z.nr, z.saldo]), [['2026-10-16', 30000, 0, null], ['2026-10-26', -10.5, 1, null], ['2026-10-27', -60, 2, 46292.43]]);
+  const v = (z) => L.bankVorschlag(z, [], '1000', { regeln: false, hinweise: [{ re: /canetg gmbh/i, gegen: '3020', text: 'Lohn Fabio Canetg GmbH', richtung: 'ein' }], standard: { aus: '4030' } });
+  assert.deepStrictEqual([v(p.zeilen[0]).text, v(p.zeilen[0]).haben], ['Lohn Fabio Canetg GmbH', '3020']);
+  assert.deepStrictEqual([v(p.zeilen[1]).text, v(p.zeilen[1]).soll], ['Adrianos Coffee SBB', '4030']);
+  assert.strictEqual(v(p.zeilen[2]).text, 'TWINT Ticketpark');
+  console.log('GKB-Export bestanden.');
+}
