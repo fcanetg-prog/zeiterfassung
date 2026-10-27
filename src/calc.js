@@ -399,6 +399,19 @@
    * Führt zwei Stände zusammen. Pro Projekt und pro Zeiteintrag gewinnt die jüngere Änderung («mod»).
    * Gelöschtes bleibt gelöscht, solange es danach nicht wieder geändert wurde.
    */
+  /**
+   * Einstellungen: Grundsätzlich gilt die jüngere Fassung. Was pro Jahr geführt wird (MWST-Sätze im Budget, Kurswert der
+   * Wertschriften) und die Merker einmaliger Umstellungen werden aber zusammengeführt, damit ein Rechner mit älterem Stand
+   * sie beim Abgleich nicht löscht.
+   */
+  function settingsZusammen(neu, alt) {
+    const s = Object.assign({}, neu || alt || {});
+    if (!alt || !neu) return s;
+    for (const k of ['mwstJahre', 'privatKurswert']) if (alt[k] || neu[k]) s[k] = Object.assign({}, alt[k] || {}, neu[k] || {});
+    if (alt.einmalig || neu.einmalig) s.einmalig = Object.assign({}, alt.einmalig || {}, neu.einmalig || {});
+    return s;
+  }
+
   function mergeData(a, b) {
     if (!a) return b;
     if (!b) return a;
@@ -433,7 +446,7 @@
     return {
       ...fremd,
       version: 1,
-      settings: neuer.settings || a.settings || b.settings,
+      settings: settingsZusammen(neuer === a ? a.settings : b.settings, neuer === a ? b.settings : a.settings),
       settingsMod: neuer.settingsMod || 0,
       projects, entries, geloescht, buchungen, kontenplaene, bankZeilen,
       offerten: mergeList(a.offerten, b.offerten), offertVorlagen: mergeList(a.offertVorlagen, b.offertVorlagen),

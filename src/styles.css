@@ -999,3 +999,4 @@ i, em, cite, dfn, address, var { font-style: normal; }
 .bu-null { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); font-size: 10px; line-height: 15px; padding: 0 5px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--muted); cursor: pointer; opacity: .35; font-variant-numeric: tabular-nums; }
 tr.bu-z:hover .bu-null, .bu-null:focus { opacity: 1; }
 .bu-null.an { opacity: 1; color: var(--teal-deep); border-color: var(--teal-deep); background: #e3f1f1; font-weight: 700; }
+.bu-fehlt { display: block; margin-left: auto; color: var(--red); font-size: 12px; font-weight: 600; text-align: right; }

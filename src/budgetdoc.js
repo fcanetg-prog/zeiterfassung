@@ -52,11 +52,11 @@
     if (p.offerteId) o.offerteId = String(p.offerteId);
     if (p.konto) o.konto = String(p.konto);         // privates Budget: Konto der Buchhaltung privat (für «Ist»)
     if (p.serie) o.serie = String(p.serie);         // derselbe Posten in allen Jahren (Änderungen gelten für die folgenden Jahre)
-    if (p.jahresausgabe) o.jahresausgabe = true;
+    if (p.jahresausgabe) o.jahresausgabe = true;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
     if (p.ohneMwst) o.ohneMwst = true;               // Einnahme mit 0 % MWST: inkl. MWST = ohne MWST
     // Stand einer Einnahme: bestätigt (Standard, zählt), offeriert oder noch zu offerieren (zählen nicht). Früher: «offen» = offeriert.
     const st = ['offeriert', 'offerieren'].includes(p.status) ? p.status : p.offen ? 'offeriert' : '';
-    if (st) o.status = st;     // privates Budget: einmalig oder jährlich fällig (kein Vergleich mit der Zeit)
+    if (st) o.status = st;
     return o;
   }
 
@@ -204,7 +204,8 @@
     if (uid) for (const j of new Set(posten.filter((x) => x.bereich === 'lohn').map((x) => x.jahr))) {
       const lohn = posten.filter((x) => x.jahr === j && x.bereich === 'lohn');
       if (lohn.length && !lohn.some((x) => /texte swi/i.test(x.text))) {
-        posten.push(normalize({ id: uid(), jahr: j, bereich: 'lohn', gruppe: '', text: 'Texte SWI', formel: '', betrag: 0, pos: Math.max(...lohn.map((x) => x.pos || 0)) + 0.5 }));
+        // feste Id: Laufen zwei Rechner die Umstellung gleichzeitig, entsteht nach dem Abgleich kein doppelter Posten
+        posten.push(normalize({ id: `bu-texteswi-${j}`, jahr: j, bereich: 'lohn', gruppe: '', text: 'Texte SWI', formel: '', betrag: 0, pos: Math.max(...lohn.map((x) => x.pos || 0)) + 0.5 }));
         anders = true; jahre.add(j);
       }
     }
@@ -242,7 +243,8 @@
       if (p.serie) continue;
       const k = key(p);
       // Leere Namen nicht zusammenhängen
-      if (!String(p.text).trim() || !map.has(k)) { p.serie = uid(); if (String(p.text).trim()) map.set(k, p.serie); } else p.serie = map.get(k);
+      // Neue Serie nach der Id des ersten Postens: auf beiden Rechnern gleich
+      if (!String(p.text).trim() || !map.has(k)) { p.serie = `bs-${p.id}`; if (String(p.text).trim()) map.set(k, p.serie); } else p.serie = map.get(k);
       n++;
     }
     return n > 0;
@@ -262,7 +264,7 @@
       if (v == null) continue;
       const status = /^m/i.test(m[1]) ? 'offerieren' : 'offeriert';   // «Möglich» = noch zu offerieren
       if (Math.abs(p.betrag || 0) < 0.005 && !p.offerteId) { p.betrag = v; p.formel = ''; p.status = status; }
-      else posten.push(normalize({ id: uid(), jahr: p.jahr, bereich: p.bereich, gruppe: p.gruppe, text: `${p.text} (${status === 'offeriert' ? 'offeriert' : 'noch zu offerieren'})`, formel: '', betrag: v, pos: (p.pos || 0) + 0.5, status }));
+      else if (!posten.some((x) => x.id === `${p.id}-off`)) posten.push(normalize({ id: `${p.id}-off`, jahr: p.jahr, bereich: p.bereich, gruppe: p.gruppe, text: `${p.text} (${status === 'offeriert' ? 'offeriert' : 'noch zu offerieren'})`, formel: '', betrag: v, pos: (p.pos || 0) + 0.5, status }));
       p.notiz = ''; anders = true;
     }
     if (anders) for (const j of new Set(posten.map((x) => x.jahr))) posten.filter((x) => x.jahr === j).sort((a, b) => (a.pos || 0) - (b.pos || 0)).forEach((x, i) => { x.pos = i + 1; });

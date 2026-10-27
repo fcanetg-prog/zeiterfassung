@@ -78,7 +78,8 @@
       const p = z.posten, o = z.offerte, ein = p.bereich === 'einnahmen', S = saetze();
       const fest = p.saldo || (o && (o.status === 'zugesagt' || o.status === 'abgeschlossen' || o.status === 'abgesagt'));
       const titel = p.saldo ? `${S.saldo} % Saldosteuersatz ${jahr()} (Einstellungen) vom Umsatz inkl. MWST` : o ? 'Betrag aus der verknüpften Offerte' : '';
-      const betrag = fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
+      const betrag = p.saldo && !S.saldo ? `<button class="link bu-fehlt" data-action="nav" data-view="einstellungen" title="Für ${jahr()} ist kein Saldosteuersatz erfasst. Klick: Einstellungen → Mehrwertsteuer im Budget">Satz fehlt</button>`
+        : fest ? `<span class="bu-fest" title="${esc(titel)}">${fr(z.wert)}</span>` : betragFeld(p, z.wert);
       const notizAuf = state.bu.notiz.has(p.id);
       const STAND = [['', 'Bestätigt'], ['offeriert', 'Offeriert'], ['offerieren', 'Noch zu offerieren']];
       const offenKn = ein && p.satz == null && !(o && o.status !== 'offen') ? `<select class="bu-stand ${p.status ? 'an' : ''}" data-bu="status" data-id="${p.id}" aria-label="Stand der Einnahme" title="Bestätigt zählt ins Total; offeriert und noch zu offerieren erscheinen oben bei den offerierten Beträgen.">${STAND.map(([k, l]) => `<option value="${k}" ${(p.status || '') === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : '';
@@ -359,7 +360,9 @@
           const f = setzeBetrag(p, key, el.value);
           if (f) { toast(f, { fehler: true }); return; }
           // Spätere Posten, die noch nicht bestätigt sind (eigener offerierter Betrag), behalten ihren Betrag
-          for (const y of folgende) { if (y.status && !p.status) continue; y.betrag = p.betrag; y.formel = p.formel; if (p.satz != null) y.satz = p.satz; else delete y.satz; }
+          const geaendert = [];
+          for (const y of folgende) { if (y.status && !p.status) continue; y.betrag = p.betrag; y.formel = p.formel; if (p.satz != null) y.satz = p.satz; else delete y.satz; geaendert.push(y); }
+          folgende.splice(0, folgende.length, ...geaendert);
         } else { p[key] = el.value; for (const y of folgende) y[key] = el.value; }
         persist(); render();
         hinweisSpaeter(folgende, { formel: 'Der Betrag', text: 'Der Name', notiz: 'Die Notiz' }[key] || 'Die Änderung');

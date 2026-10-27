@@ -409,3 +409,20 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(r.offeriertNach, { offeriert: 110, offerieren: 55 }); assert.strictEqual(r.umsatz, 0);
   console.log('Stand der Einnahmen bestanden.');
 }
+
+// Zwei Rechner: Einstellungen pro Jahr zusammenführen, Umstellungen ohne doppelte Posten
+{
+  const B = require('../src/budgetdoc.js');
+  const A = Object.assign(C.emptyData(), { settingsMod: 5, settings: Object.assign({}, C.DEFAULTS, { mwstJahre: { 2026: { mwst: 8.1, saldo: 6.2 } }, einmalig: { budget3: true } }) });
+  const Bd = Object.assign(C.emptyData(), { settingsMod: 9, settings: Object.assign({}, C.DEFAULTS, { pensum: 70, einmalig: { budget4: true } }) });
+  const m = C.mergeData(A, Bd);
+  assert.strictEqual(m.settings.pensum, 70); assert.deepStrictEqual(m.settings.mwstJahre, { 2026: { mwst: 8.1, saldo: 6.2 } });
+  assert.deepStrictEqual(m.settings.einmalig, { budget3: true, budget4: true });
+  const roh = [{ id: 'l1', jahr: 2027, bereich: 'lohn', gruppe: 'Aus Anstellungen', text: 'SRF', pos: 1 }, { id: 'e1', jahr: 2026, bereich: 'einnahmen', gruppe: '', text: 'Hypi', betrag: 2500, notiz: 'Offeriert 6’910', pos: 2 }];
+  const lauf = () => { const ps = roh.map((x) => B.normalize(Object.assign({}, x))); let n = 0; const u = () => 'zufall' + Math.random() + n++; B.neueForm(ps, {}, u); B.offerierteUebernehmen(ps, u); B.serienVergeben(ps, u); return ps; };
+  const x = lauf(), y = lauf();
+  const mm = C.mergeData(Object.assign(C.emptyData(), { budgetPosten: x }), Object.assign(C.emptyData(), { budgetPosten: y }));
+  assert.strictEqual(mm.budgetPosten.length, 4);
+  assert.deepStrictEqual(x.map((p) => p.serie).sort(), y.map((p) => p.serie).sort());
+  console.log('Zwei Rechner bestanden.');
+}
