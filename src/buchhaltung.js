@@ -143,6 +143,50 @@
     }
     const vorschlagOpt = () => (PRIVAT ? privatRegeln() : { regeln: true });
 
+    /* ---------- Eröffnung nachführen ---------- */
+
+    /** Geschäft: 2970 Gewinnvortrag. Privat: das Konto für Vortrag bzw. Eigenkapital/Vermögen im eigenen Kontenplan. */
+    const vortragKonto = (zeilen) => (zeilen.some((z) => z.konto === '2970') ? '2970'
+      : PRIVAT ? ((zeilen.find((z) => z.konto && String(z.bklasse) === '2' && /vortrag|eigenkapital|reinverm|vermögen/i.test(z.text)) || {}).konto || null) : null);
+
+    /**
+     * Wie «Eröffnungssaldi aktualisieren» in Banana, aber laufend: Die Eröffnungsbuchungen eines Jahres, die mit «Eröffnen»
+     * entstanden sind, folgen den Schlusssaldi des Vorjahres. Wird im Vorjahr nachträglich gebucht (späte Rechnung,
+     * Abgrenzung), passen sie sich an; Konten mit neuem Saldo kommen dazu, Konten ohne Saldo fallen weg.
+     * Ältere Eröffnungen (vor dieser Funktion) erkennt die App an Datum 1.1., Beleg 1 und Text «Eröffnung: …».
+     * Gibt true zurück, wenn sich etwas geändert hat.
+     */
+    function eroeffnungNachfuehren() {
+      if (!state.data) return false;
+      let geaendert = false;
+      for (const j of Object.keys(KP()).map(Number).sort((a, b) => a - b)) {
+        const vor = KP()[j - 1], plan = KP()[j];
+        if (!vor || !plan) continue;
+        const vortrag = vortragKonto(vor.zeilen);
+        if (!vortrag) continue;
+        const istEroeffnung = (b) => b.jahr === j && !b.vorschlag && (b.eroeffnung
+          || (b.datum === `${j}-01-01` && String(b.beleg) === '1' && /^Eröffnung: /.test(b.text || '') && (b.soll === vortrag || b.haben === vortrag)));
+        const alt = DB().filter(istEroeffnung);
+        if (!alt.length) continue;   // nicht mit «Eröffnen» eröffnet (z. B. importiert): nichts anfassen
+        const soll = L.eroeffnung(vor.zeilen, DB().filter((b) => b.jahr === j - 1 && !b.vorschlag), j, vortrag);
+        const kontoVon = (b) => (b.soll === vortrag ? b.haben : b.soll);
+        const nachKonto = new Map(alt.map((b) => [kontoVon(b), b]));
+        let pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0);
+        for (const n of soll) {
+          const k = kontoVon(n), b = nachKonto.get(k);
+          nachKonto.delete(k);
+          if (!b) { DB().push(Object.assign(n, { id: uid('b'), pos: ++pos, eroeffnung: true })); geaendert = true; continue; }
+          if (!b.eroeffnung) { b.eroeffnung = true; geaendert = true; }
+          if (b.soll !== n.soll || b.haben !== n.haben || Math.abs(b.betrag - n.betrag) > 0.004 || b.text !== n.text || b.datum !== n.datum) {
+            Object.assign(b, { soll: n.soll, haben: n.haben, betrag: n.betrag, text: n.text, datum: n.datum }); geaendert = true;
+          }
+        }
+        // Konten, die Ende Vorjahr keinen Saldo mehr haben
+        for (const b of nachKonto.values()) { DB().splice(DB().indexOf(b), 1); geaendert = true; }
+      }
+      return geaendert;
+    }
+
     /** Bankkonto, gegen das die E-Banking-Bewegungen gebucht werden: im Geschäft 1010 (Raiffeisen), privat das zuletzt gewählte. */
     function BANK_() {
       if (!PRIVAT) return '1010';
@@ -794,14 +838,12 @@
         S.kEdit = null; persist(); render(); toast('Konto gelöscht');
       } else if (a === 'eroeffnen') {
         const vor = KP()[jahr() - 1];
-        // Geschäft: 2970 Gewinnvortrag. Privat: das Konto für Vortrag bzw. Eigenkapital/Vermögen im eigenen Kontenplan.
-        const vortrag = vor.zeilen.some((z) => z.konto === '2970') ? '2970'
-          : PRIVAT ? ((vor.zeilen.find((z) => z.konto && String(z.bklasse) === '2' && /vortrag|eigenkapital|reinverm|vermögen/i.test(z.text)) || {}).konto || null) : null;
+        const vortrag = vortragKonto(vor.zeilen);
         if (!vortrag) { toast(PRIVAT ? 'Im Kontenplan fehlt ein Passivkonto für Vortrag, Eigenkapital oder Vermögen.' : 'Im Kontenplan fehlt das Konto 2970 für den Gewinnvortrag.', { fehler: true }); return; }
         KP()[jahr()] = { zeilen: JSON.parse(JSON.stringify(vor.zeilen)), mod: 0 };
         const er = L.eroeffnung(vor.zeilen, DB().filter((b) => b.jahr === jahr() - 1 && !b.vorschlag), jahr(), vortrag);
         let pos = DB().reduce((m, b) => Math.max(m, b.pos || 0), 0);
-        for (const b of er) DB().push(Object.assign(b, { id: uid('b'), pos: ++pos }));
+        for (const b of er) DB().push(Object.assign(b, { id: uid('b'), pos: ++pos, eroeffnung: true }));
         persist(); render(); toast(`Buchhaltung ${jahr()} eröffnet mit ${er.length} Eröffnungsbuchungen`);
       }
     });
@@ -950,6 +992,6 @@
     document.addEventListener('mousedown', (ev) => { if (S.bankMenu && state.view === VIEW && !ev.target.closest('.bh-bankmenu-wrap')) { S.bankMenu = false; render(); } });
     document.addEventListener('keydown', (ev) => { if (S.bankMenu && ev.key === 'Escape' && state.view === VIEW) { S.bankMenu = false; render(); } });
 
-    return { view, dossierHtml, ausgleichen };
+    return { view, dossierHtml, ausgleichen, eroeffnungNachfuehren };
   };
 })();

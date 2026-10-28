@@ -153,9 +153,21 @@
     merkeAbbild();
   }
 
+  /**
+   * Abhängige Buchungen nachführen: Eröffnungen (Saldi des Vorjahres) in beiden Buchhaltungen und in der privaten
+   * das GmbH-Konto und die Wertschriften. Die Reihenfolge zählt: Die Bank der GmbH bestimmt das GmbH-Konto privat,
+   * und dieses fliesst in die private Eröffnung des Folgejahres.
+   */
+  function nachfuehren() {
+    let anders = BH.eroeffnungNachfuehren();
+    anders = BHP.ausgleichen() || anders;
+    if (BHP.eroeffnungNachfuehren()) { anders = true; BHP.ausgleichen(); }
+    return anders;
+  }
+
   async function persist(opts) {
     offertenAbschliessen();
-    BHP.ausgleichen();   // Buchhaltung privat: GmbH-Konto und Wertschriften nachführen
+    nachfuehren();   // Eröffnungen und Buchhaltung privat (GmbH-Konto, Wertschriften) auf den neusten Stand
     stempeln();
     recompute();
     const r = await api.save(state.data, opts);
@@ -263,6 +275,8 @@
     const normBuchungen = (liste) => (liste || []).filter((b) => b && b.datum && C.isNum(b.betrag)).map((b, i) => ({
       id: b.id || uid('b'), jahr: +b.jahr || +b.datum.slice(0, 4), datum: b.datum, beleg: String(b.beleg == null ? '' : b.beleg), text: b.text || '',
       soll: String(b.soll == null ? '' : b.soll), haben: String(b.haben == null ? '' : b.haben), betrag: b.betrag, pos: C.isNum(b.pos) ? b.pos : i + 1, mod: b.mod || 0,
+      // Eröffnungsbuchung aus «Eröffnen»: wird nachgeführt, wenn sich das Vorjahr ändert
+      ...(b.eroeffnung ? { eroeffnung: true } : {}),
       vorschlag: !!b.vorschlag, sicher: !!b.sicher, bankText: b.bankText || '', bankSchluessel: b.bankSchluessel || '', bankDatum: b.bankDatum || null, bankNr: Number.isFinite(b.bankNr) ? b.bankNr : null,
       // Aufgeteilte Bankbewegung (z. B. Sammelzahlung): Teile verweisen auf den Hauptteil, der das Bank-Total kennt.
       ...(b.teilVon ? { teilVon: String(b.teilVon) } : {}), ...(C.isNum(b.bankTotal) ? { bankTotal: b.bankTotal } : {}),
@@ -1838,7 +1852,7 @@
       if (api.onChanged) api.onChanged(holeAenderungen);
       if (state.data && !state.veraltet) {
         const vorher = JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])); offertenAbschliessen();
-        const anders = einmalig() | BHP.ausgleichen();
+        const anders = einmalig() | nachfuehren();
         if (anders || JSON.stringify(state.data.offerten.map((p) => [p.id, p.status])) !== vorher) persist();
       }
     } catch (e) {
