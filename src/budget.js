@@ -86,8 +86,8 @@
       const akt = `${ein && !p.saldo && p.satz == null ? offerteWahl(p, o) : ''}${offenKn}${p.bereich === 'privat' ? `<label class="bu-om ${p.jahresausgabe ? 'an' : ''}" title="Jahresausgabe: einmalig oder einmal im Jahr fällig. In «Private Ausgaben bisher» ohne Vergleich mit der vergangenen Zeit."><input type="checkbox" data-bu="jahresausgabe" data-id="${p.id}"${p.jahresausgabe ? ' checked' : ''}>Jahresausgabe</label>` : ''}
         <button class="bu-nz ${p.notiz ? 'hat' : ''} ${notizAuf ? 'auf' : ''}" data-bu="notiz" data-id="${p.id}" title="${p.notiz ? esc(p.notiz) : 'Notiz hinzufügen'}" aria-label="Notiz" aria-expanded="${notizAuf}">${p.notiz ? 'Notiz' : '+ Notiz'}</button>
         <button class="btn small ghost" data-bu="weg" data-id="${p.id}" title="Posten löschen" aria-label="Posten löschen">×</button>`;
-      return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''} ${z.zaehlt ? '' : 'bu-nicht'}" data-id="${p.id}">
-        <td class="bu-po">${textFeld(p)}</td>
+      return `<tr class="zb bu-z ${o && o.status === 'abgesagt' ? 'bu-weg' : ''} ${z.zaehlt ? '' : 'bu-nicht'}" data-id="${p.id}" data-bereich="${p.bereich}">
+        <td class="bu-po"><span class="bu-griff" draggable="true" data-bu-zieh="${p.id}" title="Ziehen, um den Posten zu verschieben" aria-hidden="true">⋮⋮</span>${textFeld(p)}</td>
         ${zwei(p.bereich, betrag, ein ? `${p.satz == null ? `<button class="bu-null ${p.ohneMwst ? 'an' : ''}" data-bu="null" data-id="${p.id}" title="${p.ohneMwst ? '0 % MWST: kein Zuschlag. Klicken für den normalen Satz.' : 'Klicken, wenn für diesen Posten 0 % MWST gelten (kein Zuschlag).'}" aria-pressed="${!!p.ohneMwst}">0 %</button>` : ''}${fr(z.inkl)}` : '', 'bu-wert', 'num r bu-inkl')}
         <td class="r bu-akt">${akt}</td></tr>
         ${notizAuf ? `<tr class="bu-nzz"><td colspan="4"><input id="bu-${p.id}-notiz" class="inline bu-notiz" type="text" value="${esc(p.notiz)}" placeholder="Notiz zu diesem Posten" data-bu="feld" data-id="${p.id}" data-key="notiz"></td></tr>` : ''}`;
@@ -374,6 +374,77 @@
       }
       else if (a === 'link' && el.value) { p.offerteId = el.value; persist(); render(); }
     });
+
+    /* ---------- Verschieben mit der Maus (Drag and Drop) ---------- */
+
+    /**
+     * Posten «p» vor oder hinter den Posten «ziel» setzen (übernimmt dessen Gruppe) oder ans Ende einer Gruppe.
+     * Die neue Reihenfolge gilt auch in den folgenden Jahren: Dort kommt derselbe Posten hinter seinen neuen Vorgänger.
+     */
+    function verschiebe(p, ziel, nach, gruppe) {
+      const l = imJahr().filter((x) => x !== p);
+      let i;
+      if (ziel) { i = l.indexOf(ziel) + (nach ? 1 : 0); p.gruppe = ziel.gruppe; }
+      else {
+        p.gruppe = gruppe;
+        const g = l.filter((x) => x.bereich === p.bereich && x.gruppe === gruppe);
+        i = g.length ? l.indexOf(g[g.length - 1]) + 1 : l.filter((x) => BD.BEREICHE.findIndex(([k]) => k === x.bereich) <= BD.BEREICHE.findIndex(([k]) => k === p.bereich)).length;
+      }
+      l.splice(i, 0, p);
+      l.forEach((x, k) => { x.pos = k + 1; });
+      const imBereich = l.filter((x) => x.bereich === p.bereich), k = imBereich.indexOf(p);
+      const vorg = imBereich[k - 1], nachf = imBereich[k + 1], mit = [];
+      for (const y of spaeter(p)) {
+        const ly = posten().filter((x) => x.jahr === y.jahr && x !== y).sort((a, b) => a.pos - b.pos);
+        const v = vorg && ly.find((x) => x.serie && x.serie === vorg.serie), n = nachf && ly.find((x) => x.serie && x.serie === nachf.serie);
+        if (!v && !n) continue;
+        ly.splice(v ? ly.indexOf(v) + 1 : ly.indexOf(n), 0, y);
+        y.gruppe = p.gruppe;
+        ly.forEach((x, m) => { x.pos = m + 1; });
+        mit.push(y);
+      }
+      persist(); render();
+      hinweisSpaeter(mit, 'Die neue Reihenfolge');
+    }
+
+    let zieh = null;   // { id, bereich }
+    const markWeg = () => document.querySelectorAll('.bu-drop-vor, .bu-drop-nach, .bu-drop-in').forEach((x) => x.classList.remove('bu-drop-vor', 'bu-drop-nach', 'bu-drop-in'));
+    /** Ziel unter der Maus: eine Postenzeile oder ein Gruppenkopf im selben Bereich. */
+    function zielVon(ev) {
+      if (!zieh) return null;
+      const tr = ev.target.closest && ev.target.closest('tr.bu-z[data-id], tr.bu-g[data-gruppe]');
+      if (!tr) return null;
+      if (tr.classList.contains('bu-g')) {
+        if (tr.dataset.bereich !== zieh.bereich || tr.querySelector('.bu-gname-fix')) return null;
+        return { tr, gruppe: tr.dataset.gruppe };
+      }
+      const ziel = finde(tr.dataset.id);
+      if (!ziel || ziel.id === zieh.id || ziel.bereich !== zieh.bereich) return null;
+      const r = tr.getBoundingClientRect();
+      return { tr, ziel, nach: ev.clientY > r.top + r.height / 2 };
+    }
+    document.addEventListener('dragstart', (ev) => {
+      const h = ev.target.closest && ev.target.closest('[data-bu-zieh]');
+      if (!h || state.view !== 'budget') return;
+      const p = finde(h.dataset.buZieh); if (!p) return;
+      zieh = { id: p.id, bereich: p.bereich };
+      ev.dataTransfer.effectAllowed = 'move';
+      try { ev.dataTransfer.setData('text/plain', p.text || p.id); } catch (_) { /* egal */ }
+      const tr = h.closest('tr'); if (tr) { ev.dataTransfer.setDragImage(tr, 20, tr.offsetHeight / 2); setTimeout(() => tr.classList.add('bu-zieht'), 0); }
+    });
+    document.addEventListener('dragover', (ev) => {
+      const z = zielVon(ev); if (!z) return;
+      ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+      markWeg();
+      z.tr.classList.add(z.ziel ? (z.nach ? 'bu-drop-nach' : 'bu-drop-vor') : 'bu-drop-in');
+    });
+    document.addEventListener('drop', (ev) => {
+      const z = zielVon(ev); if (!z) return;
+      ev.preventDefault();
+      const p = finde(zieh.id); zieh = null; markWeg();
+      if (p) verschiebe(p, z.ziel || null, z.nach, z.gruppe);
+    });
+    document.addEventListener('dragend', () => { if (!zieh) return; zieh = null; markWeg(); document.querySelectorAll('.bu-zieht').forEach((x) => x.classList.remove('bu-zieht')); });
 
     return { view };
   };
