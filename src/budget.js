@@ -175,8 +175,8 @@
       const mitKonto = posten.filter((x) => x.bisher != null);
       const tot = { budget: posten.reduce((s, x) => s + x.budget, 0), bisher: mitKonto.reduce((s, x) => s + x.bisher, 0) };
       const pc = (x) => `${Math.round(x * 100)} %`;
-      // Skala bis 120 % des Budgets, damit Überschreitungen sichtbar bleiben; Strich bei 100 %.
-      const SKALA = 1.2, pos = (x) => `${(Math.min(x, SKALA) / SKALA * 100).toFixed(1)}%`;
+      // Skala bis 125 % des Budgets, damit Überschreitungen sichtbar bleiben; Strich bei 100 %, roter Pfeil erst darüber.
+      const SKALA = 1.25, pos = (x) => `${(Math.min(x, SKALA) / SKALA * 100).toFixed(1)}%`;
       /** Jahresausgaben (einmalig oder jährlich fällig): Die vergangene Zeit sagt nichts, es zählt nur über oder unter dem Budget. */
       const klasse = (anteil, jahresausgabe) => (anteil > 1.0001 ? 'ueber' : !jahresausgabe && anteil > zeit + 0.05 ? 'vor' : 'gut');
       const balken = (budget, bisher, jahresausgabe) => {
