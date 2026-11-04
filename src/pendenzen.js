@@ -64,16 +64,17 @@
 
     /** Sonntag der laufenden Kalenderwoche (Montag bis Sonntag). */
     function sonntag() { const d = new Date(heute + 'T12:00:00'); d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); return d.toISOString().slice(0, 10); }
-    /** Offene Pendenzen in zwei Teilen: diese Kalenderwoche (inkl. überfällige) und alles danach. */
-    /** Offene Pendenzen in Teilen: heute (inkl. überfällige), morgen, Rest dieser Kalenderwoche, ab nächster Woche. Leere Teile entfallen. */
+    /** Offene Pendenzen in Teilen: heute (inkl. überfällige), morgen, Rest dieser Kalenderwoche, nächste Kalenderwoche, nächste 30 Tage, später. Leere Teile entfallen. */
     function wochenTeile(ps) {
-      const so = sonntag(), morgen = P.addTage(heute, 1);
+      const so = sonntag(), so2 = P.addTage(so, 7), morgen = P.addTage(heute, 1);
       const teile = [
         ['pd-heute', 'Heute', ps.filter((p) => p.faellig && p.faellig <= heute)],
         ['pd-morgen', 'Morgen', ps.filter((p) => p.faellig === morgen)],
         ['pd-diese', 'Rest dieser Woche', ps.filter((p) => p.faellig > morgen && p.faellig <= so)],
-        ['pd-monat', 'Nächste 30 Tage', ps.filter((p) => p.faellig > so && p.faellig !== morgen && p.faellig <= P.addTage(heute, 30))],
-        ['pd-danach', 'Später', ps.filter((p) => !p.faellig || (p.faellig > so && p.faellig !== morgen && p.faellig > P.addTage(heute, 30)))],
+        // Nächste Kalenderwoche: Montag bis Sonntag nach dieser Woche (nicht die nächsten 7 Tage)
+        ['pd-naechste', 'Nächste Woche', ps.filter((p) => p.faellig > so && p.faellig !== morgen && p.faellig <= so2)],
+        ['pd-monat', 'Nächste 30 Tage', ps.filter((p) => p.faellig > so2 && p.faellig <= P.addTage(heute, 30))],
+        ['pd-danach', 'Später', ps.filter((p) => !p.faellig || (p.faellig > so2 && p.faellig > P.addTage(heute, 30)))],
       ];
       const kopf = (cls, text, n) => `<tr class="pd-trenn ${cls}"><td colspan="5"><span>${text}</span><span class="pd-trenn-n">${n}</span></td></tr>`;
       return teile.filter(([, , l]) => l.length).map(([cls, text, l]) => `<tbody data-zebra>${kopf(cls, text, l.length)}${l.map(zeile).join('')}</tbody>`).join('');

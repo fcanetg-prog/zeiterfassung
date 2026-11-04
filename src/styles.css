@@ -1011,3 +1011,4 @@ tr.bu-z:hover .bu-griff { opacity: .8; }
 .list.bu tr.bu-drop-in > td { box-shadow: inset 0 0 0 2px var(--teal-deep); }
 /* Aktionen einer Budgetzeile: nie abschneiden, das × bleibt immer sichtbar */
 .list.bu td.bu-akt { overflow: visible; }
+.list.pd tr.pd-trenn.pd-naechste td { background: #e9f1f6; color: #24577a; border-top: 3px solid #fff; border-bottom: 2px solid #8fb3cc; }
