@@ -143,7 +143,7 @@
     function richFeld(p, key, label, cls) {
       return `<div class="fld"><div class="pd-rich-kopf"><label for="pd-f-${key}">${label}</label>
           <span class="pd-rich-knoepfe"><button type="button" class="pd-fmt" data-pd="fmt" data-cmd="bold" title="Fett (Strg+B)"><b>F</b></button><button type="button" class="pd-fmt" data-pd="fmt" data-cmd="italic" title="Kursiv (Strg+I)"><i>K</i></button></span></div>
-        <div id="pd-f-${key}" class="pd-notiz pd-rich ${cls}" contenteditable="true" spellcheck="true" data-pd="rich" data-key="${key}">${richHtml(p, key)}</div></div>`;
+        <div id="pd-f-${key}" class="pd-notiz pd-rich ${cls}" contenteditable="true" spellcheck="false" data-pd="rich" data-key="${key}">${richHtml(p, key)}</div></div>`;
     }
 
     function drawerHtml() {

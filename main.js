@@ -421,6 +421,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      spellcheck: false,   // keine Rechtschreibprüfung (keine roten Unterstreichungen)
     },
   });
   // Vergrössern und verkleinern wie im Browser: Ctrl und +, − oder 0, oder Ctrl und Mausrad. Die Stufe bleibt gespeichert.
