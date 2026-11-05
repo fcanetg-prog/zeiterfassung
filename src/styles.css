@@ -675,8 +675,15 @@ tr.grp.klapp-kopf > td.klapp-titel { padding-left: 14px !important; }
 .of-box .of-liste tr.of-pz.auf > td { background: var(--k-hover); }
 .of-kopf .of-kunde, .of-kopf .of-name { font-size: var(--k-schrift); }
 .of-box .of-leer { padding: 10px 14px 10px var(--k-einzug) !important; font-size: var(--k-schrift); }
-.of-pz .of-kopf { flex-wrap: nowrap; padding-left: 2px; }
-.of-pz .of-kopf .of-kunde { flex: 0 0 170px; } .of-pz .of-kopf .of-name { flex: 0 0 250px; }
+/* Eine Zeile pro Eintrag; reicht der Platz nicht, werden zuerst Kunde, Projekt und Hinweise schmaler,
+   danach rutschen die Knöpfe in eine zweite Zeile (nichts verschwindet rechts aus dem Bild). */
+.of-pz .of-kopf { flex-wrap: nowrap; padding-left: 2px; row-gap: 4px; }
+/* Die Kopfzeile bestimmt die Tabellenbreite nicht mit, sondern füllt nur die verfügbare Breite */
+.of-pz .of-kopf { width: 0; min-width: 100%; box-sizing: border-box; }
+@media (max-width: 1060px) { .of-pz .of-kopf { flex-wrap: wrap; } }
+.of-pz .of-kopf .of-kunde { flex: 0 1 170px; min-width: 110px; } .of-pz .of-kopf .of-name { flex: 0 1 250px; min-width: 120px; }
+.of-pz .of-kopf .of-jbs { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.of-pz .of-kopf .grow { flex: 1 1 0; min-width: 0; }
 .of-pz .of-kopf .of-anz { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .of-pz .of-kopf .btn { flex: none; }
 /* Gleiche Schrift überall: Kunde fett (700), Spaltentitel 12px, Balkentitel 14px */
