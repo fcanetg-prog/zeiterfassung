@@ -182,9 +182,9 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(O.blockTotal(d.teile[0].bloecke[0]), 2150); assert.strictEqual(O.teilTotal(d.teile[0]), 3750); assert.strictEqual(O.teilTotal(d.teile[1]), 1980);
   assert.strictEqual(O.ansatzText(d.teile[0].bloecke[0].zeilen[1]), '215 Fr./h'); assert.strictEqual(O.ansatzText(d.teile[0].bloecke[1].zeilen[1]), '500 Fr.');
   assert.ok(!O.istEinfach(d.teile[0])); assert.ok(O.istEinfach(d.teile[1])); assert.strictEqual(O.kurz(d), '1a 3750.00 · 1980.00');
-  const h = O.html(d, { kunde: 'K & Co', name: 'Anlass', datum: '2026-10-11' }); assert.ok(h.includes('<b>Kostenvoranschlag 1a</b>')); assert.ok(h.includes('Test &amp; Co.')); assert.ok(h.includes('3750.00 Fr.'));
+  const h = O.html(d, { kunde: 'K & Co', name: 'Anlass', datum: '2026-10-11' }); assert.ok(/<b[^>]*>Kostenvoranschlag 1a<\/b>/.test(h)); assert.ok(h.includes('Test &amp; Co.')); assert.ok(h.includes('3750.00 Fr.'));
   assert.ok(h.includes('K &amp; Co')); assert.ok(h.includes('11. Oktober 2026')); assert.ok(h.includes('Alle Preise exkl. Mehrwertsteuer')); assert.ok(!h.includes('offeriert'));
-  assert.ok(O.html(Object.assign({}, d, { art: 'offerte' })).includes('<b>Offerte 1a</b>'));
+  assert.ok(/<b[^>]*>Offerte 1a<\/b>/.test(O.html(Object.assign({}, d, { art: 'offerte' }))));
   const t = O.latex(d); assert.ok(t.includes('Test \\& Co.')); assert.ok(t.includes('\\textit{Firma}')); assert.ok(t.includes('\\textbf{3750.00 Fr.}'));
   const r = O.ausAntwort('Gerne:\n```json\n' + JSON.stringify(d) + '\n```\nFertig.'); assert.ok(!r.fehler); assert.deepStrictEqual(r.doc, d);
   assert.ok(O.ausAntwort('kein json').fehler); assert.ok(O.ausAntwort('{"a":1}').fehler);
@@ -435,4 +435,14 @@ console.log('Alle Prüfungen bestanden.');
   assert.strictEqual(O.preisText(d.teile[0].bloecke[0].zeilen[0]), '250.00 Fr.');
   assert.ok(!('betrag' in d.teile[0].bloecke[0].zeilen[1]));
   console.log('Preis von Hand bestanden.');
+}
+// Offerten: gleiche Schriftgrösse im Kopfband auf allen Seiten
+{
+  const O = require('../src/offertdoc.js');
+  const lang = 'Ein sehr langer Untertitel '.repeat(6);
+  const h = O.html(O.normalize({ teile: [{ nummer: '1', titel: 'Kurz', bloecke: [] }, { nummer: '2', titel: lang, bloecke: [] }], leer: [{ titel: 'Referenzen', untertitel: 'Auswahl' }] }), {});
+  const g = [...h.matchAll(/<(b|span) style="font-size:([\d.]+)pt">/g)].map((m) => m[1] + m[2]);
+  assert.strictEqual(new Set(g.filter((x) => x[0] === 'b')).size, 1); assert.strictEqual(new Set(g.filter((x) => x[0] === 's')).size, 1);
+  assert.ok(+g.find((x) => x[0] === 's').slice(4) < 11);
+  console.log('Kopfband einheitlich bestanden.');
 }

@@ -153,7 +153,22 @@
     return Math.max(4, (PLATZ - hoechste) / 2);
   }
 
-  function teilHtml(d, t, oben, pt) {
+  /**
+   * Schriftgrössen im Kopfband, gleich auf allen Seiten einer Offerte: Titel höchstens 16 pt, Untertitel höchstens 11 pt;
+   * kleiner nur, wenn sonst der längste Titel bzw. Untertitel nicht auf eine Zeile passen würde.
+   */
+  function kopfGroessen(d) {
+    const platz = SEITE.b - 2 * SEITE.rand;
+    const passt = (laenge, max, breite) => Math.max(6, Math.min(max, platz / ((laenge + 2) * breite * PT)));
+    const titel = [...d.teile.map((t) => `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}`), ...d.leer.map((x) => x.titel)];
+    const unter = [...d.teile.map((t) => t.titel), ...d.leer.map((x) => x.untertitel)].filter((x) => x.trim());
+    return {
+      titel: Math.min(16, ...titel.map((x) => passt(x.length, 16, 0.6))),
+      unter: Math.min(11, ...unter.map((x) => passt(x.length, 11, 0.56))),
+    };
+  }
+
+  function teilHtml(d, t, oben, pt, kg) {
     const einfach = istEinfach(t);
     const spalten = einfach ? 2 : 5;
     let zeilen = '';
@@ -168,12 +183,10 @@
       });
     });
     const titel = `${ARTEN[d.art]}${t.nummer ? ' ' + t.nummer : ''}`;
-    // Titel im Kopfband ebenfalls einzeilig halten
-    const platz = SEITE.b - 2 * SEITE.rand;
-    const tpt = Math.max(6, Math.min(11, platz / ((t.titel.length + 2) * 0.56 * PT)));
+    // Titel im Kopfband einzeilig, Schriftgrössen gleich auf allen Seiten (kopfGroessen)
     return `<section class="folie">
       <header>
-        <h2><b>${esc(titel)}</b>${t.titel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(t.titel)}</span>` : ''}</h2></header>
+        <h2><b style="font-size:${kg.titel.toFixed(2)}pt">${esc(titel)}</b>${t.titel.trim() ? `<span style="font-size:${kg.unter.toFixed(2)}pt">${esc(t.titel)}</span>` : ''}</h2></header>
       <main style="font-size:${pt.toFixed(2)}pt;padding-top:${oben.toFixed(2)}mm">
       <table class="${einfach ? 'einfach' : ''}">
         <thead><tr>${einfach ? '<th>Was</th><th class="r">Total</th>' : '<th>Was</th><th>Aufwand</th><th class="r">Ansatz</th><th class="r">Preis</th><th class="r">Total</th>'}</tr></thead>
@@ -186,11 +199,9 @@
   }
 
   /** Zusätzliche Seite ohne Inhalt: nur das Kopfband mit Titel (und allenfalls Untertitel). */
-  function leerHtml(x) {
-    const platz = SEITE.b - 2 * SEITE.rand;
-    const tpt = Math.max(6, Math.min(11, platz / ((x.untertitel.length + 2) * 0.56 * PT)));
+  function leerHtml(x, kg) {
     return `<section class="folie">
-      <header><h2><b>${esc(x.titel)}</b>${x.untertitel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(x.untertitel)}</span>` : ''}</h2></header>
+      <header><h2><b style="font-size:${kg.titel.toFixed(2)}pt">${esc(x.titel)}</b>${x.untertitel.trim() ? `<span style="font-size:${kg.unter.toFixed(2)}pt">${esc(x.untertitel)}</span>` : ''}</h2></header>
       ${x.bild ? `<div class="seitenbild"><img src="__OFFERTE_SEITENBILD:${encodeURIComponent(x.bild)}__" alt=""></div>` : ''}</section>`;
   }
 
@@ -260,8 +271,9 @@
     const oben = tabellenOben(d);
     const pt = schriftDoc(d);
     // Zusätzliche Seiten an ihrer gewählten Stelle (nach Teilen, die es nicht mehr gibt: am Schluss)
-    const leerNach = (ort) => d.leer.filter((x) => (x.nach === ort) || (ort === 'ende' && /^teil-/.test(x.nach) && +x.nach.slice(5) >= d.teile.length)).map(leerHtml).join('\n');
-    const folien = [titel, leerNach('titel'), ...d.teile.map((t, i) => `${teilHtml(d, t, oben, pt)}\n${leerNach(`teil-${i}`)}`), leerNach('ende')].filter(Boolean).join('\n');
+    const kg = kopfGroessen(d);
+    const leerNach = (ort) => d.leer.filter((x) => (x.nach === ort) || (ort === 'ende' && /^teil-/.test(x.nach) && +x.nach.slice(5) >= d.teile.length)).map((x) => leerHtml(x, kg)).join('\n');
+    const folien = [titel, leerNach('titel'), ...d.teile.map((t, i) => `${teilHtml(d, t, oben, pt, kg)}\n${leerNach(`teil-${i}`)}`), leerNach('ende')].filter(Boolean).join('\n');
     // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
     const b = m.bestaetigung;
     return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Vertrag' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
