@@ -426,3 +426,13 @@ console.log('Alle Prüfungen bestanden.');
   assert.deepStrictEqual(x.map((p) => p.serie).sort(), y.map((p) => p.serie).sort());
   console.log('Zwei Rechner bestanden.');
 }
+
+// Offerten: Preis von Hand
+{
+  const O = require('../src/offertdoc.js');
+  const d = O.normalize({ art: 'offerte', teile: [{ bloecke: [{ titel: 'A', zeilen: [{ was: 'x', aufwand: '2h', ansatz: 100, preis: 'hand', betrag: 250 }, { was: 'y', aufwand: '1h', ansatz: 100 }] }] }] });
+  assert.strictEqual(O.zeilenPreis(d.teile[0].bloecke[0].zeilen[0]), 250); assert.strictEqual(O.teilTotal(d.teile[0]), 350);
+  assert.strictEqual(O.preisText(d.teile[0].bloecke[0].zeilen[0]), '250.00 Fr.');
+  assert.ok(!('betrag' in d.teile[0].bloecke[0].zeilen[1]));
+  console.log('Preis von Hand bestanden.');
+}

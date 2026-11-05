@@ -6,7 +6,7 @@
   'use strict';
 
   const ARTEN = { offerte: 'Offerte', kostenvoranschlag: 'Kostenvoranschlag' };
-  const PREIS = ['auto', 'inklusive', 'null'];   // berechnet, «inklusive» (nicht verrechnet), 0.00 (Position entfällt)
+  const PREIS = ['auto', 'hand', 'inklusive', 'null'];   // berechnet, von Hand, «inklusive» (nicht verrechnet), 0.00 (Position entfällt)
   const OHNE = { inklusive: 'inklusive' };   // Wort statt eines Betrags
   const round2 = (x) => Math.round(x * 100 + 1e-6) / 100;
   const zahl = (x) => {
@@ -39,6 +39,8 @@
             ansatzEinheit: text(z && z.ansatzEinheit).trim(),
             // «offeriert» aus alten Offerten heisst dasselbe wie «inklusive»: wird nicht verrechnet.
             preis: z && z.preis === 'offeriert' ? 'inklusive' : PREIS.includes(z && z.preis) ? z.preis : 'auto',
+            // Von Hand eingetragener Preis (überschreibt Aufwand × Ansatz)
+            ...(z && z.preis === 'hand' ? { betrag: zahl(z.betrag) } : {}),
           })),
         })),
       })),
@@ -68,6 +70,7 @@
     return a.menge;
   }
   function zeilenPreis(z) {
+    if (z.preis === 'hand') return round2(z.betrag || 0);
     if (z.preis !== 'auto') return 0;
     const m = mengeFuerAnsatz(z);
     return round2(m == null ? z.ansatz : m * z.ansatz);

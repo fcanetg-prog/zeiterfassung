@@ -367,8 +367,10 @@
               <td>${feld(`t.${i}.b.${j}.z.${k}.aufwand`, z.aufwand, 'placeholder="2h, pauschal" aria-label="Aufwand"')}</td>
               <td>${feld(`t.${i}.b.${j}.z.${k}.ansatz`, (z.ansatz || '') + (z.ansatzEinheit ? '/' + z.ansatzEinheit : ''), 'class="r" title="Zahl in Franken. Mit «/Tag» gilt der Ansatz pro Tag: 8 Stunden Aufwand sind ein Tag." aria-label="Ansatz"')}</td>
               <td><select data-of="f" data-pfad="t.${i}.b.${j}.z.${k}.preis" aria-label="Preisart">
-                <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
-              <td class="r num ${(z.preis === 'inklusive' || z.preis === 'offeriert') ? 'of-ink' : ''}" id="os-z${i}-${j}-${k}">${O.preisText(z)}</td><td></td>
+                <option value="auto" ${z.preis === 'auto' ? 'selected' : ''}>berechnet</option><option value="hand" ${z.preis === 'hand' ? 'selected' : ''}>von Hand</option><option value="inklusive" ${z.preis === 'inklusive' ? 'selected' : ''}>inklusive</option><option value="null" ${z.preis === 'null' ? 'selected' : ''}>0.00</option></select></td>
+              ${z.preis === 'auto' || z.preis === 'hand'
+                ? `<td class="r num"><input id="os-z${i}-${j}-${k}" class="r of-preisfeld ${z.preis === 'hand' ? 'hand' : ''}" type="text" inputmode="decimal" value="${O.zeilenPreis(z).toFixed(2)}" data-of="preis" data-pfad="t.${i}.b.${j}.z.${k}" title="Berechnet aus Aufwand × Ansatz. Du kannst den Preis überschreiben; leer lassen rechnet wieder automatisch." aria-label="Preis"></td>`
+                : `<td class="r num ${(z.preis === 'inklusive' || z.preis === 'offeriert') ? 'of-ink' : ''}" id="os-z${i}-${j}-${k}">${O.preisText(z)}</td>`}<td></td>
               <td><button class="btn small ghost" data-of="z-del" data-t="${i}" data-b="${j}" data-z="${k}" title="Zeile löschen">×</button></td></tr>`).join('')}
             <tr class="of-plus"><td colspan="7"><button class="btn small" data-of="z-neu" data-t="${i}" data-b="${j}">+ Zeile</button></td></tr>`).join('')}
           </tbody>
@@ -441,7 +443,10 @@
         const m = /^([^/]*)(?:\/\s*(.*))?$/.exec(String(wert));
         ziel.ansatz = parseFloat(m[1].replace(/[’'\s]/g, '').replace(/fr\.?/i, '').replace(',', '.')) || 0;
         ziel.ansatzEinheit = m[2] == null ? '' : O.einheitNorm(m[2]);
-      } else ziel[key] = wert;
+      } else if (key === 'preis' && wert === 'hand' && ziel.preis !== 'hand') {
+        // «von Hand» gewählt: mit dem bisher berechneten Preis beginnen
+        ziel.betrag = O.zeilenPreis(Object.assign({}, ziel, { preis: 'auto' })); ziel.preis = 'hand';
+      } else { ziel[key] = wert; if (key === 'preis' && wert !== 'hand') delete ziel.betrag; }
     }
     /** Summen im Editor nachführen, ohne die Eingabefelder neu aufzubauen. */
     function summen(d) {
@@ -450,7 +455,12 @@
         const ee = $(`#os-e${i}`); if (ee) ee.textContent = O.fr(O.preis2Betrag(t));
         t.bloecke.forEach((b, j) => {
           const eb = $(`#os-b${i}-${j}`); if (eb) eb.textContent = O.fr(O.blockTotal(b));
-          b.zeilen.forEach((z, k) => { const ez = $(`#os-z${i}-${j}-${k}`); if (ez) { ez.textContent = O.preisText(z); ez.classList.toggle('of-ink', z.preis === 'inklusive' || z.preis === 'offeriert'); } });
+          b.zeilen.forEach((z, k) => {
+            const ez = $(`#os-z${i}-${j}-${k}`); if (!ez) return;
+            // Preisfeld: berechneten Preis nachführen, aber nicht, während man darin tippt
+            if (ez.tagName === 'INPUT') { if (document.activeElement !== ez) ez.value = O.zeilenPreis(z).toFixed(2); ez.classList.toggle('hand', z.preis === 'hand'); return; }
+            ez.textContent = O.preisText(z); ez.classList.toggle('of-ink', z.preis === 'inklusive' || z.preis === 'offeriert');
+          });
         });
       });
     }
@@ -668,6 +678,15 @@
         const o = offen(); if (!o) return;
         if (el.type === 'checkbox') return;
         setze(o.doc, el.dataset.pfad, el.value); summen(o.doc);
+      } else if (a === 'preis') {
+        // Preis von Hand: Zahl → «von Hand»; leer → wieder berechnet
+        const o = offen(); if (!o) return;
+        const [, ti, , bj, , zk] = el.dataset.pfad.split('.'), z = o.doc.teile[+ti].bloecke[+bj].zeilen[+zk];
+        const t = el.value.trim();
+        if (!t) { z.preis = 'auto'; delete z.betrag; }
+        else { const v = parseFloat(t.replace(/[’'\s]/g, '').replace(/fr\.?/i, '').replace(',', '.')); if (!isFinite(v)) return; z.preis = 'hand'; z.betrag = Math.round(v * 100) / 100; }
+        summen(o.doc);
+        const sel = document.querySelector(`select[data-pfad="${el.dataset.pfad}.preis"]`); if (sel) sel.value = z.preis;
       } else if (a === 'n-feld') state.off.neu[el.dataset.key] = el.value;
       else if (a === 'd-text') state.off.dialog.text = el.value;
       else if (a === 'p-feld') { const p = projekt(el.dataset.pid); if (p) p[el.dataset.key] = el.value; }
@@ -676,6 +695,7 @@
     document.addEventListener('change', (ev) => {
       const el = ev.target, a = el.dataset && el.dataset.of;
       if (!a || !state.data || state.view !== 'offerten') return;
+      if (a === 'preis') { persist(); render(); return; }
       if (a === 'f') {
         const o = offen(); if (!o) return;
         if (el.type === 'checkbox') setze(o.doc, el.dataset.pfad, el.checked);

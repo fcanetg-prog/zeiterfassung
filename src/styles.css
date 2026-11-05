@@ -1012,3 +1012,7 @@ tr.bu-z:hover .bu-griff { opacity: .8; }
 /* Aktionen einer Budgetzeile: nie abschneiden, das × bleibt immer sichtbar */
 .list.bu td.bu-akt { overflow: visible; }
 .list.pd tr.pd-trenn.pd-naechste td { background: #e9f1f6; color: #24577a; border-top: 3px solid #fff; border-bottom: 2px solid #8fb3cc; }
+/* Offerten: Preis von Hand überschreibbar */
+input.of-preisfeld { width: 100%; text-align: right; border-color: transparent; background: transparent; padding: 3px 5px; font-variant-numeric: tabular-nums; }
+input.of-preisfeld:hover, input.of-preisfeld:focus { border-color: var(--line); background: #fff; }
+input.of-preisfeld.hand { color: var(--teal-deep); font-weight: 600; background: #eef7f7; }
