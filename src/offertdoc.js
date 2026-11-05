@@ -23,7 +23,12 @@
     return {
       art: ARTEN[d.art] ? d.art : 'offerte',
       // Zusätzliche Seiten ohne Inhalt (nur Kopfband mit Titel), am Schluss der Offerte
-      leer: (Array.isArray(d.leer) ? d.leer : []).slice(0, 20).map((x) => ({ titel: text(x && x.titel), untertitel: text(x && x.untertitel) })),
+      // nach: 'titel' (vor den Teilen), 'teil-N' (nach Teil N, ab 0) oder 'ende'; bild: Datei in «Offerten/Seitenbilder»
+      leer: (Array.isArray(d.leer) ? d.leer : []).slice(0, 20).map((x) => ({
+        titel: text(x && x.titel), untertitel: text(x && x.untertitel),
+        nach: /^(titel|ende|teil-\d+)$/.test(text(x && x.nach)) ? x.nach : 'ende',
+        ...(x && x.bild ? { bild: text(x.bild) } : {}),
+      })),
       teile: teile.map((t) => ({
         nummer: text(t && t.nummer).trim(),
         titel: text(t && t.titel),
@@ -185,7 +190,8 @@
     const platz = SEITE.b - 2 * SEITE.rand;
     const tpt = Math.max(6, Math.min(11, platz / ((x.untertitel.length + 2) * 0.56 * PT)));
     return `<section class="folie">
-      <header><h2><b>${esc(x.titel)}</b>${x.untertitel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(x.untertitel)}</span>` : ''}</h2></header></section>`;
+      <header><h2><b>${esc(x.titel)}</b>${x.untertitel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(x.untertitel)}</span>` : ''}</h2></header>
+      ${x.bild ? `<div class="seitenbild"><img src="__OFFERTE_SEITENBILD:${encodeURIComponent(x.bild)}__" alt=""></div>` : ''}</section>`;
   }
 
   const NAVY = '#18334e', TEAL = '#27b9bf', TEAL_DUNKEL = '#1a8f96', ORANGE = '#e07a2f';
@@ -232,6 +238,9 @@
     tfoot td:last-child { padding-right: .6em; }
     tfoot tr.p2 td { background: linear-gradient(#5d7389, #5d7389) top / 100% .25mm no-repeat ${NAVY}; }
     tbody tr:not(.bt) td:last-child { padding-right: .6em; }
+    /* Bild auf einer zusätzlichen Seite: mittig im freien Bereich, ganz sichtbar */
+    .seitenbild { position: absolute; left: ${SEITE.rand}mm; right: ${SEITE.rand}mm; top: ${SEITE.kopf + 1.1 + 6}mm; bottom: ${SEITE.fuss}mm; display: flex; align-items: center; justify-content: center; }
+    .seitenbild img { max-width: 100%; max-height: 100%; object-fit: contain; }
     footer { position: absolute; right: ${SEITE.rand}mm; bottom: 4.6mm; font-size: 9pt; color: #55656f; }
   `;
 
@@ -250,7 +259,9 @@
         ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;
     const oben = tabellenOben(d);
     const pt = schriftDoc(d);
-    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t, oben, pt)).join('\n')}\n${d.leer.map(leerHtml).join('\n')}`;
+    // Zusätzliche Seiten an ihrer gewählten Stelle (nach Teilen, die es nicht mehr gibt: am Schluss)
+    const leerNach = (ort) => d.leer.filter((x) => (x.nach === ort) || (ort === 'ende' && /^teil-/.test(x.nach) && +x.nach.slice(5) >= d.teile.length)).map(leerHtml).join('\n');
+    const folien = [titel, leerNach('titel'), ...d.teile.map((t, i) => `${teilHtml(d, t, oben, pt)}\n${leerNach(`teil-${i}`)}`), leerNach('ende')].filter(Boolean).join('\n');
     // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
     const b = m.bestaetigung;
     return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Vertrag' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
@@ -365,6 +376,7 @@
 \\usepackage[left=15mm,right=15mm,top=22mm,bottom=18mm]{geometry}
 \\usepackage{tabularx}
 \\usepackage{xcolor}
+\\usepackage{graphicx}
 \\definecolor{inklusive}{RGB}{232,116,44}
 \\pagestyle{empty}
 \\setlength{\\parindent}{0pt}
@@ -372,7 +384,7 @@
 \\begin{document}
 
 ${d.teile.map((t) => teilLatex(d, t)).join('\n')}
-${d.leer.map((x) => `\\newpage\n{\\Large\\textbf{${tex(x.titel)}}}${x.untertitel.trim() ? `\\\\[2mm]\n${tex(x.untertitel)}` : ''}\n`).join('\n')}
+${d.leer.map((x) => `\\newpage\n{\\Large\\textbf{${tex(x.titel)}}}${x.untertitel.trim() ? `\\\\[2mm]\n${tex(x.untertitel)}` : ''}\n${x.bild ? `\n\\vfill\\begin{center}\\includegraphics[width=\\linewidth,height=0.75\\textheight,keepaspectratio]{${x.bild}}\\end{center}\\vfill\n` : ''}`).join('\n')}
 \\end{document}
 `;
   }

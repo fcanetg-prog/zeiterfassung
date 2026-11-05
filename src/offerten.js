@@ -412,10 +412,17 @@
         <section class="pane of-leer">
           <div class="of-leer-kopf"><b>Zusätzliche leere Seiten</b>
             <label>Anzahl <input id="of-leer-n" type="number" min="0" max="20" step="1" value="${(d.leer || []).length}" data-of="leer-n" aria-label="Anzahl zusätzlicher Seiten"></label>
-            <span class="dim">Am Schluss des PDF, nur mit dem blauen Kopfband.</span></div>
-          ${(d.leer || []).map((x, n) => `<div class="of-leer-z"><span class="of-leer-nr">Seite ${n + 1}</span>
+            <span class="dim">Seiten mit dem blauen Kopfband, auf Wunsch mit einem Bild in der Mitte (z. B. Screenshot aus einer alten Offerte).</span></div>
+          ${(d.leer || []).map((x, n) => `<div class="of-leer-z of-drop" data-drop="seitenbild" data-n="${n}"><span class="of-leer-nr">Seite ${n + 1}</span>
             ${feld(`leer.${n}.titel`, x.titel, 'placeholder="Titel im blauen Kopfband" aria-label="Titel der leeren Seite ' + (n + 1) + '"')}
-            ${feld(`leer.${n}.untertitel`, x.untertitel, 'placeholder="Untertitel (optional)" aria-label="Untertitel der leeren Seite ' + (n + 1) + '"')}</div>`).join('')}
+            ${feld(`leer.${n}.untertitel`, x.untertitel, 'placeholder="Untertitel (optional)" aria-label="Untertitel der leeren Seite ' + (n + 1) + '"')}
+            <select data-of="f" data-pfad="leer.${n}.nach" aria-label="Wo die Seite steht" title="Wo im PDF diese Seite steht">
+              <option value="titel" ${x.nach === 'titel' ? 'selected' : ''}>nach der Titelseite</option>
+              ${d.teile.map((t, i) => `<option value="teil-${i}" ${x.nach === `teil-${i}` ? 'selected' : ''}>nach ${esc(O.ARTEN[d.art])}${t.nummer ? ' ' + esc(t.nummer) : ` (Teil ${i + 1})`}</option>`).join('')}
+              <option value="ende" ${!x.nach || x.nach === 'ende' || (/^teil-/.test(x.nach) && +x.nach.slice(5) >= d.teile.length) ? 'selected' : ''}>am Schluss</option></select>
+            <span class="of-leer-bild">${x.bild
+    ? `<img class="of-sb-vorschau" data-sb="${esc(x.bild)}" alt="" title="${esc(x.bild)}"><span class="of-chip of-datei"><span class="of-sb-name" title="${esc(x.bild)}">${esc(x.bild)}</span><button data-of="sb-weg" data-n="${n}" title="Bild entfernen" aria-label="Bild entfernen">×</button></span>`
+    : `<button class="btn small" data-of="sb-neu" data-n="${n}" title="Ein Bild wählen oder aus dem Explorer hierher ziehen">+ Bild</button>`}</span></div>`).join('')}
         </section>
         ${dialogHtml()}`;
     }
@@ -432,9 +439,29 @@
       </div></div>`;
     }
 
-    function view() { setTimeout(alteNeuLesen, 0); return state.off.edit ? viewEditor() : viewListe(); }
+    function view() { setTimeout(alteNeuLesen, 0); if (state.off.edit) setTimeout(vorschauenLaden, 0); return state.off.edit ? viewEditor() : viewListe(); }
 
     /* ---------- Aktionen ---------- */
+
+    /** Bild für eine zusätzliche Seite wählen (oder hineingezogene Datei) und ablegen. */
+    async function seitenbild(n, pfade) {
+      const o = offen(); if (!o || !o.doc.leer[n]) return;
+      const r = api.offertSeitenbild ? await api.offertSeitenbild(pfade || null) : { fehler: 'Nur in der Desktop-App.' };
+      if (!r || r.canceled) return;
+      if (r.fehler) { toast(r.fehler, { fehler: true }); return; }
+      o.doc.leer[n].bild = r.datei; if (r.vorschau) vorschauCache.set(r.datei, r.vorschau);
+      persist(); render();
+    }
+    /** Vorschaubilder der Seitenbilder im Editor (aus dem Datenordner, einmal geladen). */
+    const vorschauCache = new Map();
+    function vorschauenLaden() {
+      for (const img of document.querySelectorAll('img.of-sb-vorschau')) {
+        const f = img.dataset.sb;
+        if (vorschauCache.has(f)) { img.src = vorschauCache.get(f); continue; }
+        if (!api.offertSeitenbildLesen) continue;
+        api.offertSeitenbildLesen(f).then((r) => { if (r && r.vorschau) { vorschauCache.set(f, r.vorschau); document.querySelectorAll(`img.of-sb-vorschau[data-sb="${CSS.escape(f)}"]`).forEach((e) => { e.src = r.vorschau; }); } });
+      }
+    }
 
     function setze(doc, pfad, wert) {
       const teile = pfad.split('.');
@@ -551,7 +578,8 @@
         if (!pdfs.length) { toast('Alte Offerten bitte als PDF hineinziehen.', { fehler: true }); return; }
         if (pdfs.length < pfade.length) toast(`${pfade.length - pdfs.length} Datei(en) übersprungen: alte Offerten nur als PDF.`);
         alteHochladen(pdfs);
-      } else { const p = projekt(z.dataset.pid); if (p) anhangHinzu(p, pfade); }
+      } else if (z.dataset.drop === 'seitenbild') seitenbild(+z.dataset.n, pfade);
+      else { const p = projekt(z.dataset.pid); if (p) anhangHinzu(p, pfade); }
     });
 
     document.addEventListener('click', (ev) => {
@@ -566,6 +594,9 @@
         case 'jb-neu': { const j = jahrNeu(p); persist(); render(); const f = document.getElementById(`ojb-${p.id}-${j}`); if (f) { f.focus(); f.select(); } break; }
         case 'jb-weg': { const alt = p.jahresBetraege[ds.jahr]; delete p.jahresBetraege[ds.jahr]; persist(); render();
           toast(`Betrag ${ds.jahr} entfernt`, { actionLabel: 'Rückgängig', action: () => { (p.jahresBetraege || (p.jahresBetraege = {}))[ds.jahr] = alt; persist(); render(); } }); break; }
+        case 'sb-neu': seitenbild(+ds.n); break;
+        case 'sb-weg': { const o2 = offen(); if (!o2) break; const x = o2.doc.leer[+ds.n], alt = x.bild; delete x.bild; persist(); render();
+          toast('Bild entfernt', { actionLabel: 'Rückgängig', action: () => { x.bild = alt; persist(); render(); } }); break; }
         case 'p-auf': if (state.off.umgekehrt.has(ds.pid)) state.off.umgekehrt.delete(ds.pid); else state.off.umgekehrt.add(ds.pid); render(); break;
         case 'n-hoch': { hochladen().then((h) => { if (!h || !state.off.neu) return; Object.assign(state.off.neu, { doc: h.doc, quelle: h.name, art: h.doc.art }); render(); toast(`${h.name} eingelesen`); }); break; }
         case 'e-hoch': { hochladen().then((h) => { const o2 = offen(); if (!h || !o2) return; const ziel = o2.v, alt = ziel.doc; h.doc.art = alt.art; ziel.doc = h.doc; persist(); render();
@@ -708,7 +739,7 @@
       if (a === 'leer-n') {
         const o = offen(); if (!o) return;
         const n = Math.max(0, Math.min(20, parseInt(el.value, 10) || 0)), l = o.doc.leer || (o.doc.leer = []);
-        while (l.length < n) l.push({ titel: '', untertitel: '' });
+        while (l.length < n) l.push({ titel: '', untertitel: '', nach: 'ende' });
         l.length = n;
         persist(); render();
         const f = document.querySelector(`[data-pfad="leer.${n - 1}.titel"]`); if (f && !f.value) f.focus();

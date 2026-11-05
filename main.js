@@ -247,6 +247,13 @@ function bildAlsCss(basis) {
 /** Setzt Titelbild und Logo aus dem Ordner «Vorlagen» in die Offerte ein; fehlen sie, steht der Firmenname als Text. */
 function offertBilder(html) {
   const titel = bildAlsCss('offerte-titel');
+  // Bilder auf zusätzlichen Seiten (z. B. Screenshot aus einer alten Offerte) aus «Offerten/Seitenbilder»
+  html = html.replace(/__OFFERTE_SEITENBILD:([^_<>"]+?)__/g, (_m, name) => {
+    try {
+      const datei = path.basename(decodeURIComponent(name)), typ = { png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[datei.split('.').pop().toLowerCase()] || 'image/jpeg';
+      return `data:${typ};base64,${fs.readFileSync(path.join(dataDir(), 'Offerten', 'Seitenbilder', datei)).toString('base64')}`;
+    } catch { return ''; }
+  });
   return html.split('__OFFERTE_TITELBILD__').join(titel || '');
 }
 function speichereOffertBilder(bilder) {
@@ -601,6 +608,30 @@ if (!app.requestSingleInstanceLock()) {
       return anhaengeAblegen(r.filePaths);
     });
     ipcMain.handle('offerte:anhangAblegen', (_e, pfade) => anhaengeAblegen(nurDateien(pfade)));
+    // Bild für eine zusätzliche Seite der Offerte: unter «Offerten/Seitenbilder» ablegen
+    ipcMain.handle('offerte:seitenbild', async (_e, pfade) => {
+      let quellen = nurDateien(pfade);
+      if (!pfade) {
+        const r = await dialog.showOpenDialog(win, { title: 'Bild für die Seite wählen', filters: [{ name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }], properties: ['openFile'] });
+        if (r.canceled || !r.filePaths.length) return { canceled: true };
+        quellen = r.filePaths;
+      }
+      quellen = quellen.filter((f) => /\.(png|jpe?g|gif|webp)$/i.test(f)).slice(0, 1);
+      if (!quellen.length) return { fehler: 'Bitte ein Bild wählen (PNG, JPG, GIF oder WEBP).' };
+      try {
+        const dir = path.join(dataDir(), 'Offerten', 'Seitenbilder');
+        fs.mkdirSync(dir, { recursive: true });
+        const roh = fs.readFileSync(quellen[0]);
+        const name = path.basename(quellen[0]).replace(/[\\/:*?"<>|_]/g, '-');
+        let datei = name, n = 1;
+        while (fs.existsSync(path.join(dir, datei)) && !fs.readFileSync(path.join(dir, datei)).equals(roh)) datei = name.replace(/(\.[^.\s]+)?$/, ` (${++n})$1`);
+        if (!fs.existsSync(path.join(dir, datei))) fs.writeFileSync(path.join(dir, datei), roh);
+        return { datei, name: path.basename(quellen[0]), vorschau: `data:image/${/\.png$/i.test(datei) ? 'png' : 'jpeg'};base64,${roh.toString('base64')}` };
+      } catch (err) { return { fehler: `Das Bild konnte nicht übernommen werden: ${err.message}` }; }
+    });
+    ipcMain.handle('offerte:seitenbildLesen', (_e, datei) => {
+      try { const f = path.join(dataDir(), 'Offerten', 'Seitenbilder', path.basename(String(datei))); const roh = fs.readFileSync(f); return { vorschau: `data:image/${/\.png$/i.test(f) ? 'png' : 'jpeg'};base64,${roh.toString('base64')}` }; } catch { return { fehler: 'fehlt' }; }
+    });
     /** Aus dem Explorer hineingezogene Dateien: nur bestehende Dateien (keine Ordner). */
     function nurDateien(pfade) {
       return (Array.isArray(pfade) ? pfade : []).map(String).filter((f) => { try { return fs.statSync(f).isFile(); } catch { return false; } });

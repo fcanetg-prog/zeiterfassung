@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('api', {
   offertAnhangOeffnen: (datei) => ipcRenderer.invoke('offerte:anhangOeffnen', datei),
   offertAlteAblegen: (pfade) => ipcRenderer.invoke('offerte:alteAblegen', pfade),
   offertAnhangAblegen: (pfade) => ipcRenderer.invoke('offerte:anhangAblegen', pfade),
+  offertSeitenbild: (pfade) => ipcRenderer.invoke('offerte:seitenbild', pfade),
+  offertSeitenbildLesen: (datei) => ipcRenderer.invoke('offerte:seitenbildLesen', datei),
   pfadVon: (file) => { try { return webUtils.getPathForFile(file); } catch { return ''; } },
   offertDateiWeg: (art, datei, zurueck) => ipcRenderer.invoke('offerte:dateiWeg', art, datei, !!zurueck),
   offertOriginalLesen: (datei) => ipcRenderer.invoke('offerte:originalLesen', datei),

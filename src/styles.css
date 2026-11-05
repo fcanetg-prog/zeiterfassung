@@ -1028,5 +1028,9 @@ input.of-preisfeld.hand { color: var(--teal-deep); font-weight: 600; background:
 .of-leer-kopf { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .of-leer-kopf label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .of-leer-kopf input { width: 64px; }
-.of-leer-z { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 8px; align-items: center; margin-top: 8px; }
+.of-leer-z { display: grid; grid-template-columns: 60px minmax(0, 1fr) minmax(0, 1fr) 190px 230px; gap: 8px; align-items: center; margin-top: 8px; padding: 4px; border-radius: 6px; }
+.of-leer-bild { display: flex; align-items: center; gap: 6px; min-width: 0; }
+img.of-sb-vorschau { height: 34px; max-width: 60px; object-fit: contain; border: 1px solid var(--line); border-radius: 3px; background: #fff; }
+.of-leer-bild .of-chip { min-width: 0; }
+.of-sb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; font-size: 12px; }
 .of-leer-nr { font-size: 12px; color: var(--muted); }
