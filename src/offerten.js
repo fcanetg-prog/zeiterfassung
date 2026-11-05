@@ -409,6 +409,14 @@
         ${fest ? `<div class="of-fest">Diese Fassung ist ${o.p.status === 'abgesagt' ? 'abgesagt' : 'bestätigt'}. Änderungen sind weiterhin möglich, für eine neue Runde stellst du das Projekt besser zurück auf offen und legst eine neue Fassung an.</div>` : ''}
         ${d.teile.map((t, i) => teilEditor(d, t, i)).join('')}
         <div class="row of-unten"><button class="btn" data-of="t-neu">+ Teil</button></div>
+        <section class="pane of-leer">
+          <div class="of-leer-kopf"><b>Zusätzliche leere Seiten</b>
+            <label>Anzahl <input id="of-leer-n" type="number" min="0" max="20" step="1" value="${(d.leer || []).length}" data-of="leer-n" aria-label="Anzahl zusätzlicher Seiten"></label>
+            <span class="dim">Am Schluss des PDF, nur mit dem blauen Kopfband.</span></div>
+          ${(d.leer || []).map((x, n) => `<div class="of-leer-z"><span class="of-leer-nr">Seite ${n + 1}</span>
+            ${feld(`leer.${n}.titel`, x.titel, 'placeholder="Titel im blauen Kopfband" aria-label="Titel der leeren Seite ' + (n + 1) + '"')}
+            ${feld(`leer.${n}.untertitel`, x.untertitel, 'placeholder="Untertitel (optional)" aria-label="Untertitel der leeren Seite ' + (n + 1) + '"')}</div>`).join('')}
+        </section>
         ${dialogHtml()}`;
     }
 
@@ -431,6 +439,7 @@
     function setze(doc, pfad, wert) {
       const teile = pfad.split('.');
       if (pfad === 'art') { doc.art = wert; return; }
+      if (teile[0] === 'leer') { const x = (doc.leer || [])[+teile[1]]; if (x) x[teile[2]] = wert; return; }
       let ziel = doc.teile[+teile[1]];
       let i = 2;
       if (teile[2] === 'rabatt') { if (!ziel.rabatt) return; ziel.rabatt[teile[3]] = teile[3] === 'betrag' ? Math.abs(parseFloat(String(wert).replace(/[’'\s]/g, '').replace(',', '.')) || 0) : wert; return; }
@@ -696,6 +705,15 @@
       const el = ev.target, a = el.dataset && el.dataset.of;
       if (!a || !state.data || state.view !== 'offerten') return;
       if (a === 'preis') { persist(); render(); return; }
+      if (a === 'leer-n') {
+        const o = offen(); if (!o) return;
+        const n = Math.max(0, Math.min(20, parseInt(el.value, 10) || 0)), l = o.doc.leer || (o.doc.leer = []);
+        while (l.length < n) l.push({ titel: '', untertitel: '' });
+        l.length = n;
+        persist(); render();
+        const f = document.querySelector(`[data-pfad="leer.${n - 1}.titel"]`); if (f && !f.value) f.focus();
+        return;
+      }
       if (a === 'f') {
         const o = offen(); if (!o) return;
         if (el.type === 'checkbox') setze(o.doc, el.dataset.pfad, el.checked);

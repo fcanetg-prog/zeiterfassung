@@ -22,6 +22,8 @@
     const teile = Array.isArray(d.teile) ? d.teile : [];
     return {
       art: ARTEN[d.art] ? d.art : 'offerte',
+      // Zusätzliche Seiten ohne Inhalt (nur Kopfband mit Titel), am Schluss der Offerte
+      leer: (Array.isArray(d.leer) ? d.leer : []).slice(0, 20).map((x) => ({ titel: text(x && x.titel), untertitel: text(x && x.untertitel) })),
       teile: teile.map((t) => ({
         nummer: text(t && t.nummer).trim(),
         titel: text(t && t.titel),
@@ -178,6 +180,14 @@
       <footer>Alle Preise exkl. Mehrwertsteuer</footer></section>`;
   }
 
+  /** Zusätzliche Seite ohne Inhalt: nur das Kopfband mit Titel (und allenfalls Untertitel). */
+  function leerHtml(x) {
+    const platz = SEITE.b - 2 * SEITE.rand;
+    const tpt = Math.max(6, Math.min(11, platz / ((x.untertitel.length + 2) * 0.56 * PT)));
+    return `<section class="folie">
+      <header><h2><b>${esc(x.titel)}</b>${x.untertitel.trim() ? `<span style="font-size:${tpt.toFixed(2)}pt">${esc(x.untertitel)}</span>` : ''}</h2></header></section>`;
+  }
+
   const NAVY = '#18334e', TEAL = '#27b9bf', TEAL_DUNKEL = '#1a8f96', ORANGE = '#e07a2f';
   const CSS = `
     @page { size: ${SEITE.b}mm ${SEITE.h}mm; margin: 0; }
@@ -240,7 +250,7 @@
         ${m.datum ? `<p class="datum">${esc(datumLang(m.datum))}</p>` : ''}</div></section>`;
     const oben = tabellenOben(d);
     const pt = schriftDoc(d);
-    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t, oben, pt)).join('\n')}`;
+    const folien = `${titel}\n${d.teile.map((t) => teilHtml(d, t, oben, pt)).join('\n')}\n${d.leer.map(leerHtml).join('\n')}`;
     // Mit Auftragsbestätigung: zuerst die Bestätigung (A4 hoch), dann die Offerte (Folien), am Schluss die AGB (A4 hoch).
     const b = m.bestaetigung;
     return `<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><title>${b ? 'Vertrag' : ARTEN[d.art]}</title><style>${CSS}${b ? CSS_BRIEF : ''}</style></head><body>
@@ -362,6 +372,7 @@
 \\begin{document}
 
 ${d.teile.map((t) => teilLatex(d, t)).join('\n')}
+${d.leer.map((x) => `\\newpage\n{\\Large\\textbf{${tex(x.titel)}}}${x.untertitel.trim() ? `\\\\[2mm]\n${tex(x.untertitel)}` : ''}\n`).join('\n')}
 \\end{document}
 `;
   }
