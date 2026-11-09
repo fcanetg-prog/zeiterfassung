@@ -305,7 +305,9 @@
     out.budgetPosten = (d.budgetPosten || []).map(window.BudgetDoc.normalize).filter(Boolean);
     out.offertVorlagen = (d.offertVorlagen || []).filter((o) => o && o.id).map((o) => ({ id: o.id, name: o.name || 'Vorlage', doc: OD.normalize(o.doc), mod: o.mod || 0 }));
     const normBankZeilen = (quelle) => { const o = {}; for (const [jahr, bz] of Object.entries(quelle || {})) {
-      o[jahr] = { mod: (bz && bz.mod) || 0, zeilen: ((bz && bz.zeilen) || []).filter((z) => z && z.datum && C.isNum(z.betrag)).map((z, i) => ({ datum: z.datum, text: z.text || '', betrag: z.betrag, saldo: C.isNum(z.saldo) ? z.saldo : null, schluessel: z.schluessel || '', nr: C.isNum(z.nr) ? z.nr : i })) };
+      o[jahr] = { mod: (bz && bz.mod) || 0, zeilen: ((bz && bz.zeilen) || []).filter((z) => z && z.datum && C.isNum(z.betrag)).map((z, i) => ({ datum: z.datum, text: z.text || '', betrag: z.betrag, saldo: C.isNum(z.saldo) ? z.saldo : null, schluessel: z.schluessel || '', nr: C.isNum(z.nr) ? z.nr : i })),
+        // Kontostand gemäss Bank am Ende des letzten Tages der Datei (zur Kontrolle des Kontosaldos)
+        ...(bz && bz.saldoBank && /^\d{4}-\d{2}-\d{2}$/.test(bz.saldoBank.datum) && C.isNum(bz.saldoBank.saldo) ? { saldoBank: { datum: bz.saldoBank.datum, saldo: bz.saldoBank.saldo } } : {}) };
     } return o; };
     const normPlaene = (quelle) => { const o = {}; for (const [jahr, plan] of Object.entries(quelle || {})) {
       o[jahr] = { mod: plan.mod || 0, zeilen: (plan.zeilen || []).map((z) => ({ sektion: z.sektion || '', gruppe: z.gruppe || '', konto: z.konto || '', text: z.text || '', bklasse: String(z.bklasse || ''), summe_in: z.summe_in || '' })) };

@@ -263,6 +263,7 @@
         ${BZ_()[bzKey(jahr())] ? `<button class="btn ${S.abgl ? 'on' : ''}" data-bh="abgl" title="Zeigt für die letzten Bankbewegungen, welcher Buchung sie zugeordnet sind">Abgleich ${S.abgl ? 'ausblenden' : 'zeigen'}</button>` : ''}
         <button class="btn" data-bh="pdf">Dossier als PDF</button>
       </div>
+      ${S.tab === 'buchungen' ? saldoHinweise() : ''}
       ${PRIVAT ? '' : zahlPanel()}
       ${abgleichPanel()}
       ${inhalt}`;
@@ -349,19 +350,49 @@
       return t;
     }
 
+    /* ---------- Kontrolle: Kontosaldo gegen den Kontostand der Bank ---------- */
+
+    /**
+     * Für jedes Bankkonto mit eingelesenem Kontostand: Saldo des Kontos am Ende des letzten Banktages
+     * (bestätigte Buchungen und offene Vorschläge, nach Bankdatum) gegen den Saldo gemäss Bank.
+     */
+    function saldoPruefungen() {
+      const konten_ = PRIVAT ? bankKonten().map((z) => z.konto) : [BANK_()];
+      const out = [];
+      for (const konto of konten_.filter(Boolean)) {
+        const rec = BZ_()[PRIVAT ? `${jahr()}-${konto}` : String(jahr())];
+        if (!rec || !rec.saldoBank) continue;
+        const bis = rec.saldoBank.datum;
+        let saldo = 0, offen = 0;
+        for (const b of DB()) {
+          if (b.jahr !== jahr() || (b.soll !== konto && b.haben !== konto)) continue;
+          const tag = b.bankDatum || b.datum;
+          if (tag > bis) continue;
+          // Vorschläge zählen mit, auch ohne Gegenkonto: Die Bankseite steht fest
+          const v = (b.soll === konto ? b.betrag : 0) - (b.haben === konto ? b.betrag : 0);
+          saldo += v; if (b.vorschlag) offen++;
+        }
+        saldo = C.round2(saldo);
+        const diff = C.round2(saldo - rec.saldoBank.saldo);
+        out.push({ konto, text: kontoName(konto), datum: bis, bank: rec.saldoBank.saldo, saldo, offen, diff, stimmt: Math.abs(diff) < 0.005 });
+      }
+      return out;
+    }
+    function saldoHinweise() {
+      return saldoPruefungen().map((p) => (p.stimmt
+        ? `<div class="bh-saldo ok">✓ Konto ${esc(p.konto)} ${esc(p.text)} stimmt mit der Bank überein: ${chf(p.bank)} am ${fmtDate(p.datum)}${p.offen ? ` (inkl. ${p.offen} ${p.offen === 1 ? 'offenem Vorschlag' : 'offenen Vorschlägen'})` : ''}.</div>`
+        : `<div class="bh-saldo warn" role="alert"><b>⚠ Saldo stimmt nicht mit der Bank überein: Differenz ${chf(p.diff)}</b>
+            <span>Konto ${esc(p.konto)} ${esc(p.text)} am ${fmtDate(p.datum)}: ${chf(p.saldo)}${p.offen ? ` (inkl. ${p.offen} ${p.offen === 1 ? 'offenem Vorschlag' : 'offenen Vorschlägen'})` : ''} · gemäss Bank: ${chf(p.bank)}.
+            ${p.diff > 0 ? 'Im Konto ist zu viel: vielleicht eine Buchung doppelt oder ein Ausgang fehlt.' : 'Im Konto fehlt etwas: vielleicht ein Ausgang doppelt oder ein Eingang fehlt.'}</span></div>`)).join('');
+    }
+
     /** Buchungsvorschläge aus dem Bankabgleich: farbig, direkt änderbar, zählen erst nach dem Bestätigen. */
     function vorschlagZeilen() {
       const vs = vorschlaege();
       if (!vs.length) return '';
-      const sal = L.saldi(buchungen()).get(BANK_());
-      let nach = sal ? sal.saldo : 0;
-      for (const v of vs) nach += v.soll === BANK_() ? v.betrag : v.haben === BANK_() ? -v.betrag : 0;
-      const bank = S.bank && S.bank.jahr === jahr() ? S.bank : null;
-      const stimmt = bank && bank.saldo != null && Math.abs(nach - bank.saldo) < 0.005;
       const kopf = `<tr class="bh-vkopf"><td colspan="7"><div class="bh-vk"><b>${vs.length} ${vs.length === 1 ? 'Vorschlag' : 'Vorschläge'} aus dem E-Banking</b>
         <span>Prüfen und bestätigen. Bis dahin zählen sie nicht mit.</span>
         <span class="grow"></span>
-        ${bank && bank.saldo != null ? `<span class="${stimmt ? 'pos' : 'neg'}">Bank per ${fmtDate(bank.datum)}: ${chf(bank.saldo)}, Konto ${BANK_()} danach: ${chf(nach)}${stimmt ? ' ✓' : ''}</span>` : ''}
         <button class="btn small" data-bh="v-alle">Alle eindeutigen bestätigen</button></div></td></tr>`;
       const feld = (v, key, extra) => `<input id="bv-${v.id}-${key}" data-bh="vfeld" data-id="${v.id}" data-key="${key}" value="${esc(v[key])}" ${extra || ''}>`;
       return kopf + vs.map((v) => {
@@ -510,7 +541,10 @@
       const gemerkt = BZ_()[bzKey(jahr())] || { mod: 0, zeilen: [] };
       const zusammen = L.bankZeilenMerge(gemerkt.zeilen, z.filter((x) => Math.abs(x.betrag) > 0.004));
       const zeilenNeu = JSON.stringify(zusammen) !== JSON.stringify(gemerkt.zeilen);
-      BZ_()[bzKey(jahr())] = { mod: gemerkt.mod, zeilen: zusammen };
+      // Kontostand gemäss Bank: Saldo nach der letzten Bewegung der Datei (= Ende des letzten Tages). Nur ein neuerer ersetzt den gemerkten.
+      const mitSaldo = z.filter((x) => x.saldo != null), sb = mitSaldo[mitSaldo.length - 1];
+      const saldoBank = sb && (!gemerkt.saldoBank || sb.datum >= gemerkt.saldoBank.datum) ? { datum: sb.datum, saldo: sb.saldo } : gemerkt.saldoBank;
+      BZ_()[bzKey(jahr())] = { mod: gemerkt.mod, zeilen: zusammen, ...(saldoBank ? { saldoBank } : {}) };
       const a = L.bankAbgleich(z, abgleichbar(alle), BANK_(), state.data.settings[K.ign] || []);
       // Gelernt wird nur aus bestätigten Buchungen.
       const lern = a.paare.filter((x) => x.buchungen.every((b) => !b.vorschlag));
@@ -539,13 +573,12 @@
         const neu = vorschlag(paar.zeile);
         if (neu.text !== b.text || neu.haben !== b.haben) { Object.assign(b, { text: neu.text, haben: neu.haben, sicher: neu.sicher }); geaendert++; }
       }
-      const letzte = z[z.length - 1];
-      S.bank = { jahr: jahr(), datum: letzte.datum, saldo: letzte.saldo };
       S.tab = 'buchungen'; S.q = '';
-      if (a.neu.length || bezahlt || geaendert || zeilenNeu) persist();
+      if (a.neu.length || bezahlt || geaendert || zeilenNeu || saldoBank !== gemerkt.saldoBank) persist();
       render();
+      const pr = saldoPruefungen().find((x) => x.konto === BANK_());
       const offenV = a.paare.length - lern.length;
-      toast(`${a.paare.length + a.neu.length + a.ignoriert} Bewegungen gelesen: ${lern.length} schon verbucht, ${a.neu.length} ${a.neu.length === 1 ? 'neuer Vorschlag' : 'neue Vorschläge'}${offenV ? `, ${offenV} noch unbestätigt` : ''}${a.ignoriert ? `, ${a.ignoriert} früher verworfen` : ''}.${zusatz}`);
+      toast(`${a.paare.length + a.neu.length + a.ignoriert} Bewegungen gelesen: ${lern.length} schon verbucht, ${a.neu.length} ${a.neu.length === 1 ? 'neuer Vorschlag' : 'neue Vorschläge'}${offenV ? `, ${offenV} noch unbestätigt` : ''}${a.ignoriert ? `, ${a.ignoriert} früher verworfen` : ''}.${zusatz}${pr && !pr.stimmt ? ` Achtung: Der Saldo von Konto ${pr.konto} weicht um ${chf(pr.diff)} vom Kontostand der Bank ab.` : ''}`, pr && !pr.stimmt ? { fehler: true } : undefined);
     }
 
     function hinweisNeu() {
