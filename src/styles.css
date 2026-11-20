@@ -1046,3 +1046,8 @@ img.of-sb-vorschau { height: 34px; max-width: 60px; object-fit: contain; border:
 .of-qteil.an { background: #e6f3f3; border-color: var(--teal-deep); color: var(--teal-deep); text-decoration: none; }
 .of-qweg { border: 0; background: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 0 4px; }
 .of-qweg:hover { color: #b42318; }
+.of-griff { cursor: grab; color: var(--muted); font-size: 13px; letter-spacing: -2px; padding: 2px 6px 2px 0; user-select: none; }
+.of-griff:active { cursor: grabbing; }
+.of-teil.of-zieht { opacity: .45; }
+.of-teil.of-drop-vor { box-shadow: 0 -3px 0 var(--teal-deep); }
+.of-teil.of-drop-nach { box-shadow: 0 3px 0 var(--teal-deep); }

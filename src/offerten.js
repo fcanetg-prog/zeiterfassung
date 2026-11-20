@@ -384,10 +384,21 @@
 
     const feld = (pfad, wert, extra) => `<input type="text" data-of="f" data-pfad="${pfad}" value="${esc(wert)}" ${extra || ''}>`;
 
+    /** Teil von Stelle «von» an Stelle «nach» schieben; zusätzliche Seiten «nach Teil N» wandern mit ihrem Teil. */
+    function teilVerschieben(d, von, nach) {
+      if (von === nach) return;
+      const ord = d.teile.map((_, k) => k);
+      const [x] = ord.splice(von, 1); ord.splice(nach, 0, x);
+      const neu = {}; ord.forEach((alt, k) => { neu[alt] = k; });
+      d.teile = ord.map((k) => d.teile[k]);
+      for (const l of d.leer || []) { const m = /^teil-(\d+)$/.exec(l.nach); if (m && neu[+m[1]] != null) l.nach = `teil-${neu[+m[1]]}`; }
+    }
+
     function teilEditor(d, t, i) {
       const einfach = O.istEinfach(t);
-      return `<section class="pane of-teil">
+      return `<section class="pane of-teil" data-teil="${i}">
         <div class="of-tkopf">
+          ${d.teile.length > 1 ? `<span class="of-griff" draggable="true" data-of-zieh="${i}" title="Ziehen, um die Reihenfolge der Teile zu ändern" aria-hidden="true">⋮⋮</span>` : ''}
           <b>${esc(O.ARTEN[d.art])}</b>
           ${feld(`t.${i}.nummer`, t.nummer, 'class="of-nr" placeholder="Nr." aria-label="Nummer"')}
           ${feld(`t.${i}.titel`, t.titel, 'class="of-titel" placeholder="Titel" aria-label="Titel"')}
@@ -588,6 +599,41 @@
       state.off.edit = null; state.off.neu = { kunde: '', name: '', art: d.art, doc: null, quelle: '' };
       quelleDazu(state.off.neu, d, quelle || 'Vorlage');
     }
+
+    /* Teile im Editor per Drag and Drop umstellen (Griff ⋮⋮ im Kopf eines Teils) */
+    let ziehT = null;
+    const teilMarkWeg = () => document.querySelectorAll('.of-teil.of-drop-vor, .of-teil.of-drop-nach, .of-teil.of-zieht').forEach((x) => x.classList.remove('of-drop-vor', 'of-drop-nach', 'of-zieht'));
+    function teilZiel(ev) {
+      if (ziehT == null || state.view !== 'offerten') return null;
+      const sec = ev.target.closest && ev.target.closest('.of-teil[data-teil]'); if (!sec) return null;
+      const r = sec.getBoundingClientRect(), i = +sec.dataset.teil, nachHin = ev.clientY > r.top + r.height / 2;
+      return { sec, i, nachHin };
+    }
+    document.addEventListener('dragstart', (ev) => {
+      const h = ev.target.closest && ev.target.closest('[data-of-zieh]');
+      if (!h || state.view !== 'offerten') return;
+      ziehT = +h.dataset.ofZieh;
+      ev.dataTransfer.effectAllowed = 'move';
+      try { ev.dataTransfer.setData('text/plain', 'Teil ' + (ziehT + 1)); } catch (_) { /* egal */ }
+      const sec = h.closest('.of-teil'); if (sec) { ev.dataTransfer.setDragImage(sec.querySelector('.of-tkopf') || sec, 20, 16); setTimeout(() => sec.classList.add('of-zieht'), 0); }
+    });
+    document.addEventListener('dragover', (ev) => {
+      const z = teilZiel(ev); if (!z) return;
+      ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.of-teil.of-drop-vor, .of-teil.of-drop-nach').forEach((x) => x.classList.remove('of-drop-vor', 'of-drop-nach'));
+      if (z.i !== ziehT) z.sec.classList.add(z.nachHin ? 'of-drop-nach' : 'of-drop-vor');
+    });
+    document.addEventListener('drop', (ev) => {
+      const z = teilZiel(ev); if (!z) return;
+      ev.preventDefault();
+      const von = ziehT; ziehT = null; teilMarkWeg();
+      const o = offen(); if (!o || z.i === von) return;
+      let nach = z.i + (z.nachHin ? 1 : 0); if (nach > von) nach--;
+      if (nach === von) return;
+      teilVerschieben(o.doc, von, nach); persist(); render();
+      toast('Reihenfolge geändert', { actionLabel: 'Rückgängig', action: () => { teilVerschieben(o.doc, nach, von); persist(); render(); } });
+    });
+    document.addEventListener('dragend', () => { if (ziehT == null) return; ziehT = null; teilMarkWeg(); });
 
     document.addEventListener('submit', (ev) => {
       if (ev.target.dataset && ev.target.dataset.ofForm === 'neu') { ev.preventDefault(); anlegen(); }
