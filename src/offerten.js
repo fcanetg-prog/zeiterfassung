@@ -310,6 +310,45 @@
       return out.sort((a, b) => (a.v.datum < b.v.datum ? 1 : a.v.datum > b.v.datum ? -1 : (b.p.erstellt || 0) - (a.p.erstellt || 0)));
     }
 
+    /**
+     * Vorlagen der neuen Offerte: mehrere Quellen untereinander, in der Reihenfolge der Wahl.
+     * Pro Quelle lassen sich einzelne Teile abwählen; daraus entsteht n.doc.
+     */
+    function quelleDazu(n, doc, name) {
+      const d = O.normalize(kopie(doc));
+      (n.quellen || (n.quellen = [])).push({ name, doc: d, an: d.teile.map(() => true) });
+      if (n.quellen.length === 1) n.art = d.art;
+      kombinieren(n);
+    }
+    function kombinieren(n) {
+      const qs = n.quellen || [];
+      if (!qs.length) { n.doc = null; n.quelle = ''; return; }
+      const teile = [], leer = [];
+      qs.forEach((q, qi) => {
+        const neuIndex = {};
+        q.doc.teile.forEach((t, i) => { if (q.an[i]) { neuIndex[i] = teile.length; teile.push(kopie(t)); } });
+        // Zusätzliche Seiten nur aus der ersten Quelle; «nach Teil N» folgt dem Teil an seine neue Stelle
+        if (qi === 0) for (const x of q.doc.leer) {
+          const m = /^teil-(\d+)$/.exec(x.nach);
+          leer.push(Object.assign(kopie(x), m ? { nach: neuIndex[+m[1]] != null ? `teil-${neuIndex[+m[1]]}` : 'ende' } : {}));
+        }
+      });
+      // Doppelte Nummern (z. B. zweimal «1») werden durchnummeriert
+      const nr = teile.map((t) => t.nummer);
+      if (qs.length > 1 && new Set(nr).size !== nr.length) teile.forEach((t, i) => { t.nummer = String(i + 1); });
+      n.doc = O.normalize({ art: qs[0].doc.art, teile, leer });
+      n.quelle = qs.map((q) => q.name).join(' + ');
+    }
+    function quellenHtml(n) {
+      const qs = n.quellen || [];
+      if (!qs.length) return '<span class="of-vinfo">Ohne Vorlage beginnst du leer. Mehrere Offerten lassen sich nacheinander wählen; sie stehen dann untereinander.</span>';
+      const anz = n.doc ? n.doc.teile.length : 0;
+      return `<ol class="of-quellen">${qs.map((q, qi) => `<li><span class="of-qname">${qi + 1}. ${esc(q.name)}</span>
+          ${q.doc.teile.map((t, ti) => `<button type="button" class="of-qteil ${q.an[ti] ? 'an' : ''}" data-of="n-teil" data-q="${qi}" data-t="${ti}" aria-pressed="${q.an[ti]}" title="${q.an[ti] ? 'Weglassen' : 'Übernehmen'}">${q.an[ti] ? '✓ ' : ''}${esc(O.ARTEN[q.doc.art])}${t.nummer ? ' ' + esc(t.nummer) : ''}${t.titel ? ': ' + esc(t.titel.slice(0, 40)) : ''}</button>`).join('')}
+          <button type="button" class="of-qweg" data-of="n-q-weg" data-q="${qi}" title="Diese Vorlage entfernen" aria-label="Vorlage ${esc(q.name)} entfernen">×</button></li>`).join('')}</ol>
+        <span class="of-vinfo ${anz ? 'ok' : ''}">${anz} ${anz === 1 ? 'Teil' : 'Teile'} übernommen, in dieser Reihenfolge.</span>`;
+    }
+
     function neuForm() {
       const n = state.off.neu;
       if (!n) return '';
@@ -324,9 +363,9 @@
         <div class="of-vorl"><label>Vorlage</label>
           <button class="btn" type="button" data-of="n-hoch" title="PDF einer bestehenden Offerte wählen. Die Tabellen darin werden übernommen.">PDF hochladen</button>
           <select class="of-aus" data-of="n-aus" aria-label="Bestehende Offerte als Vorlage übernehmen" title="Eine Offerte aus diesem Programm als Vorlage übernehmen" ${bestehende().length ? '' : 'disabled'}>
-            <option value="">${bestehende().length ? 'Bestehende Offerte übernehmen …' : 'Noch keine bestehenden Offerten'}</option>
+            <option value="">${!bestehende().length ? 'Noch keine bestehenden Offerten' : (n.quellen || []).length ? 'Weitere Offerte darunter anfügen …' : 'Bestehende Offerte übernehmen …'}</option>
             ${bestehende().map((x) => `<option value="${x.p.id}|${x.v.id}">${esc(pTitel(x.p))} · ${esc(vTitel(x.v))}</option>`).join('')}</select>
-          <span class="of-vinfo ${n.doc ? 'ok' : ''}">${n.doc ? `${esc(n.quelle || 'Vorlage')}: ${n.doc.teile.length} ${n.doc.teile.length === 1 ? 'Teil' : 'Teile'} übernommen` : 'Ohne Vorlage beginnst du leer.'}</span></div>
+          ${quellenHtml(n)}</div>
         <div class="of-nakt"><button class="btn primary" type="submit">Anlegen und bearbeiten</button>
           <button class="btn" type="button" data-of="n-zu">Abbrechen</button></div>
       </form>`;
@@ -546,7 +585,8 @@
     /** Von aussen (Import einer Vorlagendatei): neue Offerte mit diesem Inhalt beginnen. */
     function beginneMit(doc, quelle) {
       const d = O.normalize(doc);
-      state.off.edit = null; state.off.neu = { kunde: '', name: '', art: d.art, doc: d, quelle };
+      state.off.edit = null; state.off.neu = { kunde: '', name: '', art: d.art, doc: null, quelle: '' };
+      quelleDazu(state.off.neu, d, quelle || 'Vorlage');
     }
 
     document.addEventListener('submit', (ev) => {
@@ -598,13 +638,15 @@
         case 'sb-weg': { const o2 = offen(); if (!o2) break; const x = o2.doc.leer[+ds.n], alt = x.bild; delete x.bild; persist(); render();
           toast('Bild entfernt', { actionLabel: 'Rückgängig', action: () => { x.bild = alt; persist(); render(); } }); break; }
         case 'p-auf': if (state.off.umgekehrt.has(ds.pid)) state.off.umgekehrt.delete(ds.pid); else state.off.umgekehrt.add(ds.pid); render(); break;
-        case 'n-hoch': { hochladen().then((h) => { if (!h || !state.off.neu) return; Object.assign(state.off.neu, { doc: h.doc, quelle: h.name, art: h.doc.art }); render(); toast(`${h.name} eingelesen`); }); break; }
+        case 'n-hoch': { hochladen().then((h) => { if (!h || !state.off.neu) return; quelleDazu(state.off.neu, h.doc, h.name); render(); toast(`${h.name} eingelesen`); }); break; }
         case 'e-hoch': { hochladen().then((h) => { const o2 = offen(); if (!h || !o2) return; const ziel = o2.v, alt = ziel.doc; h.doc.art = alt.art; ziel.doc = h.doc; persist(); render();
           toast(`Inhalt durch ${h.name} ersetzt`, { actionLabel: 'Rückgängig', action: () => { ziel.doc = alt; persist(); render(); } }); }); break; }
         case 'tex-kopieren': zwischenablage(O.latex(o.doc), 'LaTeX-Code kopiert'); break;
         case 'neu': { const zp = ds.pid && projekt(ds.pid); const lz = zp && fassungen(zp).pop();
           state.off.neu = { kunde: '', name: '', art: lz ? lz.doc.art : 'offerte', doc: null, quelle: '', datum: heute, pid: ds.pid || '' }; render(); window.scrollTo(0, 0); { const f = $(zp ? '#on-datum' : '#on-kunde'); if (f) f.focus(); } break; }
         case 'n-zu': state.off.neu = null; render(); break;
+        case 'n-teil': { const n = state.off.neu, q = n && n.quellen[+ds.q]; if (q) { q.an[+ds.t] = !q.an[+ds.t]; kombinieren(n); render(); } break; }
+        case 'n-q-weg': { const n = state.off.neu; if (n && n.quellen) { n.quellen.splice(+ds.q, 1); if (n.quellen.length) n.art = n.quellen[0].doc.art; kombinieren(n); render(); } break; }
         case 'edit': state.off.edit = { pid: p.id, vid: v.id }; render(); window.scrollTo(0, 0); break;
         case 'zurueck': state.off.edit = null; render(); break;
         case 'pdf': pdf(v.doc, dateiName(p, v, 'pdf'), p, v); break;
@@ -698,7 +740,7 @@
           const g = state.off.dialog, r = O.ausDatei({ text: g.text });
           if (r.fehler) { toast(r.fehler, { fehler: true }); break; }
           if (g.art === 'neu' && state.off.neu) {
-            Object.assign(state.off.neu, { doc: r.doc, quelle: 'Eingefügter Code', art: r.doc.art });
+            quelleDazu(state.off.neu, r.doc, 'Eingefügter Code');
             state.off.dialog = null; render();
           } else if (o) {
             const ziel = o.v, alt = ziel.doc;
@@ -762,7 +804,7 @@
       }
       else if (a === 'n-aus' && el.value && state.off.neu) {
         const [pid, vid] = el.value.split('|'); const p = projekt(pid), v = p && p.versionen.find((x) => x.id === vid);
-        if (v) { Object.assign(state.off.neu, { doc: kopie(v.doc), quelle: `${pTitel(p)}, ${vTitel(v)}`, art: v.doc.art }); render(); }
+        if (v) { quelleDazu(state.off.neu, v.doc, `${pTitel(p)}, ${vTitel(v)}`); render(); }
       }
       else if (a === 'verk-neu' && el.value) { const zp = projekt(el.dataset.pid); if (zp) { (zp.kundeLinks || (zp.kundeLinks = [])).push(el.value); const nA = adresseUebernehmen(zp); persist(); render(); if (!nA) toast(`Zugewiesen: ${kLabel(kAusKey(el.value))}`); } }
     });
