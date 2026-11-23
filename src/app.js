@@ -218,6 +218,7 @@
   const gmailZiel = () => ({ url: state.data.settings.gmailUrl || '', schluessel: state.data.settings.gmailSchluessel || '' });
   const gmailAktiv = () => !!(state.data && state.data.settings.gmailUrl && state.data.settings.gmailSchluessel);
 
+  const KENNUNG_NEU_AB = '2026-11-23';   // gleich wie NEUE_KENNUNG_AB im Google-Skript
   /** Kurze, stabile Kennung aus einem Text (zwei FNV-1a-Hashes, Base 36). */
   function kurzHash(t) {
     let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
@@ -244,8 +245,9 @@
       if (!st || !st.ok) continue;
       // Feste Kennung aus Kunde, Bereich und Datum: Kommt später ein Projekt dazu, bleibt es dieselbe Rechnung
       // und das Google-Skript ersetzt den noch ungesendeten Entwurf, statt einen zweiten zu erstellen.
-      const k = C.groupKey(g[0]);
-      jobs.push({ id: k ? 'R-' + kurzHash(k) : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(), bereich: g[0].bereich,
+      // Rechnungen mit Datum vor der Umstellung behalten ihre bisherige Kennung, damit das Skript keinen zweiten Entwurf macht.
+      const k = C.groupKey(g[0]), vorher = g[0].rechnungGeplant < KENNUNG_NEU_AB;
+      jobs.push({ id: k && !vorher ? 'R-' + kurzHash(k) : g.length > 1 ? `${g[0].id}x${g.length}` : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(), bereich: g[0].bereich,
         kunde: [...new Set(g.map((x) => String(x.kunde || '').trim()))].join(', '), projekt: g.map((x) => x.name).join(', '), mitglieder: g.map((x) => x.id).sort().join(',') });
     }
     const r = await api.invoicePush(jobs, absender(), gmailZiel(), !!laut);
@@ -1066,7 +1068,8 @@
   function setzeGruppenDatum(p, key, wert) {
     const g = gruppe(p);
     if (key === 'rechnungsdatum') {
-      if (wert && g.length > 1 && !p.rechnungGruppe) { const id = uid('RG'); for (const x of g) x.rechnungGruppe = id; }
+      // Beim ersten Stellen bekommt die ganze Rechnung eine neue Kennung (eine alte, z. B. aus einer Kopie, zählt nicht).
+      if (wert && !p.rechnungsdatum) { const id = g.length > 1 ? uid('RG') : null; for (const x of g) x.rechnungGruppe = id; }
       if (!wert) for (const x of g) x.rechnungGruppe = null;
     }
     for (const x of g) x[key] = wert || null;
