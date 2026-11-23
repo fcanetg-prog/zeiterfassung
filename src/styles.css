@@ -1051,3 +1051,4 @@ img.of-sb-vorschau { height: 34px; max-width: 60px; object-fit: contain; border:
 .of-teil.of-zieht { opacity: .45; }
 .of-teil.of-drop-vor { box-shadow: 0 -3px 0 var(--teal-deep); }
 .of-teil.of-drop-nach { box-shadow: 0 3px 0 var(--teal-deep); }
+.sammel-hinweis { font-size: 12px; color: #9a5b00; }

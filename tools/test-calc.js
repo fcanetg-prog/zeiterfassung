@@ -60,6 +60,20 @@ console.log('Alle Prüfungen bestanden.');
   ps[0].rechnungsdatum = ps[1].rechnungsdatum = '2026-10-20'; ps[0].rechnungGruppe = ps[1].rechnungGruppe = 'RG1'; ps[1].rechnungGeplant = '2026-12-01';
   assert.deepStrictEqual(C.invoiceGroup(ps[0], ps).map((p) => p.id), ['p1', 'p2']);
   assert.deepStrictEqual(C.invoiceGroup(ps[3], ps).map((p) => p.id), ['p4']);
+  // Gleicher Kunde, Bereich und Datum: eine Rechnung, auch bei anderem Jahr, anderer E-Mail oder anderer Adresse.
+  // Eine Gruppenkennung ohne «gestellt am» (z. B. aus einer Kopie) trennt nichts ab.
+  {
+    const q = [mk('q1', 100, { rechnungGeplant: '2026-11-23' }), mk('q2', 100, { rechnungGeplant: '2026-11-23', jahr: 2025 }),
+      mk('q3', 100, { rechnungGeplant: '2026-11-23', rechnungsEmail: 'x@y.ch', rechnungGruppe: 'RGalt' }),
+      mk('q4', 100, { rechnungGeplant: '2026-11-23', rechnungsadresse: 'Verband\nPostfach\n3073 Gümligen' }),
+      mk('q5', 100, { rechnungGeplant: '2026-11-23', kunde: 'Andere AG' }), mk('q6', 100, { rechnungGeplant: '2026-11-23', bereich: 'Geldcast' }),
+      mk('q7', 100, { rechnungGeplant: '2026-11-23', rechnungsdatum: '2026-11-23', rechnungGruppe: 'RGalt' })];
+    assert.deepStrictEqual(C.invoiceGroup(q[0], q).map((p) => p.id), ['q1', 'q2', 'q3', 'q4']);
+    assert.deepStrictEqual(C.invoiceGroup(q[2], q).map((p) => p.id), ['q1', 'q2', 'q3', 'q4']);
+    assert.deepStrictEqual(C.invoiceGroup(q[6], q).map((p) => p.id), ['q7']);
+    assert.strictEqual(C.gruppenHinweise(C.invoiceGroup(q[0], q)).length, 2);
+    assert.strictEqual(C.gruppenHinweise([q[0], q[1]]).length, 0);
+  }
 
   const A = { settings: { x: 1 }, settingsMod: 5, projects: [{ id: 'a', jahr: 2026, sort: 1, name: 'alt', mod: 1 }, { id: 'b', jahr: 2026, sort: 2, mod: 1 }], entries: [{ id: 'e1', projectId: 'a', datum: '2026-01-02', stunden: 1, mod: 1 }, { id: 'e2', projectId: 'b', datum: '2026-01-03', stunden: 2, mod: 1 }], geloescht: {} };
   const B = { settings: { x: 2 }, settingsMod: 9, projects: [{ id: 'a', jahr: 2026, sort: 1, name: 'neu', mod: 7 }, { id: 'c', jahr: 2026, sort: 3, mod: 4 }], entries: [{ id: 'e1', projectId: 'a', datum: '2026-01-02', stunden: 1, mod: 1 }, { id: 'e3', projectId: 'c', datum: '2026-01-01', stunden: 3, mod: 4 }], geloescht: { b: 6, e2: 6 } };

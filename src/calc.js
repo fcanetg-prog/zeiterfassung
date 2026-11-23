@@ -257,24 +257,40 @@
   const zeilen = (t) => String(t || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const zeilen2 = zeilen;
 
-  /** Projekte desselben Bereichs mit gleichem Rechnungsdatum, gleicher Rechnungsadresse und gleicher E-Mail kommen auf eine Rechnung. */
+  const klein = (t) => String(t || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  /**
+   * Alle noch nicht gestellten Projekte desselben Kunden und Bereichs mit gleichem Rechnungsdatum kommen auf eine Rechnung,
+   * egal wann das Datum gesetzt wurde. Kunde ohne Namen: die Rechnungsadresse zählt. Ohne Rechnungsadresse keine Sammelrechnung.
+   * Weichen Adresse oder E-Mail ab, gilt die des ersten Projekts (siehe gruppenHinweise).
+   */
   function groupKey(p) {
     if (p.abrechnung !== 'rechnung' || !p.rechnungGeplant) return null;
-    const adr = zeilen(p.rechnungsadresse).join('\n');
+    const adr = zeilen(p.rechnungsadresse).join('\n').toLowerCase();
     if (!adr) return null;
-    return [p.rechnungGeplant, adr.toLowerCase(), String(p.rechnungsEmail || '').trim().toLowerCase(), p.jahr, String(p.bereich || '').trim().toLowerCase()].join('|');
+    return [p.rechnungGeplant, klein(p.bereich), klein(p.kunde) || adr].join('|');
   }
 
   /** Alle Projekte, die mit p auf derselben Rechnung stehen (p eingeschlossen), in Listenreihenfolge. */
   function invoiceGroup(p, projects) {
     let m;
-    if (p.rechnungGruppe) m = projects.filter((x) => x.rechnungGruppe === p.rechnungGruppe);
+    // Gestellte Rechnungen bleiben, wie sie gestellt wurden. Eine Gruppenkennung ohne «gestellt am» (z. B. aus einer Kopie) zählt nicht.
+    if (p.rechnungsdatum && p.rechnungGruppe) m = projects.filter((x) => x.rechnungsdatum && x.rechnungGruppe === p.rechnungGruppe);
     else if (!p.rechnungsdatum && groupKey(p)) {
       const k = groupKey(p);
-      m = projects.filter((x) => !x.rechnungsdatum && !x.rechnungGruppe && groupKey(x) === k);
+      m = projects.filter((x) => !x.rechnungsdatum && groupKey(x) === k);
     } else m = [p];
     if (!m.includes(p)) m.push(p);
     return m.slice().sort((a, b) => a.sort - b.sort);
+  }
+
+  /** Hinweise zu einer Sammelrechnung, deren Projekte verschiedene Adressen oder E-Mails haben: es gilt die des ersten Projekts. */
+  function gruppenHinweise(members) {
+    if (members.length < 2) return [];
+    const h = [], erst = members[0], name = [erst.kunde, erst.name].filter(Boolean).join(' – ');
+    const adr = (p) => zeilen(p.rechnungsadresse).join('\n').toLowerCase();
+    if (members.some((x) => adr(x) !== adr(erst))) h.push(`Die Rechnungsadressen weichen ab. Auf der Rechnung steht die von «${name}».`);
+    if (members.some((x) => klein(x.rechnungsEmail) !== klein(erst.rechnungsEmail))) h.push(`Die E-Mails weichen ab. Der Entwurf geht an die von «${name}».`);
+    return h;
   }
 
   /** Rechnung für eine Gruppe von Projekten. Bei einem einzelnen Projekt identisch mit invoiceModel. */
@@ -331,7 +347,7 @@
     const einheiten = [], gesehen = new Set();
     for (const p of projects) {
       if (p.abrechnung !== 'rechnung' || !p.rechnungsdatum || gesehen.has(p.id)) continue;
-      const m = p.rechnungGruppe ? projects.filter((x) => x.rechnungGruppe === p.rechnungGruppe) : [p];
+      const m = p.rechnungGruppe ? projects.filter((x) => x.rechnungsdatum && x.rechnungGruppe === p.rechnungGruppe) : [p];
       m.forEach((x) => gesehen.add(x.id));
       let betrag = null;
       if (m.length > 1) { const g = invoiceModelGroup(m, sat); betrag = g.fehler && g.fehler.length ? null : g.total; }
@@ -460,7 +476,7 @@
   }
 
   return {
-    groupKey, invoiceGroup, invoiceModelGroup, mergeData, zahlungenZuordnen, zahlerPasst,
+    groupKey, invoiceGroup, invoiceModelGroup, gruppenHinweise, mergeData, zahlungenZuordnen, zahlerPasst,
     dateLong, invoiceIntro, parsePositions, invoiceModel,
     DEFAULTS, settings, emptyData, hoursByProject, projectFigures, status, daysBetween,
     dailyTotals, daysInYear, dayOfYear, isoFromDayOfYear, monthlyTarget, monthly,

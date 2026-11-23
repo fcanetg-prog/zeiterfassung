@@ -218,6 +218,13 @@
   const gmailZiel = () => ({ url: state.data.settings.gmailUrl || '', schluessel: state.data.settings.gmailSchluessel || '' });
   const gmailAktiv = () => !!(state.data && state.data.settings.gmailUrl && state.data.settings.gmailSchluessel);
 
+  /** Kurze, stabile Kennung aus einem Text (zwei FNV-1a-Hashes, Base 36). */
+  function kurzHash(t) {
+    let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+    for (let i = 0; i < t.length; i++) { const c = t.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193) >>> 0; b = Math.imul(b ^ c, 0x5bd1e995) >>> 0; }
+    return a.toString(36) + b.toString(36);
+  }
+
   let syncTimer = null;
   function scheduleSync() {
     if (!gmailAktiv()) return;
@@ -235,9 +242,11 @@
       g.forEach((x) => erledigt.add(x.id));
       const st = entwurfStatus(g[0]);
       if (!st || !st.ok) continue;
-      // Eine Sammelrechnung bekommt eine eigene Kennung, damit sie nicht mit der Einzelrechnung des ersten Projekts verwechselt wird.
-      jobs.push({ id: g.length > 1 ? `${g[0].id}x${g.length}` : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(), bereich: g[0].bereich,
-        kunde: [...new Set(g.map((x) => x.kunde))].join(', '), projekt: g.map((x) => x.name).join(', ') });
+      // Feste Kennung aus Kunde, Bereich und Datum: Kommt später ein Projekt dazu, bleibt es dieselbe Rechnung
+      // und das Google-Skript ersetzt den noch ungesendeten Entwurf, statt einen zweiten zu erstellen.
+      const k = C.groupKey(g[0]);
+      jobs.push({ id: k ? 'R-' + kurzHash(k) : g[0].id, modell: st.modell, an: g[0].rechnungsEmail.trim(), bereich: g[0].bereich,
+        kunde: [...new Set(g.map((x) => String(x.kunde || '').trim()))].join(', '), projekt: g.map((x) => x.name).join(', '), mitglieder: g.map((x) => x.id).sort().join(',') });
     }
     const r = await api.invoicePush(jobs, absender(), gmailZiel(), !!laut);
     const vorher = state.sync && state.sync.fehler;
@@ -327,7 +336,7 @@
       rechnungGeplant: p.rechnungGeplant || null, rechnungsdatum: p.rechnungsdatum || null, zahlungsdatum: p.zahlungsdatum || null,
       rechnungsadresse: p.rechnungsadresse || '', referenz: p.referenz || '', rechnungsEmail: p.rechnungsEmail || '',
       rechnungstext: p.rechnungstext || '', offerteVom: p.offerteVom || null, emailVom: p.emailVom || null,
-      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: p.rechnungGruppe || null, zahlungBank: p.zahlungBank || null, mod: p.mod || 0,
+      notiz: p.notiz || '', archiviert: !!p.archiviert, rechnungGruppe: (p.rechnungsdatum && p.rechnungGruppe) || null, zahlungBank: p.zahlungBank || null, mod: p.mod || 0,
     }));
     const ids = new Set(out.projects.map((p) => p.id));
     out.entries = d.entries.filter((e) => e && e.datum && ids.has(e.projectId) && C.isNum(e.stunden))
@@ -981,7 +990,7 @@
             ${d.abrechnung === 'rechnung' ? dat('d-rg', 'Rechnungsdatum', 'rechnungGeplant') + dat('d-rd', 'Rechnung gestellt am', 'rechnungsdatum') : ''}
             ${dat('d-zd', 'Zahlung erhalten am', 'zahlungsdatum')}
           </div>`}
-          ${d.abrechnung !== 'rechnung' || !dr.id || gruppe(projById(dr.id)).length < 2 ? '' : `<p class="sammel">${projById(dr.id).rechnungsdatum ? 'Gemeinsam in Rechnung gestellt mit' : 'Kommt auf dieselbe Rechnung wie'}: ${gruppe(projById(dr.id)).filter((x) => x.id !== dr.id).map((x) => esc(projLabel(x))).join(', ')}.</p>`}
+          ${d.abrechnung !== 'rechnung' || !dr.id || gruppe(projById(dr.id)).length < 2 ? '' : `<p class="sammel">${projById(dr.id).rechnungsdatum ? 'Gemeinsam in Rechnung gestellt mit' : 'Kommt auf dieselbe Rechnung wie'}: ${gruppe(projById(dr.id)).filter((x) => x.id !== dr.id).map((x) => esc(projLabel(x))).join(', ')}.${C.gruppenHinweise(gruppe(projById(dr.id))).map((h) => `<br>⚠ ${esc(h)}`).join('')}</p>`}
           ${d.abrechnung !== 'rechnung' ? '' : `
           <div class="fld"><label for="d-adr">Rechnungsadresse</label><textarea id="d-adr" rows="4" placeholder="Firma&#10;Strasse&#10;PLZ Ort" data-action="d-field" data-key="rechnungsadresse">${esc(d.rechnungsadresse)}</textarea></div>
           <div class="cols2">
@@ -1125,7 +1134,8 @@
       if (g.length === 1) return `<tbody>${row(p, cols, false)}</tbody>`;
       const m = C.invoiceModelGroup(g, S(), heute);
       const total = m.fehler.length ? g.reduce((a, x) => a + (figs(x).rechnungsbetrag || 0), 0) : m.total;
-      return `<tbody class="sammel-block"><tr class="rg zb"><td colspan="3"><span class="sammel-marke">Sammelrechnung</span></td><td class="r num">${fmtCHF(total)}</td>
+      const hin = C.gruppenHinweise(g);
+      return `<tbody class="sammel-block"><tr class="rg zb"><td colspan="3"><span class="sammel-marke">Sammelrechnung</span>${hin.length ? ` <span class="sammel-hinweis" title="${esc(hin.join(' '))}">⚠ ${esc(hin.join(' '))}</span>` : ''}</td><td class="r num">${fmtCHF(total)}</td>
         <td colspan="4" class="st">${entwurfTag(g[0])}</td><td class="r">${knoepfe(g[0], cols)}</td></tr>${g.map((x) => row(x, cols, true)).join('')}</tbody>`;
     }).join('');
     const nachDatum = (a, b) => (a.rechnungGeplant < b.rechnungGeplant ? -1 : a.rechnungGeplant > b.rechnungGeplant ? 1 : a.sort - b.sort);
@@ -1624,7 +1634,7 @@
       }
       case 'project-dup': {
         const src = drawerDraft();
-        const kopie = Object.assign({}, src, { id: null, sort: src.sort + 0.5, name: src.name + ' (Kopie)', rechnungGeplant: null, rechnungsdatum: null, zahlungsdatum: null });
+        const kopie = Object.assign({}, src, { id: null, sort: src.sort + 0.5, name: src.name + ' (Kopie)', rechnungGeplant: null, rechnungsdatum: null, zahlungsdatum: null, rechnungGruppe: null, zahlungBank: null });
         openDrawer(kopie); toast('Kopie geöffnet. Sie wird erst mit «Projekt anlegen» gespeichert.'); break;
       }
       case 'project-delete': {
